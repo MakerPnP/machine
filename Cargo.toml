@@ -2,6 +2,6 @@
 resolver = "3"
 
 members = [
-    "crates/experimentation-1", "crates/experimentation-2",
-    "crates/ioboard"
+    "crates/experimentation-1",
+    "crates/experimentation-2",
 ]
