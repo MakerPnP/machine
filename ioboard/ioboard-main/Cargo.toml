@@ -1,0 +1,9 @@
+[package]
+name = "ioboard-main"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+defmt = "1.0.1"
+rsruckig = { version = "2.1.0", default-features = false, features = ["libm", "alloc"] }
+embedded-alloc = "0.6.0"
