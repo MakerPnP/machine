@@ -2,24 +2,41 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
+pub mod stepper;
 
-use defmt::info;
 use embedded_alloc::LlffHeap as Heap;
+use embedded_hal::delay::DelayNs;
+
+use crate::stepper::{Stepper, StepperDirection, StepperError};
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
 
-pub fn run() {
+pub fn run<DELAY: DelayNs>(stepper: &mut impl Stepper, mut delay: DELAY) {
     init_heap();
 
-    let mut meh = Box::new(42);
+    let mut run_loop = || {
+        delay.delay_ms(500);
+        stepper.direction(StepperDirection::Normal)?;
+        for _ in 0..100 {
+            stepper.step_and_wait()?;
+            delay.delay_ms(1);
+        }
 
-    *meh = 69;
+        delay.delay_ms(500);
+        stepper.direction(StepperDirection::Reversed)?;
+        for _ in 0..100 {
+            stepper.step_and_wait()?;
+            delay.delay_ms(1);
+        }
+        Ok::<(), StepperError>(())
+    };
 
-    info!("heap test: {}", *meh);
-
-    drop(meh);
+    loop {
+        if run_loop().is_err() {
+            break;
+        }
+    }
 }
 
 #[allow(static_mut_refs)]

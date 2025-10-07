@@ -1222,6 +1222,7 @@ dependencies = [
  "embassy-executor",
  "embassy-stm32",
  "embassy-time",
+ "embedded-hal 1.0.0",
  "ioboard-main",
  "panic-probe",
 ]
@@ -1232,6 +1233,8 @@ version = "0.1.0"
 dependencies = [
  "defmt 1.0.1",
  "embedded-alloc",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
  "rsruckig",
 ]
 

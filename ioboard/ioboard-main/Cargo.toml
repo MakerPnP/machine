@@ -7,3 +7,5 @@ edition = "2024"
 defmt = "1.0.1"
 rsruckig = { version = "2.1.0", default-features = false, features = ["libm", "alloc"] }
 embedded-alloc = "0.6.0"
+embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
