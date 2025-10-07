@@ -10,6 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut velocity_data: Vec<f64> = Vec::new();
     let mut acceleration_data: Vec<f64> = Vec::new();
     let mut step_data: Vec<f64> = Vec::new();
+    let mut jerk_data: Vec<f64> = Vec::new();
 
     let mut step_time_points: Vec<f64> = Vec::new();
     let mut step_number_points: Vec<f64> = Vec::new();
@@ -24,9 +25,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // -------- Trajectory sequence ---------
     let trajectory: &[(f64, f64, f64, f64)] = &[
         // (position_mm, max_jerk, max_acc, max_vel)
-        (50.0, 500.0, 100.0, 25.0),
-        (120.0, 500.0, 100.0, 25.0),
-        (200.0, 500.0, 100.0, 25.0),
+        (100.0, 10.0, 50.0, 50.0),
+        (50.0, 20.0, 25.0, 50.0),
+        (300.0, 30.0, 75.0, 50.0),
     ];
 
     let mut ruckig = Ruckig::<1, ThrowErrorHandler>::new(None, dt);
@@ -106,13 +107,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let new_pos = output.new_position[0];
-        let delta_mm = new_pos - last_position[0];
+        let delta_mm = (new_pos - last_position[0]).abs();
 
         // record data every cycle
         time_data.push(time_s);
         pos_data.push(new_pos);
         velocity_data.push(output.new_velocity[0]);
         acceleration_data.push(output.new_acceleration[0]);
+        jerk_data.push(output.new_jerk[0]);
         step_data.push(step_index as f64);
 
         // Accumulate fractional steps
@@ -164,18 +166,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //let root = BitMapBackend::new("trajectory.png", (3840, 2440)).into_drawing_area();
     let root = SVGBackend::new("trajectory.svg", (1000, 600)).into_drawing_area();
     root.fill(&WHITE)?;
+
+    let all_x = time_data
+        .iter()
+        .chain(&step_time_points)
+        .cloned()
+        .collect::<Vec<f64>>();
+    let x_min = all_x
+        .iter()
+        .cloned()
+        .fold(f64::INFINITY, f64::min);
+    let x_max = all_x
+        .iter()
+        .cloned()
+        .fold(f64::NEG_INFINITY, f64::max);
+
+    // Find y-range across all datasets
+    let all_y = pos_data
+        .iter()
+        .chain(&velocity_data)
+        .chain(&acceleration_data)
+        .chain(&jerk_data)
+        .chain(&step_number_points)
+        .cloned()
+        .collect::<Vec<f64>>();
+    let y_min = all_y
+        .iter()
+        .cloned()
+        .fold(f64::INFINITY, f64::min);
+    let y_max = all_y
+        .iter()
+        .cloned()
+        .fold(f64::NEG_INFINITY, f64::max);
+
     let mut chart = ChartBuilder::on(&root)
-        .margin(10)
         .caption("Position (mm) vs Time (s) with Step Edges", ("sans-serif", 20))
+        .margin(10)
         .x_label_area_size(40)
         .y_label_area_size(60)
-        .build_cartesian_2d(
-            0.0..time_data.last().cloned().unwrap_or(1.0),
-            0.0..pos_data
-                .iter()
-                .cloned()
-                .fold(0. / 0., f64::max),
-        )?;
+        .build_cartesian_2d(x_min..x_max, y_min..y_max)?;
 
     chart
         .configure_mesh()
@@ -183,42 +212,73 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .y_desc("Position (mm)")
         .draw()?;
 
-    chart.draw_series(LineSeries::new(
-        time_data
-            .iter()
-            .cloned()
-            .zip(pos_data.iter().cloned()),
-        &RED,
-    ))?;
+    chart
+        .draw_series(LineSeries::new(
+            time_data
+                .iter()
+                .cloned()
+                .zip(pos_data.iter().cloned()),
+            &RED,
+        ))?
+        .label("Position")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
 
-    chart.draw_series(LineSeries::new(
-        time_data
-            .iter()
-            .cloned()
-            .zip(velocity_data.iter().cloned()),
-        &RED,
-    ))?;
+    chart
+        .draw_series(LineSeries::new(
+            time_data
+                .iter()
+                .cloned()
+                .zip(velocity_data.iter().cloned()),
+            &BLUE,
+        ))?
+        .label("Velocity")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
 
-    chart.draw_series(LineSeries::new(
-        time_data
-            .iter()
-            .cloned()
-            .zip(acceleration_data.iter().cloned()),
-        &RED,
-    ))?;
+    chart
+        .draw_series(LineSeries::new(
+            time_data
+                .iter()
+                .cloned()
+                .zip(acceleration_data.iter().cloned()),
+            &GREEN,
+        ))?
+        .label("Acceleration")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREEN));
+
+    chart
+        .draw_series(LineSeries::new(
+            time_data
+                .iter()
+                .cloned()
+                .zip(jerk_data.iter().cloned()),
+            &MAGENTA,
+        ))?
+        .label("Jerk")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &MAGENTA));
 
     // Overlay discrete step edges
-    chart.draw_series(PointSeries::of_element(
-        step_time_points
-            .iter()
-            .cloned()
-            .zip(step_number_points.iter().cloned()),
-        2,
-        &BLACK,
-        &|_coord, size, style| {
-            return EmptyElement::at((_coord.0, _coord.1)) + Circle::new((0, 0), size, style.filled());
-        },
-    ))?;
+    chart
+        .draw_series(PointSeries::of_element(
+            step_time_points
+                .iter()
+                .cloned()
+                .zip(step_number_points.iter().cloned()),
+            2,
+            &BLACK,
+            &|_coord, size, style| {
+                return EmptyElement::at((_coord.0, _coord.1)) + Circle::new((0, 0), size, style.filled());
+            },
+        ))?
+        .label("Step")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLACK));
+
+    chart
+        .configure_series_labels()
+        .background_style(&WHITE.mix(0.8))
+        .border_style(&BLACK)
+        .draw()?;
+
+    root.present()?;
 
     println!("Plot saved");
 
