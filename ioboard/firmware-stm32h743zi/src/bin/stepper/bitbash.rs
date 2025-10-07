@@ -71,6 +71,14 @@ where
     PIN3: OutputPin,
     DELAY: DelayNs,
 {
+    fn set_pulse_width_us(&mut self, pulse_width: u32) {
+        self.pulse_width = pulse_width;
+    }
+
+    fn set_pulse_delay_us(&mut self, pulse_delay: u32) {
+        self.pulse_delay = pulse_delay;
+    }
+
     #[inline(always)]
     fn enable(&mut self) -> Result<(), StepperError> {
         match &self.enable_mode {

@@ -7,6 +7,16 @@ pub enum StepperDirection {
 
 /// A simple synchronous stepper trait.
 pub trait Stepper {
+    // configuration
+
+    /// pulse width in microseconds
+    fn set_pulse_width_us(&mut self, pulse_width: u32);
+
+    /// delay in microseconds
+    fn set_pulse_delay_us(&mut self, pulse_delay: u32);
+
+    // operation
+
     fn enable(&mut self) -> Result<(), StepperError>;
     fn disable(&mut self) -> Result<(), StepperError>;
     fn direction(&mut self, direction: StepperDirection) -> Result<(), StepperError>;
