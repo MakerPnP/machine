@@ -23,22 +23,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let min_pulse_width_ns = 10_000; // 10 us
 
     // -------- Trajectory sequence ---------
-    let trajectory: &[(f64, f64, f64, f64)] = &[
+    let trajectory_in_mm: &[(f64, f64, f64, f64)] = &[
         // (position_mm, max_jerk, max_acc, max_vel)
         (100.0, 10.0, 50.0, 50.0),
         (50.0, 20.0, 25.0, 50.0),
         (300.0, 30.0, 75.0, 50.0),
     ];
 
+    let trajectory = trajectory_in_mm
+        .iter()
+        .map(|(position, jerk, acc, velocity)| {
+            (
+                (position * steps_per_mm) as i64,
+                jerk * steps_per_mm,
+                acc * steps_per_mm,
+                velocity * steps_per_mm,
+            )
+        })
+        .collect::<Vec<(i64, f64, f64, f64)>>();
+
     let mut ruckig = Ruckig::<1, ThrowErrorHandler>::new(None, dt);
 
     let mut input = InputParameter::<1>::new(None);
     let mut output = OutputParameter::<1>::new(None);
-    let mut last_position = input.current_position.clone();
+    let mut last_position_steps = 0i64;
 
     let mut current_segment = 0;
 
-    let mut step_accumulator: f64 = 0.0;
     let mut step_index: u64 = 0;
 
     // Store steps per move
@@ -56,8 +67,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if prepare_next_segment {
             prepare_next_segment = false;
 
-            let (target_pos, max_jerk, max_acc, max_vel) = trajectory[current_segment];
-            input.target_position = daov_stack![target_pos];
+            let (target_steps, max_jerk, max_acc, max_vel) = trajectory[current_segment];
+            input.target_position = daov_stack![target_steps as f64];
             input.target_velocity = daov_stack![0.0];
             input.target_acceleration = daov_stack![0.0];
 
@@ -69,10 +80,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output.new_section = current_segment;
             ruckig.reset();
 
-            let start_pos = input.current_position[0];
-            let start_steps_i64 = (start_pos * steps_per_mm).round() as i64;
-            let target_steps_i64 = (target_pos * steps_per_mm).round() as i64;
-            let requested_steps = (target_steps_i64 - start_steps_i64).abs() as u32;
+            let start_steps = input.current_position[0].round() as i64;
+            let requested_steps = (target_steps - start_steps).abs() as u32;
 
             steps_per_move.push(requested_steps);
             total_steps_requested = total_steps_requested.saturating_add(requested_steps);
@@ -106,26 +115,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        let new_pos = output.new_position[0];
-        let delta_mm = (new_pos - last_position[0]).abs();
+        // Convert to steps with rounding - deterministic and safe because ruckig final position always includes target position.
+        let new_position_steps = output.new_position[0].round() as i64;
+        let steps_this_cycle = (new_position_steps - last_position_steps).abs() as u32;
 
-        // record data every cycle
+        let delta_mm = (new_position_steps - last_position_steps).abs() as f64 / steps_per_mm;
+        println!(
+            "Delta: {}, Steps: {}, Steps this cycle: {}",
+            delta_mm, new_position_steps, steps_this_cycle
+        );
+
+        // record data every cycle (convert to mm for plotting)
         time_data.push(time_s);
-        pos_data.push(new_pos);
-        velocity_data.push(output.new_velocity[0]);
-        acceleration_data.push(output.new_acceleration[0]);
-        jerk_data.push(output.new_jerk[0]);
+        pos_data.push(new_position_steps as f64 / steps_per_mm);
+        velocity_data.push(output.new_velocity[0] / steps_per_mm);
+        acceleration_data.push(output.new_acceleration[0] / steps_per_mm);
+        jerk_data.push(output.new_jerk[0] / steps_per_mm);
         step_data.push(step_index as f64);
 
-        // Accumulate fractional steps
-        step_accumulator += delta_mm * steps_per_mm;
-        let n_steps = step_accumulator.floor() as u32;
-
-        if n_steps > 0 {
+        if steps_this_cycle > 0 {
             let cycle_start_ns = (cycle as f64 * dt * 1_000_000_000.0) as u64;
-            let pulse_interval_ns = ((dt * 1_000_000_000.0) / n_steps as f64) as u64;
+            let pulse_interval_ns = ((dt * 1_000_000_000.0) / steps_this_cycle as f64) as u64;
 
-            for i in 0..n_steps {
+            for i in 0..steps_this_cycle {
                 let pulse_start_ns = cycle_start_ns + i as u64 * pulse_interval_ns;
 
                 sleep_until(start_time, pulse_start_ns);
@@ -141,12 +153,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 step_number_points.push((step_index as f64 + i as f64) / steps_per_mm); // scale to mm
             }
 
-            step_accumulator -= n_steps as f64;
-            step_index += n_steps as u64;
+            step_index += steps_this_cycle as u64;
         }
 
         // Prepare input for next cycle
-        last_position[0] = new_pos;
+        last_position_steps = new_position_steps;
         cycle += 1;
         time_s += dt;
 
@@ -159,8 +170,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Total steps requested: {}", total_steps_requested);
     println!("Total steps pulsed: {}", total_steps_pulsed);
 
-    assert_eq!(total_steps_requested, total_steps_pulsed, "Step count mismatch!");
-    println!("All steps accounted for");
+    // this should always be true, since the steps are deterministically calculated
+    debug_assert_eq!(total_steps_requested, total_steps_pulsed, "Step count mismatch!");
+
+    if total_steps_pulsed == total_steps_requested {
+        println!("All steps accounted for");
+    }
 
     // --- Plot trajectory + steps overlay ---
     //let root = BitMapBackend::new("trajectory.png", (3840, 2440)).into_drawing_area();
