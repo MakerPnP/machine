@@ -215,7 +215,7 @@ fn run_trajectory_loop<TIME: TimeService>(
 
         tracepin::on(0);
 
-        // On an STM32H743ZI this take 2.5ms when the segment is changed, and 85us otherwise.
+        // On an STM32H743ZI @ 400Mhz this takes ~758us when the segment is changed, and ~25us otherwise (including tracepin overheads)
         let result = ruckig
             .update(&input, &mut output)
             .unwrap();
