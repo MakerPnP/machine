@@ -1221,6 +1221,7 @@ dependencies = [
  "defmt-rtt",
  "embassy-executor",
  "embassy-stm32",
+ "embassy-sync",
  "embassy-time",
  "embedded-hal 1.0.0",
  "ioboard-main",
@@ -1237,7 +1238,6 @@ dependencies = [
  "embedded-hal-async",
  "libm",
  "rsruckig",
- "static_cell",
 ]
 
 [[package]]

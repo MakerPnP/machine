@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
@@ -10,6 +9,9 @@ use embassy_stm32::rcc::mux::{
 };
 use embassy_stm32::rcc::{AHBPrescaler, APBPrescaler, LsConfig, PllDiv, Sysclk};
 use embassy_stm32::{Config, Peri, rcc};
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_sync::mutex::Mutex;
+use embassy_time::{Duration, Instant, Ticker, Timer};
 use ioboard_main::TimeService;
 use ioboard_main::tracepin::TracePins;
 use {defmt_rtt as _, panic_probe as _};
@@ -27,7 +29,7 @@ const CPU_REV: CpuRevision = CpuRevision::RevY;
 
 mod stepper;
 #[embassy_executor::main]
-async fn main(_spawner: Spawner) {
+async fn main(spawner: Spawner) {
     let mut config = Config::default();
     config.rcc.hse = Some(rcc::Hse {
         freq: embassy_stm32::time::Hertz(8_000_000),
@@ -119,7 +121,6 @@ async fn main(_spawner: Spawner) {
     let p = embassy_stm32::init(config);
     info!("firmware-stm32h743zi");
 
-    let stepper_delay = embassy_time::Delay;
     let mut stepper = GpioBitbashStepper::new(
         // enable
         Output::new(p.PC8, Level::Low, Speed::Low),
@@ -128,7 +129,6 @@ async fn main(_spawner: Spawner) {
         // direction
         Output::new(p.PC10, Level::Low, Speed::Low),
         StepperEnableMode::ActiveHigh,
-        stepper_delay,
         1000,
         1000,
     );
@@ -139,16 +139,28 @@ async fn main(_spawner: Spawner) {
     #[cfg(feature = "tracepin")]
     let trace_pins_service = TracePinsService::new([p.PD2.into(), p.PD3.into(), p.PD4.into(), p.PD5.into()]);
 
+    let led = Output::new(p.PB14, Level::Low, Speed::Low);
+    {
+        // scope required to release mutex guard
+        *(LED.lock().await) = Some(led);
+    }
+
+    spawner.spawn(unwrap!(activity_indicator_task(&LED, Duration::from_millis(200))));
+
     ioboard_main::run(
         &mut stepper,
         main_delay,
         time_service,
         #[cfg(feature = "tracepin")]
         trace_pins_service,
-    );
+    )
+    .await;
 
     info!("halt");
 }
+
+type LedType = Mutex<ThreadModeRawMutex, Option<Output<'static>>>;
+static LED: LedType = Mutex::new(None);
 
 #[derive(Default)]
 struct EmbassyTimeService {}
@@ -156,15 +168,11 @@ struct EmbassyTimeService {}
 impl TimeService for EmbassyTimeService {
     #[inline]
     fn now_micros(&self) -> u64 {
-        embassy_time::Instant::now().as_micros()
+        Instant::now().as_micros()
     }
 
-    fn delay_until_micros(&self, deadline: u64) {
-        while self.now_micros() < deadline {
-            // unsafe {
-            //     core::arch::asm!("wfi");
-            // }
-        }
+    async fn delay_until_us(&self, deadline: u64) {
+        Timer::at(Instant::from_micros(deadline)).await;
     }
 }
 
@@ -209,5 +217,20 @@ impl TracePins for TracePinsService {
         for pin in &mut self.pins {
             pin.set_high();
         }
+    }
+}
+
+#[embassy_executor::task]
+async fn activity_indicator_task(led: &'static LedType, delay: Duration) {
+    let mut ticker = Ticker::every(delay);
+
+    loop {
+        {
+            let mut led_unlocked = led.lock().await;
+            if let Some(pin_ref) = led_unlocked.as_mut() {
+                pin_ref.toggle();
+            }
+        }
+        ticker.next().await;
     }
 }

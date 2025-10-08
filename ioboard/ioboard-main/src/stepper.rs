@@ -6,6 +6,7 @@ pub enum StepperDirection {
 }
 
 /// A simple synchronous stepper trait.
+#[allow(async_fn_in_trait)]
 pub trait Stepper {
     // configuration
 
@@ -23,7 +24,7 @@ pub trait Stepper {
 
     /// Perform a single step pulse
     /// returns the minimum duration before it can be called again, or an error.
-    fn step_and_wait(&mut self) -> Result<(), StepperError>;
+    async fn step_and_wait(&mut self) -> Result<(), StepperError>;
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]

@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 
 use defmt::info;
 use embedded_alloc::LlffHeap as Heap;
-use embedded_hal::delay::DelayNs;
+use embedded_hal_async::delay::DelayNs;
 use libm::round;
 use rsruckig::prelude::*;
 
@@ -18,7 +18,7 @@ use crate::tracepin::TracePins;
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
 
-pub fn run<DELAY: DelayNs, TIME: TimeService, #[cfg(feature = "tracepin")] TRACEPINS: TracePins>(
+pub async fn run<DELAY: DelayNs, TIME: TimeService, #[cfg(feature = "tracepin")] TRACEPINS: TracePins>(
     stepper: &mut impl Stepper,
     mut delay: DELAY,
     mut time: TIME,
@@ -30,7 +30,7 @@ pub fn run<DELAY: DelayNs, TIME: TimeService, #[cfg(feature = "tracepin")] TRACE
     {
         info!("Initializing trace pins");
         trace_pins.all_on();
-        delay.delay_ms(500);
+        delay.delay_ms(500).await;
         trace_pins.all_off();
 
         tracepin::init(trace_pins);
@@ -74,23 +74,29 @@ pub fn run<DELAY: DelayNs, TIME: TimeService, #[cfg(feature = "tracepin")] TRACE
     loop {
         for i in 0..2 {
             info!("Run simple loop {}", i);
-            if run_simple_loop(&mut delay, stepper, &mut time, move_steps).is_err() {
+            if run_simple_loop(&mut delay, stepper, &mut time, move_steps)
+                .await
+                .is_err()
+            {
                 break;
             }
-            delay.delay_ms(1000);
+            delay.delay_ms(1000).await;
         }
 
         for i in 0..2 {
             info!("Run trajectory {}", i);
-            if run_trajectory_loop(stepper, &mut time, trajectory_units, steps_per_unit).is_err() {
+            if run_trajectory_loop(stepper, &mut time, trajectory_units, steps_per_unit)
+                .await
+                .is_err()
+            {
                 break;
             }
-            delay.delay_ms(1000);
+            delay.delay_ms(1000).await;
         }
     }
 }
 
-fn run_simple_loop<DELAY: DelayNs, TIME: TimeService>(
+async fn run_simple_loop<DELAY: DelayNs, TIME: TimeService>(
     delay: &mut DELAY,
     stepper: &mut impl Stepper,
     time: &mut TIME,
@@ -102,34 +108,36 @@ fn run_simple_loop<DELAY: DelayNs, TIME: TimeService>(
     info!("Normal");
     stepper.direction(StepperDirection::Normal)?;
 
-    delay.delay_ms(direction_change_delay_ms);
+    delay
+        .delay_ms(direction_change_delay_ms)
+        .await;
 
     let start_time = time.now_micros();
     let mut step_deadline = start_time;
     for _ in 0..move_steps {
-        stepper.step_and_wait()?;
-        // delay.delay_us(pulse_interval_us);
+        stepper.step_and_wait().await?;
         step_deadline = step_deadline.wrapping_add(cycle_interval_micros);
-        time.delay_until_micros(step_deadline);
+        time.delay_until_us(step_deadline).await;
     }
 
     info!("Reversed");
     stepper.direction(StepperDirection::Reversed)?;
 
-    delay.delay_ms(direction_change_delay_ms);
+    delay
+        .delay_ms(direction_change_delay_ms)
+        .await;
 
     let start_time = time.now_micros();
     let mut step_deadline = start_time;
     for _ in 0..move_steps {
-        stepper.step_and_wait()?;
-        // delay.delay_us(pulse_interval_us);
+        stepper.step_and_wait().await?;
         step_deadline = step_deadline.wrapping_add(cycle_interval_micros);
-        time.delay_until_micros(step_deadline);
+        time.delay_until_us(step_deadline).await;
     }
     Ok::<(), StepperError>(())
 }
 
-fn run_trajectory_loop<TIME: TimeService>(
+async fn run_trajectory_loop<TIME: TimeService>(
     stepper: &mut impl Stepper,
     time: &mut TIME,
     trajectory_units: &[(f64, f64, f64, f64)],
@@ -250,10 +258,10 @@ fn run_trajectory_loop<TIME: TimeService>(
             let mut step_deadline = cycle_start_us;
 
             for _ in 0..steps_this_cycle {
-                stepper.step_and_wait()?;
+                stepper.step_and_wait().await?;
 
                 step_deadline = step_deadline.wrapping_add(pulse_interval_us);
-                time.delay_until_micros(step_deadline);
+                time.delay_until_us(step_deadline).await
             }
         }
 
@@ -262,7 +270,8 @@ fn run_trajectory_loop<TIME: TimeService>(
         cycle_deadline = cycle_deadline.wrapping_add(cycle_interval_micros);
 
         // Sleep until next RT cycle
-        time.delay_until_micros(cycle_deadline);
+        time.delay_until_us(cycle_deadline)
+            .await;
     }
 
     Ok::<(), StepperError>(())
@@ -276,9 +285,10 @@ fn init_heap() {
     unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
 }
 
+#[allow(async_fn_in_trait)]
 pub trait TimeService {
     fn now_micros(&self) -> u64;
-    fn delay_until_micros(&self, deadline: u64);
+    async fn delay_until_us(&self, deadline: u64);
 }
 
 pub mod tracepin {

@@ -14,6 +14,8 @@ ioboard-main = { path = "../ioboard-main" }
 embassy-stm32 = { version = "0.4.0", path = "../../libs/embassy/embassy-stm32", features = ["defmt", "stm32h743zi", "time-driver-any", "unstable-pac", "exti", "memory-x"] }
 embassy-executor = { version = "0.9.0", path = "../../libs/embassy/embassy-executor", features = ["defmt", "arch-cortex-m", "executor-thread"] }
 embassy-time = { version = "0.5.0", path = "../../libs/embassy/embassy-time", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-sync = { version = "0.7.2", path = "../../libs/embassy/embassy-sync", features = ["defmt"] }
+
 defmt = "1.0.1"
 
 defmt-rtt = "1.0.0"

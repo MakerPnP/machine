@@ -1,4 +1,4 @@
-use embedded_hal::delay::DelayNs;
+use embassy_time::{Duration, Instant, Timer};
 use embedded_hal::digital::OutputPin;
 use ioboard_main::stepper::{Stepper, StepperDirection, StepperError};
 
@@ -9,25 +9,23 @@ pub enum StepperEnableMode {
     /// needs a low voltage to enable
     ActiveLow,
 }
-pub struct GpioBitbashStepper<PIN1, PIN2, PIN3, DELAY> {
+pub struct GpioBitbashStepper<PIN1, PIN2, PIN3> {
     enable_pin: PIN1,
     step_pin: PIN2,
     direction_pin: PIN3,
     enable_mode: StepperEnableMode,
-    delay: DELAY,
     /// pulse width (us)
     pulse_width: u32,
     /// minimum delay between pulses (us)
     pulse_delay: u32,
 }
 
-impl<PIN1, PIN2, PIN3, DELAY> GpioBitbashStepper<PIN1, PIN2, PIN3, DELAY> {
+impl<PIN1, PIN2, PIN3> GpioBitbashStepper<PIN1, PIN2, PIN3> {
     pub fn new(
         enable_pin: PIN1,
         step_pin: PIN2,
         direction_pin: PIN3,
         enable_mode: StepperEnableMode,
-        delay: DELAY,
         pulse_width: u32,
         pulse_delay: u32,
     ) -> Self {
@@ -36,7 +34,6 @@ impl<PIN1, PIN2, PIN3, DELAY> GpioBitbashStepper<PIN1, PIN2, PIN3, DELAY> {
             step_pin,
             direction_pin,
             enable_mode,
-            delay,
             pulse_width,
             pulse_delay,
         };
@@ -45,12 +42,11 @@ impl<PIN1, PIN2, PIN3, DELAY> GpioBitbashStepper<PIN1, PIN2, PIN3, DELAY> {
     }
 }
 
-impl<PIN1, PIN2, PIN3, DELAY> GpioBitbashStepper<PIN1, PIN2, PIN3, DELAY>
+impl<PIN1, PIN2, PIN3> GpioBitbashStepper<PIN1, PIN2, PIN3>
 where
     PIN1: OutputPin,
     PIN2: OutputPin,
     PIN3: OutputPin,
-    DELAY: DelayNs,
 {
     pub fn initialize_io(&mut self) -> Result<(), StepperError> {
         self.step_pin
@@ -64,12 +60,11 @@ where
     }
 }
 
-impl<PIN1, PIN2, PIN3, DELAY> Stepper for GpioBitbashStepper<PIN1, PIN2, PIN3, DELAY>
+impl<PIN1, PIN2, PIN3> Stepper for GpioBitbashStepper<PIN1, PIN2, PIN3>
 where
     PIN1: OutputPin,
     PIN2: OutputPin,
     PIN3: OutputPin,
-    DELAY: DelayNs,
 {
     fn set_pulse_width_us(&mut self, pulse_width: u32) {
         self.pulse_width = pulse_width;
@@ -107,15 +102,18 @@ where
     }
 
     #[inline(always)]
-    fn step_and_wait(&mut self) -> Result<(), StepperError> {
+    async fn step_and_wait(&mut self) -> Result<(), StepperError> {
+        let now = Instant::now();
         self.step_pin
             .set_high()
             .map_err(|_e| StepperError::IoError)?;
-        self.delay.delay_us(self.pulse_width);
+        let mut deadline = now + Duration::from_micros(self.pulse_width as u64);
+        Timer::at(deadline).await;
         self.step_pin
             .set_low()
             .map_err(|_e| StepperError::IoError)?;
-        self.delay.delay_us(self.pulse_delay);
+        deadline += Duration::from_micros(self.pulse_width as u64);
+        Timer::at(deadline).await;
         Ok(())
     }
 }
