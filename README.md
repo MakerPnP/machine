@@ -1,6 +1,6 @@
 <div align="center">
 
-[![Build Status](https://github.com/makerpnp/makerpnp/workflows/Rust/badge.svg)](https://github.com/makerpnp/makerpnp/actions/workflows/rust.yml)
+[![Build Status](https://github.com/makerpnp/machine/workflows/Rust/badge.svg)](https://github.com/makerpnp/machine/actions/workflows/rust.yml)
 [![Discord](https://img.shields.io/discord/1255867192503832688?label=MakerPnP%20discord&color=%2332c955)](https://discord.gg/ffwj5rKZuf)
 [![YouTube Channel Subscribers](https://img.shields.io/youtube/channel/subscribers/UClzmlBRrChCJCXkY2h9GhBQ?style=flat&color=%2332c955)](https://www.youtube.com/channel/UClzmlBRrChCJCXkY2h9GhBQ?sub_confirmation=1)
 [![MakerPnP GitHub Organization's stars](https://img.shields.io/github/stars/makerpnp?style=flat&color=%2332c955)](https://github.com/MakerPnP)
