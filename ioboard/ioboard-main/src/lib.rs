@@ -63,12 +63,10 @@ pub fn run<DELAY: DelayNs, TIME: TimeService, #[cfg(feature = "tracepin")] TRACE
         // (degrees, max_jerk, max_acc, max_vel)
         (360.0, 10000.0, 10000.0, 10000.0),
         (0.0, 10000.0, 10000.0, 10000.0),
-        (360.0, 20000.0, 20000.0, 20000.0),
-        (0.0, 20000.0, 20000.0, 20000.0),
-        (360.0, 40000.0, 40000.0, 40000.0),
-        (0.0, 40000.0, 40000.0, 40000.0),
-        (360.0, 80000.0, 80000.0, 80000.0),
-        (0.0, 80000.0, 80000.0, 80000.0),
+        (360.0, 50000.0, 50000.0, 50000.0),
+        (0.0, 50000.0, 50000.0, 50000.0),
+        (360.0, 100000.0, 100000.0, 100000.0),
+        (0.0, 100000.0, 100000.0, 100000.0),
     ];
 
     let steps_per_unit = motor_steps as f64 / 360.0;
@@ -98,8 +96,8 @@ fn run_simple_loop<DELAY: DelayNs, TIME: TimeService>(
     time: &mut TIME,
     move_steps: i32,
 ) -> Result<(), StepperError> {
-    let cycle_interval_micros = 200;
-    let direction_change_delay_ms = 500;
+    let cycle_interval_micros = 175;
+    let direction_change_delay_ms = 250;
 
     info!("Normal");
     stepper.direction(StepperDirection::Normal)?;
