@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 defmt = "1.0.1"
-rsruckig = { version = "2.1.0", default-features = false, features = ["libm", "alloc"] }
 embedded-alloc = "0.6.0"
 embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
+rsruckig = { version = "2.1.0", default-features = false, features = ["libm", "alloc"] }
+libm = "0.2.15"
