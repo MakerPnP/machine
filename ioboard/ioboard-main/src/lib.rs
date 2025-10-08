@@ -13,12 +13,28 @@ use libm::round;
 use rsruckig::prelude::*;
 
 use crate::stepper::{Stepper, StepperDirection, StepperError};
+use crate::tracepin::TracePins;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
 
-pub fn run<DELAY: DelayNs, TIME: TimeService>(stepper: &mut impl Stepper, mut delay: DELAY, mut time: TIME) {
+pub fn run<DELAY: DelayNs, TIME: TimeService, #[cfg(feature = "tracepin")] TRACEPINS: TracePins>(
+    stepper: &mut impl Stepper,
+    mut delay: DELAY,
+    mut time: TIME,
+    #[cfg(feature = "tracepin")] mut trace_pins: TRACEPINS,
+) {
     init_heap();
+
+    #[cfg(feature = "tracepin")]
+    {
+        info!("Initializing trace pins");
+        trace_pins.all_on();
+        delay.delay_ms(500);
+        trace_pins.all_off();
+
+        tracepin::init(trace_pins);
+    }
 
     let step_frequency_khz = 20_000;
     let step_period_us = 1_000_000 / step_frequency_khz;
@@ -51,18 +67,20 @@ pub fn run<DELAY: DelayNs, TIME: TimeService>(stepper: &mut impl Stepper, mut de
         (0.0, 20000.0, 20000.0, 20000.0),
         (360.0, 40000.0, 40000.0, 40000.0),
         (0.0, 40000.0, 40000.0, 40000.0),
+        (360.0, 80000.0, 80000.0, 80000.0),
+        (0.0, 80000.0, 80000.0, 80000.0),
     ];
 
     let steps_per_unit = motor_steps as f64 / 360.0;
 
     loop {
-        for i in 0..2 {
-            info!("Run simple loop {}", i);
-            if run_simple_loop(&mut delay, stepper, &mut time, move_steps).is_err() {
-                break;
-            }
-            delay.delay_ms(1000);
-        }
+        // for i in 0..2 {
+        //     info!("Run simple loop {}", i);
+        //     if run_simple_loop(&mut delay, stepper, &mut time, move_steps).is_err() {
+        //         break
+        //     }
+        //     delay.delay_ms(1000);
+        // }
 
         for i in 0..2 {
             info!("Run trajectory {}", i);
@@ -195,10 +213,15 @@ fn run_trajectory_loop<TIME: TimeService>(
             ruckig.reset();
         }
 
+        tracepin::on(0);
+
+        // On an STM32H743ZI this take 2.5ms when the segment is changed, and 85us otherwise.
         let result = ruckig
             .update(&input, &mut output)
             .unwrap();
         output.pass_to_input(&mut input);
+
+        tracepin::off(0);
 
         if matches!(result, RuckigResult::Finished) {
             // prepare for new segment
@@ -250,4 +273,56 @@ fn init_heap() {
 pub trait TimeService {
     fn now_micros(&self) -> u64;
     fn delay_until_micros(&self, deadline: u64);
+}
+
+pub mod tracepin {
+    use core::mem::MaybeUninit;
+
+    /// Safety: for speed, any pins used are assumed to be initialized to the correct state.
+    pub trait TracePins {
+        fn set_pin_on(&mut self, pin: u8);
+        fn set_pin_off(&mut self, pin: u8);
+
+        fn all_off(&mut self);
+        fn all_on(&mut self);
+    }
+
+    //
+    // API to avoid having to pass around a mutable reference to the trace pins
+    //
+
+    #[inline(always)]
+    pub fn on(pin: u8) {
+        #[cfg(feature = "tracepin")]
+        unsafe {
+            (*TRACE_PINS.assume_init()).set_pin_on(pin);
+        }
+    }
+
+    #[inline(always)]
+    pub fn off(pin: u8) {
+        #[cfg(feature = "tracepin")]
+        unsafe {
+            (*TRACE_PINS.assume_init()).set_pin_off(pin);
+        }
+    }
+
+    #[cfg(feature = "tracepin")]
+    static mut TRACE_PINS: MaybeUninit<*mut dyn TracePins> = MaybeUninit::uninit();
+
+    pub fn init<TRACEPINS: TracePins>(trace_pins: TRACEPINS) {
+        #[cfg(feature = "tracepin")]
+        unsafe {
+            // FUTURE find a no-alloc way to do this in a safe way, avoiding the need for suppressing errors or warnings
+
+            // Leak the trace_pins to give it a true 'static lifetime
+            // This is safe because we never try to drop it or access it from multiple places
+            let trace_pins_box = alloc::boxed::Box::new(trace_pins);
+            let trace_pins_leaked = alloc::boxed::Box::leak(trace_pins_box);
+            let trace_pins_ptr: *mut dyn TracePins = trace_pins_leaked as *mut dyn TracePins as _;
+
+            #[allow(static_mut_refs)]
+            TRACE_PINS.write(trace_pins_ptr);
+        }
+    }
 }

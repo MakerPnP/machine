@@ -3,6 +3,11 @@ name = "ioboard-firmware-stm32h743zi"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["tracepin"]
+
+tracepin = ["ioboard-main/tracepin"]
+
 [dependencies]
 ioboard-main = { path = "../ioboard-main" }
 
