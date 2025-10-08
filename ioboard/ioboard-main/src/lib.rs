@@ -74,13 +74,13 @@ pub fn run<DELAY: DelayNs, TIME: TimeService, #[cfg(feature = "tracepin")] TRACE
     let steps_per_unit = motor_steps as f64 / 360.0;
 
     loop {
-        // for i in 0..2 {
-        //     info!("Run simple loop {}", i);
-        //     if run_simple_loop(&mut delay, stepper, &mut time, move_steps).is_err() {
-        //         break
-        //     }
-        //     delay.delay_ms(1000);
-        // }
+        for i in 0..2 {
+            info!("Run simple loop {}", i);
+            if run_simple_loop(&mut delay, stepper, &mut time, move_steps).is_err() {
+                break;
+            }
+            delay.delay_ms(1000);
+        }
 
         for i in 0..2 {
             info!("Run trajectory {}", i);
