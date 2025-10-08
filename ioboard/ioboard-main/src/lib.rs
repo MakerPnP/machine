@@ -251,6 +251,9 @@ async fn run_trajectory_loop<TIME: TimeService>(
         let new_position_steps = round(output.new_position[0]) as i64;
         let steps_this_cycle = (new_position_steps - last_position_steps).abs() as u32;
 
+        // FUTURE improve step spacing (e.g. by using a hardware timer to control the step pulse width and frequency
+        //        or by using a hardware driven DMA stream
+
         if steps_this_cycle > 0 {
             let cycle_start_us = time.now_micros();
             let pulse_interval_us: u64 = cycle_interval_micros / steps_this_cycle as u64;
@@ -258,9 +261,10 @@ async fn run_trajectory_loop<TIME: TimeService>(
             let mut step_deadline = cycle_start_us;
 
             for _ in 0..steps_this_cycle {
-                stepper.step_and_wait().await?;
+                let pulse_delay = stepper.step().await?;
 
-                step_deadline = step_deadline.wrapping_add(pulse_interval_us);
+                // wait until next step pulse or the pulse delay has elapsed
+                step_deadline = step_deadline.wrapping_add(pulse_interval_us.max(pulse_delay as u64));
                 time.delay_until_us(step_deadline).await
             }
         }

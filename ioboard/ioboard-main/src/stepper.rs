@@ -22,9 +22,12 @@ pub trait Stepper {
     fn disable(&mut self) -> Result<(), StepperError>;
     fn direction(&mut self, direction: StepperDirection) -> Result<(), StepperError>;
 
-    /// Perform a single step pulse
-    /// returns the minimum duration before it can be called again, or an error.
+    /// Perform a single step pulse and waits for the pulse delay to expire
     async fn step_and_wait(&mut self) -> Result<(), StepperError>;
+
+    /// Perform a single step pulse and return the pulse delay so the caller can schedule the next
+    /// step without an additional await.
+    async fn step(&mut self) -> Result<u32, StepperError>;
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]

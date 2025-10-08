@@ -116,4 +116,18 @@ where
         Timer::at(deadline).await;
         Ok(())
     }
+
+    #[inline(always)]
+    async fn step(&mut self) -> Result<u32, StepperError> {
+        let now = Instant::now();
+        self.step_pin
+            .set_high()
+            .map_err(|_e| StepperError::IoError)?;
+        let deadline = now + Duration::from_micros(self.pulse_width as u64);
+        Timer::at(deadline).await;
+        self.step_pin
+            .set_low()
+            .map_err(|_e| StepperError::IoError)?;
+        Ok(self.pulse_delay)
+    }
 }
