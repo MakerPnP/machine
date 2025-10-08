@@ -186,7 +186,6 @@ fn run_trajectory_loop<TIME: TimeService>(
 
     loop {
         if prepare_next_segment {
-            prepare_next_segment = false;
             info!("Preparing segment, index: {}", segment_index);
 
             let (target_steps, max_jerk, max_acc, max_vel) = trajectory_steps[segment_index];
@@ -222,6 +221,15 @@ fn run_trajectory_loop<TIME: TimeService>(
         output.pass_to_input(&mut input);
 
         tracepin::off(0);
+
+        if prepare_next_segment {
+            prepare_next_segment = false;
+
+            // When changing the segment, after the initial calculation is done, which takes longer then normal,
+            // a the cycle deadline is reset to avoid first-step jitter on the rare case where there is actually
+            // a step on the first cycle.
+            cycle_deadline = time.now_micros();
+        }
 
         if matches!(result, RuckigResult::Finished) {
             // prepare for new segment
