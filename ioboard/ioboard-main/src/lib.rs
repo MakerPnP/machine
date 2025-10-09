@@ -7,35 +7,15 @@ pub mod stepper;
 use alloc::vec::Vec;
 
 use defmt::info;
-use embedded_alloc::LlffHeap as Heap;
 use embedded_hal_async::delay::DelayNs;
+use ioboard_time::TimeService;
+use ioboard_trace::tracepin;
 use libm::round;
 use rsruckig::prelude::*;
 
 use crate::stepper::{Stepper, StepperDirection, StepperError};
-use crate::tracepin::TracePins;
 
-#[global_allocator]
-static HEAP: Heap = Heap::empty();
-
-pub async fn run<DELAY: DelayNs, TIME: TimeService, #[cfg(feature = "tracepin")] TRACEPINS: TracePins>(
-    stepper: &mut impl Stepper,
-    mut delay: DELAY,
-    mut time: TIME,
-    #[cfg(feature = "tracepin")] mut trace_pins: TRACEPINS,
-) {
-    init_heap();
-
-    #[cfg(feature = "tracepin")]
-    {
-        info!("Initializing trace pins");
-        trace_pins.all_on();
-        delay.delay_ms(500).await;
-        trace_pins.all_off();
-
-        tracepin::init(trace_pins);
-    }
-
+pub async fn run<DELAY: DelayNs, TIME: TimeService>(stepper: &mut impl Stepper, mut delay: DELAY, mut time: TIME) {
     let step_frequency_khz = 20_000;
     let step_period_us = 1_000_000 / step_frequency_khz;
     let step_pulse_width_us = 4;
@@ -61,9 +41,9 @@ pub async fn run<DELAY: DelayNs, TIME: TimeService, #[cfg(feature = "tracepin")]
 
     let trajectory_units: &[(f64, f64, f64, f64)] = &[
         // (degrees, max_jerk, max_acc, max_vel)
-        (360.0, 10000.0, 10000.0, 10000.0),
+        (90.0, 10000.0, 10000.0, 10000.0),
         (0.0, 10000.0, 10000.0, 10000.0),
-        (360.0, 50000.0, 50000.0, 50000.0),
+        (180.0, 50000.0, 50000.0, 50000.0),
         (0.0, 50000.0, 50000.0, 50000.0),
         (360.0, 100000.0, 100000.0, 100000.0),
         (0.0, 100000.0, 100000.0, 100000.0),
@@ -279,70 +259,4 @@ async fn run_trajectory_loop<TIME: TimeService>(
     }
 
     Ok::<(), StepperError>(())
-}
-
-#[allow(static_mut_refs)]
-fn init_heap() {
-    use core::mem::MaybeUninit;
-    const HEAP_SIZE: usize = 1024;
-    static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
-    unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
-}
-
-#[allow(async_fn_in_trait)]
-pub trait TimeService {
-    fn now_micros(&self) -> u64;
-    async fn delay_until_us(&self, deadline: u64);
-}
-
-pub mod tracepin {
-    use core::mem::MaybeUninit;
-
-    /// Safety: for speed, any pins used are assumed to be initialized to the correct state.
-    pub trait TracePins {
-        fn set_pin_on(&mut self, pin: u8);
-        fn set_pin_off(&mut self, pin: u8);
-
-        fn all_off(&mut self);
-        fn all_on(&mut self);
-    }
-
-    //
-    // API to avoid having to pass around a mutable reference to the trace pins
-    //
-
-    #[inline(always)]
-    pub fn on(pin: u8) {
-        #[cfg(feature = "tracepin")]
-        unsafe {
-            (*TRACE_PINS.assume_init()).set_pin_on(pin);
-        }
-    }
-
-    #[inline(always)]
-    pub fn off(pin: u8) {
-        #[cfg(feature = "tracepin")]
-        unsafe {
-            (*TRACE_PINS.assume_init()).set_pin_off(pin);
-        }
-    }
-
-    #[cfg(feature = "tracepin")]
-    static mut TRACE_PINS: MaybeUninit<*mut dyn TracePins> = MaybeUninit::uninit();
-
-    pub fn init<TRACEPINS: TracePins>(trace_pins: TRACEPINS) {
-        #[cfg(feature = "tracepin")]
-        unsafe {
-            // FUTURE find a no-alloc way to do this in a safe way, avoiding the need for suppressing errors or warnings
-
-            // Leak the trace_pins to give it a true 'static lifetime
-            // This is safe because we never try to drop it or access it from multiple places
-            let trace_pins_box = alloc::boxed::Box::new(trace_pins);
-            let trace_pins_leaked = alloc::boxed::Box::leak(trace_pins_box);
-            let trace_pins_ptr: *mut dyn TracePins = trace_pins_leaked as *mut dyn TracePins as _;
-
-            #[allow(static_mut_refs)]
-            TRACE_PINS.write(trace_pins_ptr);
-        }
-    }
 }

@@ -1,23 +1,34 @@
 #![no_std]
 #![no_main]
+
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
+use embassy_net::tcp::client::TcpClient;
+use embassy_net::tcp::client::TcpClientState;
+use embassy_stm32::eth::PacketQueue;
+use embassy_stm32::eth::{Ethernet, GenericPhy};
+use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::pac::rcc::vals::{Pllm, Plln, Pllsrc};
+use embassy_stm32::peripherals::ETH;
 use embassy_stm32::rcc::mux::{
     Fdcansel, Fmcsel, I2c4sel, I2c1235sel, Saisel, Sdmmcsel, Spi6sel, Spi45sel, Usart16910sel, Usart234578sel, Usbsel,
 };
 use embassy_stm32::rcc::{AHBPrescaler, APBPrescaler, LsConfig, PllDiv, Sysclk};
-use embassy_stm32::{Config, Peri, rcc};
+use embassy_stm32::rng::Rng;
+use embassy_stm32::{Config, bind_interrupts, eth, peripherals, rcc, rng};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Instant, Ticker, Timer};
-use ioboard_main::TimeService;
-use ioboard_main::tracepin::TracePins;
+use embassy_time::{Duration, Ticker};
+use embedded_alloc::LlffHeap as Heap;
+use embedded_hal_async::delay::DelayNs;
+use ioboard_trace::tracepin;
+use ioboard_trace::tracepin::TracePins;
+use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
 use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
-
+use crate::time::EmbassyTimeService;
+use crate::trace::TracePinsService;
 #[derive(Debug, Copy, Clone, PartialEq, Hash)]
 #[allow(dead_code)]
 enum CpuRevision {
@@ -28,6 +39,18 @@ enum CpuRevision {
 const CPU_REV: CpuRevision = CpuRevision::RevY;
 
 mod stepper;
+mod time;
+#[cfg(feature = "tracepin")]
+mod trace;
+
+#[global_allocator]
+static HEAP: Heap = Heap::empty();
+
+bind_interrupts!(struct Irqs {
+    ETH => eth::InterruptHandler;
+    RNG => rng::InterruptHandler<peripherals::RNG>;
+});
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let mut config = Config::default();
@@ -36,7 +59,7 @@ async fn main(spawner: Spawner) {
         mode: rcc::HseMode::Oscillator,
     });
     config.rcc.ls = LsConfig::off();
-
+    config.rcc.hsi48 = Some(Default::default()); // needed for RNG
     config.rcc.sys = Sysclk::PLL1_P;
     config.rcc.d1c_pre = AHBPrescaler::DIV1;
     config.rcc.ahb_pre = AHBPrescaler::DIV2;
@@ -121,6 +144,69 @@ async fn main(spawner: Spawner) {
     let p = embassy_stm32::init(config);
     info!("firmware-stm32h743zi");
 
+    init_heap();
+
+    info!("Initializing LED");
+    let led = Output::new(p.PB14, Level::Low, Speed::Low);
+    {
+        // scope required to release mutex guard
+        *(LED.lock().await) = Some(led);
+    }
+    spawner.spawn(unwrap!(activity_indicator_task(&LED, Duration::from_millis(200))));
+
+    let mut delay = embassy_time::Delay;
+    let time_service = EmbassyTimeService::default();
+
+    #[cfg(feature = "tracepin")]
+    {
+        info!("Initializing trace pins");
+        let mut trace_pins = TracePinsService::new([p.PD2.into(), p.PD3.into(), p.PD4.into(), p.PD5.into()]);
+        trace_pins.all_on();
+        delay.delay_ms(500).await;
+        trace_pins.all_off();
+
+        tracepin::init(trace_pins);
+    }
+
+    // Generate random seed.
+    info!("Initializing RNG");
+    let mut rng = Rng::new(p.RNG, Irqs);
+    let mut seed = [0; 8];
+    rng.fill_bytes(&mut seed);
+    let seed = u64::from_le_bytes(seed);
+
+    info!("Initializing ETH");
+    // TODO generate mac address from CPU ID
+    //      potentially using this algorythm (C): https://github.com/zephyrproject-rtos/zephyr/issues/59993#issuecomment-1644030438
+    let mac_addr = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
+
+    static PACKETS: StaticCell<PacketQueue<4, 4>> = StaticCell::new();
+    // warning: Not all STM32H7 devices have the exact same pins here
+    // for STM32H747XIH, replace p.PB13 for PG12
+    let device = Ethernet::new(
+        PACKETS.init(PacketQueue::<4, 4>::new()),
+        p.ETH,
+        Irqs,
+        p.PA1,  // ref_clk
+        p.PA2,  // mdio
+        p.PC1,  // eth_mdc
+        p.PA7,  // CRS_DV: Carrier Sense
+        p.PC4,  // RX_D0: Received Bit 0
+        p.PC5,  // RX_D1: Received Bit 1
+        p.PG13, // TX_D0: Transmit Bit 0
+        p.PB13, // TX_D1: Transmit Bit 1
+        p.PG11, // TX_EN: Transmit Enable
+        GenericPhy::new_auto(),
+        mac_addr,
+    );
+
+    let (stack, runner) = ioboard_net_embassy::init(device, seed);
+
+    // Launch network task
+    spawner.spawn(unwrap!(net_task(runner)));
+    spawner.spawn(unwrap!(comms_task(stack, time_service)));
+
+    info!("Initializing Stepper");
     let mut stepper = GpioBitbashStepper::new(
         // enable
         Output::new(p.PC8, Level::Low, Speed::Low),
@@ -134,91 +220,14 @@ async fn main(spawner: Spawner) {
     );
     stepper.initialize_io().unwrap();
 
-    let main_delay = embassy_time::Delay;
-    let time_service = EmbassyTimeService::default();
-    #[cfg(feature = "tracepin")]
-    let trace_pins_service = TracePinsService::new([p.PD2.into(), p.PD3.into(), p.PD4.into(), p.PD5.into()]);
-
-    let led = Output::new(p.PB14, Level::Low, Speed::Low);
-    {
-        // scope required to release mutex guard
-        *(LED.lock().await) = Some(led);
-    }
-
-    spawner.spawn(unwrap!(activity_indicator_task(&LED, Duration::from_millis(200))));
-
-    ioboard_main::run(
-        &mut stepper,
-        main_delay,
-        time_service,
-        #[cfg(feature = "tracepin")]
-        trace_pins_service,
-    )
-    .await;
+    info!("Initialisation complete");
+    ioboard_main::run(&mut stepper, delay, time_service).await;
 
     info!("halt");
 }
 
 type LedType = Mutex<ThreadModeRawMutex, Option<Output<'static>>>;
 static LED: LedType = Mutex::new(None);
-
-#[derive(Default)]
-struct EmbassyTimeService {}
-
-impl TimeService for EmbassyTimeService {
-    #[inline]
-    fn now_micros(&self) -> u64 {
-        Instant::now().as_micros()
-    }
-
-    async fn delay_until_us(&self, deadline: u64) {
-        Timer::at(Instant::from_micros(deadline)).await;
-    }
-}
-
-struct TracePinsService {
-    pins: [Output<'static>; 4],
-}
-
-impl TracePinsService {
-    fn new(pins: [Peri<'static, AnyPin>; 4]) -> Self {
-        Self {
-            pins: pins.map(|pin| Output::new(pin, Level::Low, Speed::Low)),
-        }
-    }
-}
-
-impl TracePins for TracePinsService {
-    #[inline(always)]
-    fn set_pin_on(&mut self, pin: u8) {
-        unsafe {
-            self.pins
-                .get_unchecked_mut(pin as usize)
-                .set_high();
-        }
-    }
-
-    #[inline(always)]
-    fn set_pin_off(&mut self, pin: u8) {
-        unsafe {
-            self.pins
-                .get_unchecked_mut(pin as usize)
-                .set_low();
-        }
-    }
-
-    fn all_off(&mut self) {
-        for pin in &mut self.pins {
-            pin.set_low();
-        }
-    }
-
-    fn all_on(&mut self) {
-        for pin in &mut self.pins {
-            pin.set_high();
-        }
-    }
-}
 
 #[embassy_executor::task]
 async fn activity_indicator_task(led: &'static LedType, delay: Duration) {
@@ -233,4 +242,33 @@ async fn activity_indicator_task(led: &'static LedType, delay: Duration) {
         }
         ticker.next().await;
     }
+}
+
+type Device = Ethernet<'static, ETH, GenericPhy>;
+
+#[embassy_executor::task]
+async fn net_task(mut runner: embassy_net::Runner<'static, Device>) -> ! {
+    runner.run().await
+}
+
+#[embassy_executor::task]
+async fn comms_task(stack: embassy_net::Stack<'static>, time_service: EmbassyTimeService) -> ! {
+    // Ensure DHCP configuration is up before trying connect
+    stack.wait_config_up().await;
+
+    info!("Network task initialized");
+
+    let state: TcpClientState<1, 1024, 1024> = TcpClientState::new();
+    let client = TcpClient::new(stack, &state);
+
+    let mut runner = ioboard_net::init(time_service, client);
+    runner.run().await
+}
+
+#[allow(static_mut_refs)]
+fn init_heap() {
+    use core::mem::MaybeUninit;
+    const HEAP_SIZE: usize = 1024;
+    static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+    unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
 }

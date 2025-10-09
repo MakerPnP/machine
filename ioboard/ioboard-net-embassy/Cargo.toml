@@ -1,0 +1,10 @@
+[package]
+name = "ioboard-net-embassy"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+
+[dependencies]
+embassy-net = { version = "0.7.1", path = "../../libs/embassy/embassy-net", features = ["defmt", "tcp", "dhcpv4", "medium-ethernet", "dns"] }
+static_cell = "2.1.1"
