@@ -1,13 +1,18 @@
 #![no_std]
 #![no_main]
 
+use cortex_m::asm;
+use cortex_m_rt::entry;
 use defmt::*;
-use embassy_executor::Spawner;
+use embassy_executor::SendSpawner;
+use embassy_executor::{Executor, InterruptExecutor, Spawner};
 use embassy_net::tcp::client::TcpClient;
 use embassy_net::tcp::client::TcpClientState;
+use embassy_stm32::Peripherals;
 use embassy_stm32::eth::PacketQueue;
 use embassy_stm32::eth::{Ethernet, GenericPhy};
 use embassy_stm32::gpio::{Level, Output, Speed};
+use embassy_stm32::interrupt::{InterruptExt, Priority};
 use embassy_stm32::pac::rcc::vals::{Pllm, Plln, Pllsrc};
 use embassy_stm32::peripherals::ETH;
 use embassy_stm32::rcc::mux::{
@@ -15,12 +20,15 @@ use embassy_stm32::rcc::mux::{
 };
 use embassy_stm32::rcc::{AHBPrescaler, APBPrescaler, LsConfig, PllDiv, Sysclk};
 use embassy_stm32::rng::Rng;
-use embassy_stm32::{Config, bind_interrupts, eth, peripherals, rcc, rng};
+use embassy_stm32::{Config, bind_interrupts, eth, interrupt, peripherals, rcc, rng};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Ticker};
 use embedded_alloc::LlffHeap as Heap;
+use embedded_hal::digital::OutputPin;
 use embedded_hal_async::delay::DelayNs;
+use ioboard_main::stepper::Stepper;
+use ioboard_time::TimeService;
 use ioboard_trace::tracepin;
 use ioboard_trace::tracepin::TracePins;
 use static_cell::StaticCell;
@@ -51,8 +59,16 @@ bind_interrupts!(struct Irqs {
     RNG => rng::InterruptHandler<peripherals::RNG>;
 });
 
-#[embassy_executor::main]
-async fn main(spawner: Spawner) {
+#[interrupt]
+unsafe fn UART4() {
+    EXECUTOR_HIGH.on_interrupt()
+}
+
+static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
+static EXECUTOR_LOW: StaticCell<Executor> = StaticCell::new();
+
+#[entry]
+fn main() -> ! {
     let mut config = Config::default();
     config.rcc.hse = Some(rcc::Hse {
         freq: embassy_stm32::time::Hertz(8_000_000),
@@ -146,13 +162,26 @@ async fn main(spawner: Spawner) {
 
     init_heap();
 
+    // High-priority executor: UART4, priority level 6
+    interrupt::UART4.set_priority(Priority::P6);
+    let hp_spawner = EXECUTOR_HIGH.start(interrupt::UART4);
+
+    // Low priority executor: runs in thread mode, using WFE/SEV
+    let executor = EXECUTOR_LOW.init(Executor::new());
+    executor.run(|lp_spawner| {
+        lp_spawner.spawn(unwrap!(main(lp_spawner, hp_spawner, p)));
+    });
+}
+
+#[embassy_executor::task]
+async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
     info!("Initializing LED");
     let led = Output::new(p.PB14, Level::Low, Speed::Low);
     {
         // scope required to release mutex guard
         *(LED.lock().await) = Some(led);
     }
-    spawner.spawn(unwrap!(activity_indicator_task(&LED, Duration::from_millis(200))));
+    lp_spawner.spawn(unwrap!(activity_indicator_task(&LED, Duration::from_millis(200))));
 
     let mut delay = embassy_time::Delay;
     let time_service = EmbassyTimeService::default();
@@ -203,8 +232,8 @@ async fn main(spawner: Spawner) {
     let (stack, runner) = ioboard_net_embassy::init(device, seed);
 
     // Launch network task
-    spawner.spawn(unwrap!(net_task(runner)));
-    spawner.spawn(unwrap!(comms_task(stack, time_service)));
+    lp_spawner.spawn(unwrap!(net_task(runner)));
+    lp_spawner.spawn(unwrap!(comms_task(stack, time_service)));
 
     info!("Hardware address: {}", stack.hardware_address());
 
@@ -223,9 +252,16 @@ async fn main(spawner: Spawner) {
     stepper.initialize_io().unwrap();
 
     info!("Initialisation complete");
-    ioboard_main::run(&mut stepper, delay, time_service).await;
 
-    info!("halt");
+    hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(delay, time_service, stepper))));
+
+    info!("running");
+
+    let mut ticker = Ticker::every(Duration::from_secs(1));
+    loop {
+        info!("Tick");
+        ticker.next().await;
+    }
 }
 
 type LedType = Mutex<ThreadModeRawMutex, Option<Output<'static>>>;
@@ -265,6 +301,38 @@ async fn comms_task(stack: embassy_net::Stack<'static>, time_service: EmbassyTim
 
     let mut runner = ioboard_net::init(time_service, client);
     runner.run().await
+}
+
+type StepperInstance = GpioBitbashStepper<Output<'static>, Output<'static>, Output<'static>>;
+#[embassy_executor::task]
+async fn stepper_task(mut runner: StepperRunner<embassy_time::Delay, EmbassyTimeService, StepperInstance>) {
+    runner.run().await
+}
+
+struct StepperRunner<DELAY: DelayNs, TIME: TimeService, STEPPER: Stepper> {
+    delay: DELAY,
+    time_service: TIME,
+    stepper: STEPPER,
+}
+
+impl<DELAY: DelayNs, TIME: TimeService, STEPPER: Stepper> StepperRunner<DELAY, TIME, STEPPER> {
+    pub fn new(delay: DELAY, time_service: TIME, stepper: STEPPER) -> Self {
+        Self {
+            delay,
+            time_service,
+            stepper,
+        }
+    }
+
+    pub async fn run(self) {
+        let Self {
+            delay,
+            time_service,
+            stepper,
+        } = self;
+
+        ioboard_main::run(stepper, delay, time_service).await;
+    }
 }
 
 #[allow(static_mut_refs)]
