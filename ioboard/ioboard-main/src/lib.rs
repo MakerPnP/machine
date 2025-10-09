@@ -15,7 +15,11 @@ use rsruckig::prelude::*;
 
 use crate::stepper::{Stepper, StepperDirection, StepperError};
 
-pub async fn run<DELAY: DelayNs, TIME: TimeService>(stepper: &mut impl Stepper, mut delay: DELAY, mut time: TIME) {
+pub async fn run<DELAY: DelayNs, TIME: TimeService, STEPPER: Stepper>(
+    mut stepper: STEPPER,
+    mut delay: DELAY,
+    mut time: TIME,
+) {
     let step_frequency_khz = 20_000;
     let step_period_us = 1_000_000 / step_frequency_khz;
     let step_pulse_width_us = 4;
@@ -54,7 +58,7 @@ pub async fn run<DELAY: DelayNs, TIME: TimeService>(stepper: &mut impl Stepper, 
     loop {
         for i in 0..2 {
             info!("Run simple loop {}", i);
-            if run_simple_loop(&mut delay, stepper, &mut time, move_steps)
+            if run_simple_loop(&mut delay, &mut stepper, &mut time, move_steps)
                 .await
                 .is_err()
             {
@@ -65,7 +69,7 @@ pub async fn run<DELAY: DelayNs, TIME: TimeService>(stepper: &mut impl Stepper, 
 
         for i in 0..2 {
             info!("Run trajectory {}", i);
-            if run_trajectory_loop(stepper, &mut time, trajectory_units, steps_per_unit)
+            if run_trajectory_loop(&mut stepper, &mut time, trajectory_units, steps_per_unit)
                 .await
                 .is_err()
             {
