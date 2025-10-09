@@ -1,3 +1,8 @@
+//! BUILDING:
+//! make sure the working directory is the `firmware-stm32h743zi` directory when running cargo.
+//! if not, you'll likely get a compile error in embassy executor as the target from the cargo.toml
+//! won't be picked up if you compile from the root directory
+
 #![no_std]
 #![no_main]
 
