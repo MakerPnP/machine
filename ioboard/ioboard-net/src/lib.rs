@@ -8,20 +8,19 @@ use ioboard_time::TimeService;
 use ioboard_trace::tracepin;
 use log::info;
 
-pub fn init<'c, TIME: TimeService, CLIENT: TcpConnect>(time: TIME, client: CLIENT) -> Runner<TIME, CLIENT> {
-    let runner1 = Runner {
-        time,
-        client,
-    };
-    runner1
-}
-
-pub struct Runner<TIME: TimeService, CLIENT: TcpConnect> {
+pub struct IoConnection<TIME: TimeService, CLIENT: TcpConnect> {
     time: TIME,
     client: CLIENT,
 }
 
-impl<TIME: TimeService, CLIENT: TcpConnect> Runner<TIME, CLIENT> {
+impl<TIME: TimeService, CLIENT: TcpConnect> IoConnection<TIME, CLIENT> {
+    pub fn new(time: TIME, client: CLIENT) -> IoConnection<TIME, CLIENT> {
+        Self {
+            time,
+            client,
+        }
+    }
+
     pub async fn run(&mut self) -> ! {
         loop {
             // You need to start a server on the host machine, for example: `nc -l 8000`

@@ -6,7 +6,6 @@
 #![no_std]
 #![no_main]
 
-use cortex_m::asm;
 use cortex_m_rt::entry;
 use defmt::*;
 use embassy_executor::SendSpawner;
@@ -30,7 +29,6 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Ticker};
 use embedded_alloc::LlffHeap as Heap;
-use embedded_hal::digital::OutputPin;
 use embedded_hal_async::delay::DelayNs;
 use ioboard_main::stepper::Stepper;
 use ioboard_time::TimeService;
@@ -70,7 +68,7 @@ bind_interrupts!(struct Irqs {
 
 #[interrupt]
 unsafe fn UART4() {
-    EXECUTOR_HIGH.on_interrupt()
+    unsafe { EXECUTOR_HIGH.on_interrupt() }
 }
 
 static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
@@ -241,8 +239,8 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
     let (stack, runner) = ioboard_net_embassy::init(device, seed);
 
     // Launch network task
-    lp_spawner.spawn(unwrap!(net_task(runner)));
-    lp_spawner.spawn(unwrap!(comms_task(stack, time_service)));
+    lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
+    lp_spawner.spawn(unwrap!(networking_task(stack, time_service)));
 
     info!("Hardware address: {}", stack.hardware_address());
 
@@ -294,12 +292,12 @@ async fn activity_indicator_task(led: &'static LedType, delay: Duration) {
 type Device = Ethernet<'static, ETH, GenericPhy>;
 
 #[embassy_executor::task]
-async fn net_task(mut runner: embassy_net::Runner<'static, Device>) -> ! {
+async fn embassy_net_task(mut runner: embassy_net::Runner<'static, Device>) -> ! {
     runner.run().await
 }
 
 #[embassy_executor::task]
-async fn comms_task(stack: embassy_net::Stack<'static>, time_service: EmbassyTimeService) -> ! {
+async fn networking_task(stack: embassy_net::Stack<'static>, time_service: EmbassyTimeService) -> ! {
     // Ensure DHCP configuration is up before trying connect
     stack.wait_config_up().await;
 
@@ -308,13 +306,14 @@ async fn comms_task(stack: embassy_net::Stack<'static>, time_service: EmbassyTim
     let state: TcpClientState<1, 1024, 1024> = TcpClientState::new();
     let client = TcpClient::new(stack, &state);
 
-    let mut runner = ioboard_net::init(time_service, client);
-    runner.run().await
+    ioboard_net::IoConnection::new(time_service, client)
+        .run()
+        .await
 }
 
 type StepperInstance = GpioBitbashStepper<Output<'static>, Output<'static>, Output<'static>>;
 #[embassy_executor::task]
-async fn stepper_task(mut runner: StepperRunner<embassy_time::Delay, EmbassyTimeService, StepperInstance>) {
+async fn stepper_task(runner: StepperRunner<embassy_time::Delay, EmbassyTimeService, StepperInstance>) {
     runner.run().await
 }
 
