@@ -6,15 +6,22 @@ edition = "2024"
 [features]
 default = ["tracepin"]
 
-tracepin = ["ioboard-main/tracepin"]
+tracepin = [
+    "ioboard-trace/enable"
+]
 
 [dependencies]
 ioboard-main = { path = "../ioboard-main" }
+ioboard-net = { path = "../ioboard-net" }
+ioboard-time = { path = "../ioboard-time" }
+ioboard-trace = { path = "../ioboard-trace" }
+ioboard-net-embassy = { path = "../ioboard-net-embassy" }
 
 embassy-stm32 = { version = "0.4.0", path = "../../libs/embassy/embassy-stm32", features = ["defmt", "stm32h743zi", "time-driver-any", "unstable-pac", "exti", "memory-x"] }
 embassy-executor = { version = "0.9.0", path = "../../libs/embassy/embassy-executor", features = ["defmt", "arch-cortex-m", "executor-thread"] }
 embassy-time = { version = "0.5.0", path = "../../libs/embassy/embassy-time", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
 embassy-sync = { version = "0.7.2", path = "../../libs/embassy/embassy-sync", features = ["defmt"] }
+embassy-net = { version = "0.7.1", path = "../../libs/embassy/embassy-net", features = ["defmt", "tcp", "dhcpv4", "medium-ethernet", "dns"] }
 
 defmt = "1.0.1"
 
@@ -23,6 +30,9 @@ cortex-m = {version = "0.7.7", features = ["critical-section-single-core"]}
 cortex-m-rt = "0.7.0"
 panic-probe = "1.0.0"
 embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
+static_cell = "2.1.1"
+embedded-alloc = "0.6.0"
 
 [profile.release]
 debug = 2

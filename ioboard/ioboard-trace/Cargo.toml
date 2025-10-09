@@ -1,0 +1,12 @@
+[package]
+name = "ioboard-trace"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+
+# disabled by default, but API still exposed
+enable = []
+
+[dependencies]

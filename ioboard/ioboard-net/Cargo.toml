@@ -1,0 +1,16 @@
+[package]
+name = "ioboard-net"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ioboard-time = { path = "../ioboard-time" }
+ioboard-trace = { path = "../ioboard-trace" }
+
+# IMPORTANT: The networking code does not depend on embassy, only embedded-nal-async.
+
+log = "0.4.28"
+embedded-nal-async = "0.8.0"
+embedded-io-async = "0.6.1"
+
+defmt = "1.0.1"

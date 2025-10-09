@@ -1,0 +1,64 @@
+#![no_std]
+
+use core::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+
+use embedded_io_async::Write;
+use embedded_nal_async::TcpConnect;
+use ioboard_time::TimeService;
+use ioboard_trace::tracepin;
+use log::info;
+
+pub fn init<'c, TIME: TimeService, CLIENT: TcpConnect>(time: TIME, client: CLIENT) -> Runner<TIME, CLIENT> {
+    let runner1 = Runner {
+        time,
+        client,
+    };
+    runner1
+}
+
+pub struct Runner<TIME: TimeService, CLIENT: TcpConnect> {
+    time: TIME,
+    client: CLIENT,
+}
+
+impl<TIME: TimeService, CLIENT: TcpConnect> Runner<TIME, CLIENT> {
+    pub async fn run(&mut self) -> ! {
+        loop {
+            // You need to start a server on the host machine, for example: `nc -l 8000`
+            let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 18, 41), 8000));
+
+            info!("connecting...");
+            let r = self.client.connect(addr).await;
+            if let Err(e) = r {
+                info!("connect error: {:?}", e);
+                self.time
+                    .delay_until_us(self.time.now_micros() + 1_000_000)
+                    .await;
+                continue;
+            }
+            tracepin::on(3);
+            let mut connection = r.unwrap();
+            info!("connected!");
+
+            let cycle_period_us = 1_000_000 / 20;
+            let mut deadline = self.time.now_micros();
+            loop {
+                let r = connection.write_all(
+                    b"\
+                    0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
+                    0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
+                    0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
+                    0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
+                    \n"
+                ).await;
+                if let Err(e) = r {
+                    info!("write error: {:?}", e);
+                    break;
+                }
+                deadline += cycle_period_us;
+                self.time.delay_until_us(deadline).await;
+            }
+            tracepin::off(3);
+        }
+    }
+}
