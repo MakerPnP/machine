@@ -32,14 +32,18 @@ use embedded_alloc::LlffHeap as Heap;
 use embedded_hal_async::delay::DelayNs;
 use ioboard_main::stepper::Stepper;
 use ioboard_time::TimeService;
-use ioboard_trace::tracepin;
-use ioboard_trace::tracepin::TracePins;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
 use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
 use crate::time::EmbassyTimeService;
+#[cfg(feature = "tracepin")]
+use ioboard_trace::tracepin;
+#[cfg(feature = "tracepin")]
+use ioboard_trace::tracepin::TracePins;
+#[cfg(feature = "tracepin")]
 use crate::trace::TracePinsService;
+
 #[derive(Debug, Copy, Clone, PartialEq, Hash)]
 #[allow(dead_code)]
 enum CpuRevision {
