@@ -10,3 +10,4 @@ default = []
 enable = []
 
 [dependencies]
+critical-section = { version = "1.2.0" }
