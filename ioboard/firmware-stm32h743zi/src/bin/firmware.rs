@@ -206,6 +206,8 @@ async fn main(spawner: Spawner) {
     spawner.spawn(unwrap!(net_task(runner)));
     spawner.spawn(unwrap!(comms_task(stack, time_service)));
 
+    info!("Hardware address: {}", stack.hardware_address());
+
     info!("Initializing Stepper");
     let mut stepper = GpioBitbashStepper::new(
         // enable
