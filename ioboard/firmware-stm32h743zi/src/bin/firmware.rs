@@ -298,10 +298,27 @@ async fn embassy_net_task(mut runner: embassy_net::Runner<'static, Device>) -> !
 
 #[embassy_executor::task]
 async fn networking_task(stack: embassy_net::Stack<'static>, time_service: EmbassyTimeService) -> ! {
-    // Ensure DHCP configuration is up before trying connect
-    stack.wait_config_up().await;
-
     info!("Network task initialized");
+
+    // Ensure DHCP configuration is up before trying connect
+    let mut attempts: u32 = 0;
+    let config = loop {
+        if let Some(config) = stack.config_v4() {
+            break config;
+        }
+
+        if attempts % 10 == 0 {
+            info!("Waiting for DHCP address allocation");
+        }
+
+        attempts = attempts.wrapping_add(1);
+        Timer::after(Duration::from_millis(100)).await;
+    };
+
+    info!(
+        "IP address: {}, gateway: {}, dns: {}",
+        config.address, config.dns_servers, config.gateway
+    );
 
     let state: TcpClientState<1, 1024, 1024> = TcpClientState::new();
     let client = TcpClient::new(stack, &state);
