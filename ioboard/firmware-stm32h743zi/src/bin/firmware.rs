@@ -27,7 +27,7 @@ use embassy_stm32::rng::Rng;
 use embassy_stm32::{Config, bind_interrupts, eth, interrupt, peripherals, rcc, rng};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Ticker};
+use embassy_time::{Delay, Duration, Ticker, Timer};
 use embedded_alloc::LlffHeap as Heap;
 use embedded_hal_async::delay::DelayNs;
 use ioboard_main::stepper::Stepper;
