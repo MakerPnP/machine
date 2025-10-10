@@ -242,6 +242,8 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
     lp_spawner.spawn(unwrap!(networking_task(stack, time_service)));
 
+    info!("Hardware address: {}", stack.hardware_address());
+
     info!("Initializing Stepper");
     let mut stepper = GpioBitbashStepper::new(
         // enable
