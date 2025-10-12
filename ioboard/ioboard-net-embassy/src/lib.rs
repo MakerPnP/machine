@@ -13,7 +13,7 @@ pub fn init<'d, D: Driver>(driver: D, random_seed: u64) -> (Stack<'d>, Runner<'d
     //});
 
     // Init network stack
-    static RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
+    static RESOURCES: StaticCell<StackResources<5>> = StaticCell::new();
     let (stack, runner) = embassy_net::new(driver, config, RESOURCES.init(StackResources::new()), random_seed);
 
     (stack, runner)

@@ -10,8 +10,10 @@ use cortex_m_rt::entry;
 use defmt::*;
 use embassy_executor::SendSpawner;
 use embassy_executor::{Executor, InterruptExecutor, Spawner};
+use embassy_net::Ipv4Address;
 use embassy_net::tcp::client::TcpClient;
 use embassy_net::tcp::client::TcpClientState;
+use embassy_net::udp::{PacketMetadata, UdpSocket};
 use embassy_stm32::Peripherals;
 use embassy_stm32::eth::PacketQueue;
 use embassy_stm32::eth::{Ethernet, GenericPhy};
@@ -216,11 +218,11 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
     //      potentially using this algorythm (C): https://github.com/zephyrproject-rtos/zephyr/issues/59993#issuecomment-1644030438
     let mac_addr = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
 
-    static PACKETS: StaticCell<PacketQueue<4, 4>> = StaticCell::new();
+    static PACKETS: StaticCell<PacketQueue<8, 8>> = StaticCell::new();
     // warning: Not all STM32H7 devices have the exact same pins here
     // for STM32H747XIH, replace p.PB13 for PG12
     let device = Ethernet::new(
-        PACKETS.init(PacketQueue::<4, 4>::new()),
+        PACKETS.init(PacketQueue::<8, 8>::new()),
         p.ETH,
         Irqs,
         p.PA1,  // ref_clk
@@ -241,6 +243,7 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
     // Launch network task
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
     lp_spawner.spawn(unwrap!(networking_task(stack, time_service)));
+    lp_spawner.spawn(unwrap!(udp_spam_task(stack, time_service)));
 
     info!("Hardware address: {}", stack.hardware_address());
 
@@ -326,6 +329,50 @@ async fn networking_task(stack: embassy_net::Stack<'static>, time_service: Embas
     ioboard_net::IoConnection::new(time_service, client)
         .run()
         .await
+}
+
+#[embassy_executor::task]
+async fn udp_spam_task(stack: embassy_net::Stack<'static>, _time_service: EmbassyTimeService) -> ! {
+    info!("UDP spam task initialized");
+
+    while stack.config_v4().is_none() {
+        Timer::after(Duration::from_millis(100)).await;
+    }
+
+    info!("UDP spamming!");
+    let mut rx_meta = [PacketMetadata::EMPTY; 1];
+    let mut rx_buffer = [0; 4096];
+    let mut tx_meta = [PacketMetadata::EMPTY; 1];
+    let mut tx_buffer = [0; 4096];
+
+    // You need to start a server on the host machine, for example: `nc -lu 8000`
+
+    let mut socket = UdpSocket::new(stack, &mut rx_meta, &mut rx_buffer, &mut tx_meta, &mut tx_buffer);
+
+    let remote_endpoint = (Ipv4Address::new(192, 168, 18, 41), 8000);
+    socket
+        .bind(remote_endpoint)
+        .expect("bound");
+
+    let cycle_period_us = 1_000_000 / 200;
+    let mut ticker = Ticker::every(Duration::from_micros(cycle_period_us));
+    loop {
+        tracepin::on(1);
+        socket
+            .send_to(
+                b"\
+                0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
+                0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
+                0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
+                0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
+                \n",
+                remote_endpoint,
+            )
+            .await
+            .expect("sent");
+        tracepin::off(1);
+        ticker.next().await;
+    }
 }
 
 type StepperInstance = GpioBitbashStepper<Output<'static>, Output<'static>, Output<'static>>;
