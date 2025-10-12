@@ -1,11 +1,12 @@
 #![no_std]
 
 use core::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+
 use embedded_io_async::Write;
 use embedded_nal_async::TcpConnect;
 use ioboard_time::TimeService;
 use ioboard_trace::tracepin;
-use log::{info, error};
+use log::{error, info};
 
 pub struct IoConnection<TIME: TimeService, CLIENT: TcpConnect> {
     time: TIME,
@@ -38,7 +39,7 @@ impl<TIME: TimeService, CLIENT: TcpConnect> IoConnection<TIME, CLIENT> {
             let mut connection = r.unwrap();
             info!("connected!");
 
-            let cycle_period_us = (1.0 / 200.0) as u64 * 1_000_000;
+            let cycle_period_us = 1_000_000 / 10;
             let mut deadline = self.time.now_micros();
             loop {
                 tracepin::on(2);
