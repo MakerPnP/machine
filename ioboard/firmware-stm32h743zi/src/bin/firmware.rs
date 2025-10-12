@@ -32,6 +32,10 @@ use embedded_alloc::LlffHeap as Heap;
 use embedded_hal_async::delay::DelayNs;
 use ioboard_main::stepper::Stepper;
 use ioboard_time::TimeService;
+#[cfg(feature = "tracepin")]
+use ioboard_trace::tracepin;
+#[cfg(feature = "tracepin")]
+use ioboard_trace::tracepin::TracePins;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -315,7 +319,10 @@ async fn networking_task(stack: embassy_net::Stack<'static>, time_service: Embas
         Timer::after(Duration::from_millis(100)).await;
     };
 
-    info!("IP address: {}, gateway: {}, dns: {}", config.address, config.dns_servers, config.gateway);
+    info!(
+        "IP address: {}, gateway: {}, dns: {}",
+        config.address, config.dns_servers, config.gateway
+    );
 
     let state: TcpClientState<1, 1024, 1024> = TcpClientState::new();
     let client = TcpClient::new(stack, &state);

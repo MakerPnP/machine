@@ -46,7 +46,9 @@ mod storage {
     use core::cell::UnsafeCell;
     use core::mem::MaybeUninit;
     use core::sync::atomic::{AtomicBool, Ordering};
+
     use critical_section::RestoreState;
+
     use crate::tracepin::TracePins;
 
     pub(crate) static TRACEPIN: TracePin = TracePin::new();
@@ -73,13 +75,13 @@ mod storage {
                     panic!("tracepin taken reentrantly")
                 }
                 // no need for CAS because we are in a critical section
-                self.taken.store(true, Ordering::Relaxed);
+                self.taken
+                    .store(true, Ordering::Relaxed);
 
                 let meh = self.instance.get();
                 let foo = (*meh).assume_init();
                 (restore_state, foo)
             }
-
         }
 
         /// Release the tracepins.
@@ -95,7 +97,8 @@ mod storage {
                 if !self.taken.load(Ordering::Relaxed) {
                     panic!("tracepin out of context")
                 }
-                self.taken.store(false, Ordering::Relaxed);
+                self.taken
+                    .store(false, Ordering::Relaxed);
                 // paired with exactly one acquire call
                 critical_section::release(restore_state);
             }
@@ -112,14 +115,15 @@ mod storage {
 
             let (restore_state, _instance) = self.acquire();
             unsafe {
-                self.instance.get().write(MaybeUninit::new(trace_pins_ptr));
+                self.instance
+                    .get()
+                    .write(MaybeUninit::new(trace_pins_ptr));
             }
             self.release(restore_state);
         }
     }
 
     unsafe impl Sync for TracePin {}
-
 }
 
 pub fn init<TRACEPINS: TracePins>(trace_pins: TRACEPINS) {
