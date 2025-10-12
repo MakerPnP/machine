@@ -40,7 +40,7 @@ impl<TIME: TimeService, CLIENT: TcpConnect> Runner<TIME, CLIENT> {
             let mut connection = r.unwrap();
             info!("connected!");
 
-            let cycle_period_us = 1_000_000 / 20;
+            let cycle_period_us = 1_000_000 / 10;
             let mut deadline = self.time.now_micros();
             loop {
                 let r = connection.write_all(
