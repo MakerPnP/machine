@@ -1,3 +1,4 @@
+# cargo manifest format - https://doc.rust-lang.org/cargo/reference/manifest.html
 [package]
 name = "ioboard-firmware-stm32h743zi"
 version = "0.1.0"
@@ -34,9 +35,20 @@ embedded-hal-async = "1.0.0"
 static_cell = "2.1.1"
 embedded-alloc = "0.6.0"
 
+# profiles - https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.release]
-debug = 2
+debug = "full"
 panic = "abort"
+lto = "fat"
+opt-level = 2 # (0 = none, 1 = basic, 2 = some, "s" = size, "z" = size, without loop vectorization
+codegen-units = 1
+
+[profile.dev]
+debug = "full"
+panic = "abort"
+lto = "fat"
+opt-level = 0 # none
+codegen-units = 1
 
 [package.metadata.embassy]
 build = [
