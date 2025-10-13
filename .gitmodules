@@ -1,3 +1,6 @@
 [submodule "libs/embassy"]
 	path = libs/embassy
 	url = https://github.com/embassy-rs/embassy.git
+[submodule "libs/ergot"]
+	path = libs/ergot
+	url = https://github.com/jamesmunns/ergot.git
