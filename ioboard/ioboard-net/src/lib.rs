@@ -1,11 +1,12 @@
 #![no_std]
 
 use core::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+
 use embedded_io_async::Write;
 use embedded_nal_async::TcpConnect;
 use ioboard_time::TimeService;
 use ioboard_trace::tracepin;
-use log::{info, error};
+use log::{error, info};
 
 pub struct IoConnection<TIME: TimeService, CLIENT: TcpConnect> {
     time: TIME,
@@ -55,8 +56,8 @@ impl<TIME: TimeService, CLIENT: TcpConnect> IoConnection<TIME, CLIENT> {
                     error!("write error: {:?}", e);
                     break;
                 }
-                deadline += cycle_period_us;
-                self.time.delay_until_us(deadline).await;
+                //deadline += cycle_period_us;
+                //self.time.delay_until_us(deadline).await;
             }
             tracepin::off(3);
         }

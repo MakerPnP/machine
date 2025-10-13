@@ -8,7 +8,7 @@ linker = "flip-link"
 target = "thumbv7em-none-eabihf" # Cortex-M4F and Cortex-M7F (with FPU)
 
 [env]
-DEFMT_LOG = "trace"
+#DEFMT_LOG = "trace"
 
 [profile.release]
 # Allows defmt to display log locations even in release

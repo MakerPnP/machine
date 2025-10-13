@@ -243,7 +243,7 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
     // Launch network task
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
     lp_spawner.spawn(unwrap!(networking_task(stack, time_service)));
-    lp_spawner.spawn(unwrap!(udp_spam_task(stack, time_service)));
+    //lp_spawner.spawn(unwrap!(udp_spam_task(stack, time_service)));
 
     info!("Hardware address: {}", stack.hardware_address());
 
@@ -263,7 +263,7 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
 
     info!("Initialisation complete");
 
-    hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(delay, time_service, stepper))));
+    //hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(delay, time_service, stepper))));
 
     info!("running");
 
