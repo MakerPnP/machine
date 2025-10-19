@@ -155,9 +155,6 @@ async fn run_trajectory_loop(
 
     let mut segment_index = 0;
 
-    let start_time = Instant::now().as_micros();
-    let mut cycle_deadline = start_time;
-
     let mut prepare_next_segment = true;
 
     let mut cycle_ticker = Ticker::every(Duration::from_micros(cycle_interval_micros));

@@ -5,15 +5,12 @@
 
 #![no_std]
 #![no_main]
+extern crate alloc;
 
 use cortex_m_rt::entry;
 use defmt::*;
 use embassy_executor::SendSpawner;
 use embassy_executor::{Executor, InterruptExecutor, Spawner};
-use embassy_net::Ipv4Address;
-use embassy_net::tcp::client::TcpClient;
-use embassy_net::tcp::client::TcpClientState;
-use embassy_net::udp::{PacketMetadata, UdpSocket};
 use embassy_stm32::Peripherals;
 use embassy_stm32::eth::PacketQueue;
 use embassy_stm32::eth::{Ethernet, GenericPhy};
@@ -31,18 +28,34 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Ticker, Timer};
 use embedded_alloc::LlffHeap as Heap;
-use embedded_hal_async::delay::DelayNs;
 use ioboard_main::stepper::Stepper;
 #[cfg(feature = "tracepin")]
 use ioboard_trace::tracepin;
 #[cfg(feature = "tracepin")]
 use ioboard_trace::tracepin::TracePins;
+
 use static_cell::StaticCell;
+
 use {defmt_rtt as _, panic_probe as _};
 
 use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
 #[cfg(feature = "tracepin")]
 use crate::trace::TracePinsService;
+
+mod stepper;
+#[cfg(feature = "tracepin")]
+mod trace;
+
+//
+// Heap/Allocator configuration
+//
+
+#[global_allocator]
+static HEAP: Heap = Heap::empty();
+
+//
+// Embassy configuration
+//
 
 #[derive(Debug, Copy, Clone, PartialEq, Hash)]
 #[allow(dead_code)]
@@ -52,13 +65,6 @@ enum CpuRevision {
     RevZ,
 }
 const CPU_REV: CpuRevision = CpuRevision::RevY;
-
-mod stepper;
-#[cfg(feature = "tracepin")]
-mod trace;
-
-#[global_allocator]
-static HEAP: Heap = Heap::empty();
 
 bind_interrupts!(struct Irqs {
     ETH => eth::InterruptHandler;
@@ -168,26 +174,26 @@ fn main() -> ! {
 
     init_heap();
 
-    // High-priority executor: UART4, priority level 6
+    // High-priority executor: using UART4 interrupt, priority level 6
     interrupt::UART4.set_priority(Priority::P6);
     let hp_spawner = EXECUTOR_HIGH.start(interrupt::UART4);
 
     // Low priority executor: runs in thread mode, using WFE/SEV
     let executor = EXECUTOR_LOW.init(Executor::new());
     executor.run(|lp_spawner| {
-        lp_spawner.spawn(unwrap!(main(lp_spawner, hp_spawner, p)));
+        lp_spawner.must_spawn(init_task(lp_spawner, hp_spawner, p));
     });
 }
 
 #[embassy_executor::task]
-async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
+async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
     info!("Initializing LED");
     let led = Output::new(p.PB14, Level::Low, Speed::Low);
     {
         // scope required to release mutex guard
         *(LED.lock().await) = Some(led);
     }
-    lp_spawner.spawn(unwrap!(activity_indicator_task(&LED, Duration::from_millis(200))));
+    lp_spawner.must_spawn(activity_indicator_task(&LED, Duration::from_millis(200)));
 
     #[cfg(feature = "tracepin")]
     {
@@ -232,14 +238,10 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
         mac_addr,
     );
 
-    let (stack, runner) = ioboard_net::init(device, seed);
+    let runner = ioboard_net::init(device, seed, lp_spawner.clone());
 
     // Launch network task
-    lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
-    lp_spawner.spawn(unwrap!(networking_task(stack)));
-    lp_spawner.spawn(unwrap!(udp_spam_task(stack)));
-
-    info!("Hardware address: {}", stack.hardware_address());
+    lp_spawner.must_spawn(embassy_net_task(runner));
 
     info!("Initializing Stepper");
     let mut stepper = GpioBitbashStepper::new(
@@ -257,7 +259,7 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
 
     info!("Initialisation complete");
 
-    hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(stepper))));
+    hp_spawner.must_spawn(stepper_task(StepperRunner::new(stepper)));
 
     info!("running");
 
@@ -266,6 +268,13 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
         info!("Tick");
         ticker.next().await;
     }
+}
+
+type Device = Ethernet<'static, ETH, GenericPhy>;
+
+#[embassy_executor::task]
+async fn embassy_net_task(mut runner: embassy_net::Runner<'static, Device>) -> ! {
+    runner.run().await
 }
 
 type LedType = Mutex<ThreadModeRawMutex, Option<Output<'static>>>;
@@ -282,89 +291,6 @@ async fn activity_indicator_task(led: &'static LedType, delay: Duration) {
                 pin_ref.toggle();
             }
         }
-        ticker.next().await;
-    }
-}
-
-type Device = Ethernet<'static, ETH, GenericPhy>;
-
-#[embassy_executor::task]
-async fn embassy_net_task(mut runner: embassy_net::Runner<'static, Device>) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn networking_task(stack: embassy_net::Stack<'static>) -> ! {
-    info!("Network task initialized");
-
-    // Ensure DHCP configuration is up before trying connect
-    let mut attempts: u32 = 0;
-    let config = loop {
-        if let Some(config) = stack.config_v4() {
-            break config;
-        }
-
-        if attempts % 10 == 0 {
-            info!("Waiting for DHCP address allocation");
-        }
-
-        attempts = attempts.wrapping_add(1);
-        Timer::after(Duration::from_millis(100)).await;
-    };
-
-    info!(
-        "IP address: {}, gateway: {}, dns: {}",
-        config.address, config.dns_servers, config.gateway
-    );
-
-    let state: TcpClientState<1, 1024, 1024> = TcpClientState::new();
-    let client = TcpClient::new(stack, &state);
-
-    ioboard_net::IoConnection::new(client)
-        .run()
-        .await
-}
-
-#[embassy_executor::task]
-async fn udp_spam_task(stack: embassy_net::Stack<'static>) -> ! {
-    info!("UDP spam task initialized");
-
-    while stack.config_v4().is_none() {
-        Timer::after(Duration::from_millis(100)).await;
-    }
-
-    info!("UDP spamming!");
-    let mut rx_meta = [PacketMetadata::EMPTY; 1];
-    let mut rx_buffer = [0; 4096];
-    let mut tx_meta = [PacketMetadata::EMPTY; 1];
-    let mut tx_buffer = [0; 4096];
-
-    // You need to start a server on the host machine, for example: `nc -lu 8000`
-
-    let mut socket = UdpSocket::new(stack, &mut rx_meta, &mut rx_buffer, &mut tx_meta, &mut tx_buffer);
-
-    let remote_endpoint = (Ipv4Address::new(192, 168, 18, 41), 8000);
-    socket
-        .bind(remote_endpoint)
-        .expect("bound");
-
-    let cycle_period_us = 1_000_000 / 200;
-    let mut ticker = Ticker::every(Duration::from_micros(cycle_period_us));
-    loop {
-        tracepin::on(1);
-        socket
-            .send_to(
-                b"\
-                0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
-                0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
-                0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
-                0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\
-                \n",
-                remote_endpoint,
-            )
-            .await
-            .expect("sent");
-        tracepin::off(1);
         ticker.next().await;
     }
 }
@@ -398,7 +324,9 @@ impl<STEPPER: Stepper> StepperRunner<STEPPER> {
 #[allow(static_mut_refs)]
 fn init_heap() {
     use core::mem::MaybeUninit;
-    const HEAP_SIZE: usize = 1024;
+    const HEAP_SIZE: usize = 16384;
+
+    // TODO specify the linker section for the heap
     static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
     unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
 }
