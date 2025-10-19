@@ -33,7 +33,6 @@ use embassy_time::{Duration, Ticker, Timer};
 use embedded_alloc::LlffHeap as Heap;
 use embedded_hal_async::delay::DelayNs;
 use ioboard_main::stepper::Stepper;
-use ioboard_time::TimeService;
 #[cfg(feature = "tracepin")]
 use ioboard_trace::tracepin;
 #[cfg(feature = "tracepin")]
@@ -42,7 +41,6 @@ use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
 use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
-use crate::time::EmbassyTimeService;
 #[cfg(feature = "tracepin")]
 use crate::trace::TracePinsService;
 
@@ -56,7 +54,6 @@ enum CpuRevision {
 const CPU_REV: CpuRevision = CpuRevision::RevY;
 
 mod stepper;
-mod time;
 #[cfg(feature = "tracepin")]
 mod trace;
 
@@ -192,15 +189,12 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
     }
     lp_spawner.spawn(unwrap!(activity_indicator_task(&LED, Duration::from_millis(200))));
 
-    let mut delay = embassy_time::Delay;
-    let time_service = EmbassyTimeService::default();
-
     #[cfg(feature = "tracepin")]
     {
         info!("Initializing trace pins");
         let mut trace_pins = TracePinsService::new([p.PD2.into(), p.PD3.into(), p.PD4.into(), p.PD5.into()]);
         trace_pins.all_on();
-        delay.delay_ms(500).await;
+        Timer::after(Duration::from_millis(500)).await;
         trace_pins.all_off();
 
         tracepin::init(trace_pins);
@@ -238,12 +232,12 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
         mac_addr,
     );
 
-    let (stack, runner) = ioboard_net_embassy::init(device, seed);
+    let (stack, runner) = ioboard_net::init(device, seed);
 
     // Launch network task
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
-    lp_spawner.spawn(unwrap!(networking_task(stack, time_service)));
-    lp_spawner.spawn(unwrap!(udp_spam_task(stack, time_service)));
+    lp_spawner.spawn(unwrap!(networking_task(stack)));
+    lp_spawner.spawn(unwrap!(udp_spam_task(stack)));
 
     info!("Hardware address: {}", stack.hardware_address());
 
@@ -263,7 +257,7 @@ async fn main(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
 
     info!("Initialisation complete");
 
-    hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(delay, time_service, stepper))));
+    hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(stepper))));
 
     info!("running");
 
@@ -300,7 +294,7 @@ async fn embassy_net_task(mut runner: embassy_net::Runner<'static, Device>) -> !
 }
 
 #[embassy_executor::task]
-async fn networking_task(stack: embassy_net::Stack<'static>, time_service: EmbassyTimeService) -> ! {
+async fn networking_task(stack: embassy_net::Stack<'static>) -> ! {
     info!("Network task initialized");
 
     // Ensure DHCP configuration is up before trying connect
@@ -326,13 +320,13 @@ async fn networking_task(stack: embassy_net::Stack<'static>, time_service: Embas
     let state: TcpClientState<1, 1024, 1024> = TcpClientState::new();
     let client = TcpClient::new(stack, &state);
 
-    ioboard_net::IoConnection::new(time_service, client)
+    ioboard_net::IoConnection::new(client)
         .run()
         .await
 }
 
 #[embassy_executor::task]
-async fn udp_spam_task(stack: embassy_net::Stack<'static>, _time_service: EmbassyTimeService) -> ! {
+async fn udp_spam_task(stack: embassy_net::Stack<'static>) -> ! {
     info!("UDP spam task initialized");
 
     while stack.config_v4().is_none() {
@@ -377,33 +371,27 @@ async fn udp_spam_task(stack: embassy_net::Stack<'static>, _time_service: Embass
 
 type StepperInstance = GpioBitbashStepper<Output<'static>, Output<'static>, Output<'static>>;
 #[embassy_executor::task]
-async fn stepper_task(runner: StepperRunner<embassy_time::Delay, EmbassyTimeService, StepperInstance>) {
+async fn stepper_task(runner: StepperRunner<StepperInstance>) {
     runner.run().await
 }
 
-struct StepperRunner<DELAY: DelayNs, TIME: TimeService, STEPPER: Stepper> {
-    delay: DELAY,
-    time_service: TIME,
+struct StepperRunner<STEPPER: Stepper> {
     stepper: STEPPER,
 }
 
-impl<DELAY: DelayNs, TIME: TimeService, STEPPER: Stepper> StepperRunner<DELAY, TIME, STEPPER> {
-    pub fn new(delay: DELAY, time_service: TIME, stepper: STEPPER) -> Self {
+impl<STEPPER: Stepper> StepperRunner<STEPPER> {
+    pub fn new(stepper: STEPPER) -> Self {
         Self {
-            delay,
-            time_service,
             stepper,
         }
     }
 
     pub async fn run(self) {
         let Self {
-            delay,
-            time_service,
             stepper,
         } = self;
 
-        ioboard_main::run(stepper, delay, time_service).await;
+        ioboard_main::run(stepper).await;
     }
 }
 

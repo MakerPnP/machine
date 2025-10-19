@@ -5,5 +5,7 @@ members = [
     "crates/experimentation-1",
     "crates/experimentation-2",
     "ioboard/firmware-stm32h743zi",
-    "ioboard/ioboard-main", "ioboard/ioboard-net", "ioboard/ioboard-net-embassy", "ioboard/ioboard-time", "ioboard/ioboard-trace",
+    "ioboard/ioboard-main",
+    "ioboard/ioboard-net",
+    "ioboard/ioboard-trace",
 ]

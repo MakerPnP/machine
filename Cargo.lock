@@ -1266,8 +1266,6 @@ dependencies = [
  "embedded-hal-async",
  "ioboard-main",
  "ioboard-net",
- "ioboard-net-embassy",
- "ioboard-time",
  "ioboard-trace",
  "panic-probe",
  "static_cell",
@@ -1278,10 +1276,8 @@ name = "ioboard-main"
 version = "0.1.0"
 dependencies = [
  "defmt 1.0.1",
- "embedded-hal 1.0.0",
- "embedded-hal-async",
+ "embassy-time",
  "ioboard-net",
- "ioboard-time",
  "ioboard-trace",
  "libm",
  "rsruckig",
@@ -1292,24 +1288,14 @@ name = "ioboard-net"
 version = "0.1.0"
 dependencies = [
  "defmt 1.0.1",
+ "embassy-net",
+ "embassy-time",
  "embedded-io-async",
  "embedded-nal-async",
- "ioboard-time",
  "ioboard-trace",
  "log",
-]
-
-[[package]]
-name = "ioboard-net-embassy"
-version = "0.1.0"
-dependencies = [
- "embassy-net",
  "static_cell",
 ]
-
-[[package]]
-name = "ioboard-time"
-version = "0.1.0"
 
 [[package]]
 name = "ioboard-trace"

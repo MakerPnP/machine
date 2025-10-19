@@ -7,18 +7,14 @@ pub mod stepper;
 use alloc::vec::Vec;
 
 use defmt::info;
-use embedded_hal_async::delay::DelayNs;
-use ioboard_time::TimeService;
 use ioboard_trace::tracepin;
 use libm::round;
 use rsruckig::prelude::*;
-
+use embassy_time::{Duration, Instant, Ticker, Timer};
 use crate::stepper::{Stepper, StepperDirection, StepperError};
 
-pub async fn run<DELAY: DelayNs, TIME: TimeService, STEPPER: Stepper>(
+pub async fn run<STEPPER: Stepper>(
     mut stepper: STEPPER,
-    mut delay: DELAY,
-    mut time: TIME,
 ) {
     let step_frequency_khz = 20_000;
     let step_period_us = 1_000_000 / step_frequency_khz;
@@ -58,32 +54,30 @@ pub async fn run<DELAY: DelayNs, TIME: TimeService, STEPPER: Stepper>(
     loop {
         for i in 0..2 {
             info!("Run simple loop {}", i);
-            if run_simple_loop(&mut delay, &mut stepper, &mut time, move_steps)
+            if run_simple_loop(&mut stepper, move_steps)
                 .await
                 .is_err()
             {
                 break;
             }
-            delay.delay_ms(1000).await;
+            Timer::after(Duration::from_millis(1000)).await;
         }
 
         for i in 0..2 {
             info!("Run trajectory {}", i);
-            if run_trajectory_loop(&mut stepper, &mut time, trajectory_units, steps_per_unit)
+            if run_trajectory_loop(&mut stepper, trajectory_units, steps_per_unit)
                 .await
                 .is_err()
             {
                 break;
             }
-            delay.delay_ms(1000).await;
+            Timer::after(Duration::from_millis(1000)).await;
         }
     }
 }
 
-async fn run_simple_loop<DELAY: DelayNs, TIME: TimeService>(
-    delay: &mut DELAY,
+async fn run_simple_loop(
     stepper: &mut impl Stepper,
-    time: &mut TIME,
     move_steps: i32,
 ) -> Result<(), StepperError> {
     let cycle_interval_micros = 175;
@@ -92,38 +86,30 @@ async fn run_simple_loop<DELAY: DelayNs, TIME: TimeService>(
     info!("Normal");
     stepper.direction(StepperDirection::Normal)?;
 
-    delay
-        .delay_ms(direction_change_delay_ms)
-        .await;
+    Timer::after(Duration::from_millis(direction_change_delay_ms)).await;
 
-    let start_time = time.now_micros();
-    let mut step_deadline = start_time;
+    let mut step_ticker = Ticker::every(Duration::from_micros(cycle_interval_micros));
+
     for _ in 0..move_steps {
         stepper.step_and_wait().await?;
-        step_deadline = step_deadline.wrapping_add(cycle_interval_micros);
-        time.delay_until_us(step_deadline).await;
+        step_ticker.next().await;
     }
 
     info!("Reversed");
     stepper.direction(StepperDirection::Reversed)?;
 
-    delay
-        .delay_ms(direction_change_delay_ms)
-        .await;
+    Timer::after(Duration::from_millis(direction_change_delay_ms)).await;
 
-    let start_time = time.now_micros();
-    let mut step_deadline = start_time;
+    step_ticker.reset();
     for _ in 0..move_steps {
         stepper.step_and_wait().await?;
-        step_deadline = step_deadline.wrapping_add(cycle_interval_micros);
-        time.delay_until_us(step_deadline).await;
+        step_ticker.next().await;
     }
     Ok::<(), StepperError>(())
 }
 
-async fn run_trajectory_loop<TIME: TimeService>(
+async fn run_trajectory_loop(
     stepper: &mut impl Stepper,
-    time: &mut TIME,
     trajectory_units: &[(f64, f64, f64, f64)],
     steps_per_unit: f64,
 ) -> Result<(), StepperError> {
@@ -169,10 +155,12 @@ async fn run_trajectory_loop<TIME: TimeService>(
 
     let mut segment_index = 0;
 
-    let start_time = time.now_micros();
+    let start_time = Instant::now().as_micros();
     let mut cycle_deadline = start_time;
 
     let mut prepare_next_segment = true;
+
+    let mut cycle_ticker = Ticker::every(Duration::from_micros(cycle_interval_micros));
 
     loop {
         if prepare_next_segment {
@@ -218,7 +206,7 @@ async fn run_trajectory_loop<TIME: TimeService>(
             // When changing the segment, after the initial calculation is done, which takes longer then normal,
             // a the cycle deadline is reset to avoid first-step jitter on the rare case where there is actually
             // a step on the first cycle.
-            cycle_deadline = time.now_micros();
+            cycle_ticker.reset();
         }
 
         if matches!(result, RuckigResult::Finished) {
@@ -239,7 +227,7 @@ async fn run_trajectory_loop<TIME: TimeService>(
         //        or by using a hardware driven DMA stream
 
         if steps_this_cycle > 0 {
-            let cycle_start_us = time.now_micros();
+            let cycle_start_us = Instant::now().as_micros();
             let pulse_interval_us: u64 = cycle_interval_micros / steps_this_cycle as u64;
 
             let mut step_deadline = cycle_start_us;
@@ -249,16 +237,15 @@ async fn run_trajectory_loop<TIME: TimeService>(
 
                 // wait until next step pulse or the pulse delay has elapsed
                 step_deadline = step_deadline.wrapping_add(pulse_interval_us.max(pulse_delay as u64));
-                time.delay_until_us(step_deadline).await
+                Timer::at(Instant::from_micros(step_deadline)).await
             }
         }
 
         // Prepare input for next cycle
         last_position_steps = new_position_steps;
-        cycle_deadline = cycle_deadline.wrapping_add(cycle_interval_micros);
 
         // Sleep until next RT cycle
-        time.delay_until_us(cycle_deadline)
+        cycle_ticker.next()
             .await;
     }
 
