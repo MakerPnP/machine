@@ -530,6 +530,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ioboard-shared"
+version = "0.1.0"
+
+[[package]]
 name = "ioboard-trace"
 version = "0.1.0"
 dependencies = [

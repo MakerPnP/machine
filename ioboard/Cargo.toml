@@ -5,4 +5,8 @@ members = [
     "ioboard-main",
     "ioboard-net",
     "ioboard-trace",
+    "ioboard-shared",
 ]
+
+[workspace.dependencies]
+machine_shared = { path = "ioboard-shared" }
