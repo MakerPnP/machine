@@ -521,6 +521,7 @@ dependencies = [
  "embedded-nal-async",
  "ergot",
  "heapless 0.9.1",
+ "ioboard-shared",
  "ioboard-trace",
  "log",
  "mutex",

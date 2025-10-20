@@ -26,6 +26,8 @@ use mutex::raw_impls::cs::CriticalSectionRawMutex;
 
 use static_cell::{ConstStaticCell, StaticCell};
 
+use ioboard_shared::yeet::Yeet;
+
 //
 // Ergot configuration
 //
@@ -278,7 +280,7 @@ async fn pingserver() {
 }
 
 // TODO replace with the the load-cell data type and topic
-topic!(YeetTopic, u64, "topic/yeet");
+topic!(YeetTopic, Yeet, "topic/yeet");
 
 #[embassy_executor::task]
 async fn yeeter() {

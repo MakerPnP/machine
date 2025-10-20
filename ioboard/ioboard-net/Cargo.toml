@@ -7,6 +7,7 @@ edition = "2024"
 
 [dependencies]
 ioboard-trace = { path = "../ioboard-trace" }
+ioboard-shared = { path = "../ioboard-shared" }
 embedded-nal-async = "0.8.0"
 embedded-io-async = "0.6.1"
 

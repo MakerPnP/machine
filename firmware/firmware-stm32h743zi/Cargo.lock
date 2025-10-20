@@ -836,6 +836,7 @@ dependencies = [
  "embedded-nal-async",
  "ergot",
  "heapless 0.9.1",
+ "ioboard-shared",
  "ioboard-trace",
  "log",
  "mutex",
@@ -843,6 +844,10 @@ dependencies = [
  "serde",
  "static_cell",
 ]
+
+[[package]]
+name = "ioboard-shared"
+version = "0.1.0"
 
 [[package]]
 name = "ioboard-trace"
