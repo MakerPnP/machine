@@ -533,6 +533,12 @@ dependencies = [
 [[package]]
 name = "ioboard-shared"
 version = "0.1.0"
+dependencies = [
+ "defmt 1.0.1",
+ "ergot",
+ "postcard-schema",
+ "serde",
+]
 
 [[package]]
 name = "ioboard-trace"

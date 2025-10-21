@@ -7,7 +7,7 @@ edition = "2024"
 
 [dependencies]
 ioboard-trace = { path = "../ioboard-trace" }
-ioboard-shared = { path = "../ioboard-shared" }
+ioboard-shared = { path = "../ioboard-shared", features = ["defmt"] }
 embedded-nal-async = "0.8.0"
 embedded-io-async = "0.6.1"
 
@@ -19,13 +19,12 @@ embassy-executor = { version = "0.9.1" }
 #embassy-time = { version = "0.5.0", path = "../../libs/embassy/embassy-time", features = ["defmt", "defmt-timestamp-uptime"] }
 
 ergot = { path = "../../libs/ergot/crates/ergot", features = ["embassy-net-v0_7"] }
-mutex          = "1.0.2"
+mutex             = { workspace = true }
 bbq2              = { version = "0.4.1", default-features = false, features = ["critical-section", "maitake-sync-0_2"] }
 heapless          = { version = "0.9", default-features = false }
-postcard-schema   = { version = "0.2.5", features = ["derive"] }
-serde             = { version = "1.0.219", default-features = false, features = ["derive"] }
+postcard-schema   = { workspace = true, features = ["derive"] }
+serde             = { workspace = true, default-features = false, features = ["derive"] }
 
-static_cell = "2.1.1"
-
-log = "0.4.28"
-defmt = "1.0.1"
+static_cell = { workspace = true }
+log = { workspace = true }
+defmt = { workspace = true }

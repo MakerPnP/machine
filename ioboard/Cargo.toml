@@ -10,3 +10,9 @@ members = [
 
 [workspace.dependencies]
 machine_shared = { path = "ioboard-shared" }
+serde             = { version = "1.0.219", default-features = false }
+postcard-schema   = { version = "0.2.5", features = ["derive"] }
+static_cell = "2.1.1"
+log = "0.4.28"
+defmt = "1.0.1"
+mutex          = "1.0.2"

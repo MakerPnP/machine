@@ -403,6 +403,11 @@ dependencies = [
 [[package]]
 name = "ioboard-shared"
 version = "0.1.0"
+dependencies = [
+ "ergot",
+ "postcard-schema",
+ "serde",
+]
 
 [[package]]
 name = "is_terminal_polyfill"

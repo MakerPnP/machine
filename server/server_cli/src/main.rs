@@ -11,7 +11,10 @@ use std::convert::TryInto;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
 
 use ioboard_shared::yeet::Yeet;
+use ioboard_shared::commands::Command;
+
 topic!(YeetTopic, Yeet, "topic/yeet");
+topic!(CommandTopic, Command, "topic/command");
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -27,7 +30,7 @@ async fn main() -> io::Result<()> {
     env_logger::init();
 
     tokio::task::spawn(basic_services(stack.clone(), port));
-    tokio::task::spawn(yeeter(stack.clone()));
+    tokio::task::spawn(command_sender(stack.clone()));
     tokio::task::spawn(yeet_listener(stack.clone(), 0));
 
     register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Controller)
@@ -56,13 +59,12 @@ async fn basic_services(stack: EdgeStack, port: u16) {
     }
 }
 
-async fn yeeter(stack: EdgeStack) {
+async fn command_sender(stack: EdgeStack) {
     let mut ctr = 0;
-    tokio::time::sleep(Duration::from_secs(1)).await;
     loop {
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        warn!("Sending broadcast message");
-        stack.topics().broadcast::<YeetTopic>(&ctr, None).unwrap();
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        let command = Command::Test(ctr);
+        stack.topics().broadcast::<CommandTopic>(&command, None).unwrap();
         ctr += 1;
     }
 }

@@ -27,6 +27,7 @@ use mutex::raw_impls::cs::CriticalSectionRawMutex;
 use static_cell::{ConstStaticCell, StaticCell};
 
 use ioboard_shared::yeet::Yeet;
+use ioboard_shared::commands::Command;
 
 //
 // Ergot configuration
@@ -195,7 +196,7 @@ async fn networking_task(
     spawner.must_spawn(pinger());
 
     spawner.must_spawn(yeeter());
-    spawner.must_spawn(yeet_listener(0));
+    spawner.must_spawn(command_listener());
 
     LOGSINK.register_static(log::LevelFilter::Info);
 
@@ -330,20 +331,26 @@ async fn yeeter() {
     }
 }
 
+topic!(CommandTopic, Command, "topic/command");
+
 #[embassy_executor::task]
-async fn yeet_listener(id: u8) {
+async fn command_listener() {
     let subber = STACK
         .topics()
-        .bounded_receiver::<YeetTopic, 64>(None);
+        .bounded_receiver::<CommandTopic, 32>(None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe();
 
-    defmt::info!("Yeet listener started");
+    defmt::info!("Command listener started");
     loop {
         tracepin::on(3);
         let msg = hdl.recv().await;
         tracepin::off(3);
-        defmt::info!("{:?}: Listener id:{} got {}", msg.hdr, id, msg.t);
+        match msg.t {
+            Command::Test(counter) => {
+                defmt::info!("Test command received: {}", counter);
+            }
+        }
     }
 }
 
