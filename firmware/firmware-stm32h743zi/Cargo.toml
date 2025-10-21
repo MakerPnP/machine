@@ -47,8 +47,8 @@ embedded-alloc = "0.6.0"
 [profile.release]
 debug = "full"
 panic = "abort"
-lto = "fat"
-opt-level = 2 # (0 = none, 1 = basic, 2 = some, "s" = size, "z" = size, without loop vectorization
+lto = "off"
+opt-level = 1 # (0 = none, 1 = basic, 2 = some, "s" = size, "z" = size, without loop vectorization
 codegen-units = 1
 
 [profile.dev]
