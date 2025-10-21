@@ -14,7 +14,9 @@ use embassy_net::driver::Driver;
 use embassy_net::{IpEndpoint, Ipv4Address, Runner, StackResources};
 use embassy_net::tcp::client::{TcpClient, TcpClientState};
 use embassy_net::udp::{PacketMetadata, UdpSocket};
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_time::{Duration, Ticker, Timer, WithTimeout};
+use embassy_sync::channel::{Channel, Sender, Receiver};
 
 use ergot::exports::bbq2::traits::coordination::cas::AtomicCoord;
 use ergot::interface_manager::profiles::direct_edge::embassy_net_udp_0_7::RxTxWorker;
@@ -195,8 +197,11 @@ async fn networking_task(
     spawner.must_spawn(pingserver());
     spawner.must_spawn(pinger());
 
-    spawner.must_spawn(yeeter());
-    spawner.must_spawn(command_listener());
+    let yeet_command_sender = YEET_COMMAND_CHANNEL.sender();
+    let yeet_command_receiver = YEET_COMMAND_CHANNEL.receiver();
+
+    spawner.must_spawn(yeeter(yeet_command_receiver));
+    spawner.must_spawn(command_listener(yeet_command_sender));
 
     LOGSINK.register_static(log::LevelFilter::Info);
 
@@ -283,8 +288,19 @@ async fn pingserver() {
 // TODO replace with the the load-cell data type and topic
 topic!(YeetTopic, Yeet, "topic/yeet");
 
+#[derive(Debug, Clone, Copy)]
+enum YeetCommand {
+    Begin,
+    End,
+}
+
+static YEET_COMMAND_CHANNEL: Channel<ThreadModeRawMutex, YeetCommand, 1> = Channel::new();
+
+type YeetCommandSender = Sender<'static, ThreadModeRawMutex, YeetCommand, 1>;
+type YeetCommandReceiver = Receiver<'static, ThreadModeRawMutex, YeetCommand, 1>;
+
 #[embassy_executor::task]
-async fn yeeter() {
+async fn yeeter(receiver: YeetCommandReceiver) {
     let mut counter = 0;
     let mut error_counter = 0;
 
@@ -295,46 +311,70 @@ async fn yeeter() {
 
     // Using a target frequency of 320Hz, the same as the HX717 load-cell ADC sensor
     const TARGET_HZ: u16 = 320;
-    let mut cycle_ticker = Ticker::every(Duration::from_micros(1_000_000_u64 / TARGET_HZ as u64));
+    let mut cycle_ticker: Option<Ticker> = None;
     loop {
-        info!("Sending broadcast message. ctr: {}, errors: {}", counter, error_counter);
-
-        enum Action {
-            Retry,
-            Wait,
-        }
-
-        tracepin::on(1);
-        let action = match STACK
-            .topics()
-            .broadcast::<YeetTopic>(&counter, None)
-        {
-            Ok(_) => {
-                counter += 1;
-                Action::Wait
-            }
-            Err(_e) => {
-                error_counter += 1;
-                // TODO look at the error and act appropriately instead of just retrying
-                Action::Retry
+        let cycle_ticker_fut = async {
+            if let Some(ticker) = &mut cycle_ticker {
+                ticker.next().await
+            } else {
+                core::future::pending().await
             }
         };
-        tracepin::off(1);
 
-        if matches!(action, Action::Retry) {
-            Timer::after(Duration::from_millis(100)).await;
-            cycle_ticker.reset();
-            continue;
+        match embassy_futures::select::select(receiver.receive(), cycle_ticker_fut).await {
+            embassy_futures::select::Either::First(cmd) => {
+                match cmd {
+                    YeetCommand::Begin => {
+                        cycle_ticker = Some(Ticker::every(Duration::from_micros(1_000_000_u64 / TARGET_HZ as u64)));
+                    }
+                    YeetCommand::End => {
+                        cycle_ticker = None;
+                    }
+                }
+            }
+            embassy_futures::select::Either::Second(_) => {
+                let Some(ref mut cycle_ticker) = cycle_ticker else {
+                    continue;
+                };
+
+                info!("Sending yeet broadcast message. ctr: {}, errors: {}", counter, error_counter);
+
+                enum Action {
+                    Retry,
+                    Wait,
+                }
+
+                tracepin::on(1);
+                let action = match STACK
+                    .topics()
+                    .broadcast::<YeetTopic>(&counter, None)
+                {
+                    Ok(_) => {
+                        counter += 1;
+                        Action::Wait
+                    }
+                    Err(_e) => {
+                        error_counter += 1;
+                        // TODO look at the error and act appropriately instead of just retrying
+                        Action::Retry
+                    }
+                };
+                tracepin::off(1);
+
+                if matches!(action, Action::Retry) {
+                    Timer::after(Duration::from_millis(100)).await;
+                    cycle_ticker.reset();
+                    continue;
+                }
+            }
         }
-
-        cycle_ticker.next().await;
     }
 }
 
 topic!(CommandTopic, Command, "topic/command");
 
 #[embassy_executor::task]
-async fn command_listener() {
+async fn command_listener(yeet_command_sender: YeetCommandSender) {
     let subber = STACK
         .topics()
         .bounded_receiver::<CommandTopic, 32>(None);
@@ -349,7 +389,13 @@ async fn command_listener() {
         match msg.t {
             Command::Test(counter) => {
                 defmt::info!("Test command received: {}", counter);
-            }
+            },
+            Command::BeginYeetTest => {
+                yeet_command_sender.send(YeetCommand::Begin).await;
+            },
+            Command::EndYeetTest => {
+                yeet_command_sender.send(YeetCommand::End).await;
+            },
         }
     }
 }

@@ -5,4 +5,6 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Command {
     Test(u64),
+    BeginYeetTest,
+    EndYeetTest,
 }

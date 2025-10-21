@@ -62,10 +62,16 @@ async fn basic_services(stack: EdgeStack, port: u16) {
 async fn command_sender(stack: EdgeStack) {
     let mut ctr = 0;
     loop {
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
         let command = Command::Test(ctr);
         stack.topics().broadcast::<CommandTopic>(&command, None).unwrap();
         ctr += 1;
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        stack.topics().broadcast::<CommandTopic>(&Command::BeginYeetTest, None).unwrap();
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        stack.topics().broadcast::<CommandTopic>(&Command::EndYeetTest, None).unwrap();
     }
 }
 
