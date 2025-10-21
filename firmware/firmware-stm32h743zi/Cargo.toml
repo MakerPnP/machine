@@ -31,7 +31,12 @@ defmt = "1.0.1"
 
 defmt-rtt = "1.0.0"
 cortex-m = {version = "0.7.7", features = ["critical-section-single-core"]}
-cortex-m-rt = "0.7.0"
+
+# stack painting in combination with flip-link is broken - fixed in https://github.com/knurling-rs/flip-link/pull/126
+# `cargo install --git https://github.com/knurling-rs/flip-link.git`
+# also requires a fixed version of cortex-m-rt which uses both `_stack_start` and `_stack_end`
+#cortex-m-rt = { version = "0.7.0", features = ["set-sp", "paint-stack"] }
+cortex-m-rt = { version = "0.7.0", features = ["set-sp"] }
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
