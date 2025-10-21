@@ -42,6 +42,7 @@ const MAX_PACKET_SIZE: usize = 1514;
 
 /// Statically store receive buffers
 static RECV_BUF: ConstStaticCell<[u8; MAX_PACKET_SIZE]> = ConstStaticCell::new([0u8; MAX_PACKET_SIZE]);
+/// Scratch buffer is used for UDP packet reception, set to the size of the largest UDP packet we expect to receive (ergot overhead + payload)
 static SCRATCH_BUF: ConstStaticCell<[u8; 64]> = ConstStaticCell::new([0u8; 64]);
 
 type Stack = kit::EdgeStack<&'static Queue, CriticalSectionRawMutex>;
