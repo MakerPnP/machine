@@ -32,14 +32,14 @@ use ioboard_shared::yeet::Yeet;
 // Ergot configuration
 //
 
-const OUT_QUEUE_SIZE: usize = 4096;
+const OUT_QUEUE_SIZE: usize = 1024;
 
 // FIXME this depends on the interface being used, maybe need a feature or something
-const MAX_PACKET_SIZE: usize = 1514;
+const MAX_PACKET_SIZE: usize = 4096;
 
 /// Statically store receive buffers
 static RECV_BUF: ConstStaticCell<[u8; MAX_PACKET_SIZE]> = ConstStaticCell::new([0u8; MAX_PACKET_SIZE]);
-static SCRATCH_BUF: ConstStaticCell<[u8; 64]> = ConstStaticCell::new([0u8; 64]);
+static SCRATCH_BUF: ConstStaticCell<[u8; 4096]> = ConstStaticCell::new([0u8; 4096]);
 
 type Stack = kit::EdgeStack<&'static Queue, CriticalSectionRawMutex>;
 type Queue = kit::Queue<OUT_QUEUE_SIZE, AtomicCoord>;
@@ -334,7 +334,7 @@ async fn yeeter() {
 async fn yeet_listener(id: u8) {
     let subber = STACK
         .topics()
-        .bounded_receiver::<YeetTopic, 4>(None);
+        .bounded_receiver::<YeetTopic, 64>(None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe();
 
