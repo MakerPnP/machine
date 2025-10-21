@@ -7,6 +7,7 @@
 #![no_main]
 extern crate alloc;
 
+use core::ptr;
 use cortex_m_rt::entry;
 use defmt::*;
 use embassy_executor::SendSpawner;
@@ -81,6 +82,8 @@ static EXECUTOR_LOW: StaticCell<Executor> = StaticCell::new();
 
 #[entry]
 fn main() -> ! {
+    //trigger_stack_corruption();
+
     let mut config = Config::default();
     config.rcc.hse = Some(rcc::Hse {
         freq: embassy_stm32::time::Hertz(8_000_000),
@@ -328,4 +331,37 @@ fn init_heap() {
     // TODO specify the linker section for the heap
     static mut HEAP_MEM: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
     unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
+}
+
+#[unsafe(no_mangle)]
+//pub static __stack_chk_guard: usize = 0b10101010101010101010101010101010;
+pub static __stack_chk_guard: usize = 0b01010101010101010101010101010101;
+
+
+#[unsafe(no_mangle)]
+extern "C" fn __stack_chk_fail() {
+    defmt::panic!("stack corruption detected");
+}
+
+/// Prevent inlining so this has its own stack frame.
+/// Use volatile writes so optimizer cannot remove or reorder them.
+#[inline(never)]
+pub fn trigger_stack_corruption() {
+    // small local buffer; it's placed on the stack.
+    let mut buf = [0u8; 16];
+
+    // base pointer to buffer
+    let p = buf.as_mut_ptr();
+
+    // range to corrupt: try many bytes both below and above the buffer
+    // use negative and positive offsets to clobber canary no matter its position.
+    for i in -512isize..512 {
+        unsafe {
+            // ptr.offset accepts isize and can go negative
+            ptr::write_volatile(p.offset(i), (i & 0xff) as u8);
+        }
+    }
+
+    // do a volatile read so compiler cannot prune the buffer away entirely
+    unsafe { ptr::read_volatile(p) };
 }
