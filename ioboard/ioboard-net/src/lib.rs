@@ -32,14 +32,14 @@ use ioboard_shared::yeet::Yeet;
 // Ergot configuration
 //
 
-const OUT_QUEUE_SIZE: usize = 1024;
+const OUT_QUEUE_SIZE: usize = 4096;
 
 // FIXME this depends on the interface being used, maybe need a feature or something
-const MAX_PACKET_SIZE: usize = 4096;
+const MAX_PACKET_SIZE: usize = 1514;
 
 /// Statically store receive buffers
 static RECV_BUF: ConstStaticCell<[u8; MAX_PACKET_SIZE]> = ConstStaticCell::new([0u8; MAX_PACKET_SIZE]);
-static SCRATCH_BUF: ConstStaticCell<[u8; 4096]> = ConstStaticCell::new([0u8; 4096]);
+static SCRATCH_BUF: ConstStaticCell<[u8; 64]> = ConstStaticCell::new([0u8; 64]);
 
 type Stack = kit::EdgeStack<&'static Queue, CriticalSectionRawMutex>;
 type Queue = kit::Queue<OUT_QUEUE_SIZE, AtomicCoord>;
