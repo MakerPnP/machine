@@ -323,10 +323,9 @@ impl<STEPPER: Stepper> StepperRunner<STEPPER> {
 
 #[allow(static_mut_refs)]
 fn init_heap() {
-    use core::mem::MaybeUninit;
     const HEAP_SIZE: usize = 16384;
 
     // TODO specify the linker section for the heap
-    static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+    static mut HEAP_MEM: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
     unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
 }
