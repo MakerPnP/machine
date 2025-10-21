@@ -824,7 +824,17 @@ dependencies = [
  "ioboard-shared",
  "log",
  "mutex",
+ "server_shared",
  "tokio",
+]
+
+[[package]]
+name = "server_shared"
+version = "0.1.0"
+dependencies = [
+ "ergot",
+ "postcard-schema",
+ "serde",
 ]
 
 [[package]]
