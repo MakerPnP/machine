@@ -45,12 +45,14 @@ const MAX_COBS_SIZE: usize = (1500_f32 * 1.5_f32) as usize;
 
 /// Receive buffer is used to by the COBS accumulator as packets are received
 static RECV_BUF: ConstStaticCell<[u8; MAX_COBS_SIZE]> = ConstStaticCell::new([0u8; MAX_COBS_SIZE]);
+// FIXME should be be using MAX_PACKET_SIZE here?
 /// Scratch buffer is used for UDP packet reception, set to the size of the largest UDP packet we expect to receive (ergot overhead + payload)
 static SCRATCH_BUF: ConstStaticCell<[u8; 64]> = ConstStaticCell::new([0u8; 64]);
 
 type Stack = kit::EdgeStack<&'static Queue, CriticalSectionRawMutex>;
 type Queue = kit::Queue<OUT_QUEUE_SIZE, AtomicCoord>;
 
+// FIXME should we *really* be using MAX_PACKET_SIZE here?
 /// Statically store our netstack
 static STACK: Stack = kit::new_target_stack(OUTQ.stream_producer(), MAX_PACKET_SIZE as u16);
 /// Statically store our outgoing packet buffer
