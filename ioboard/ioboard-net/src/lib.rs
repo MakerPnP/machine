@@ -40,8 +40,11 @@ const OUT_QUEUE_SIZE: usize = 4096;
 // FIXME this depends on the interface being used, maybe need a feature or something
 const MAX_PACKET_SIZE: usize = 1514;
 
-/// Statically store receive buffers
-static RECV_BUF: ConstStaticCell<[u8; MAX_PACKET_SIZE]> = ConstStaticCell::new([0u8; MAX_PACKET_SIZE]);
+// set to the size of the largest cobs payload we expect to receive (size of largest T + cobs overhead)
+const MAX_COBS_SIZE: usize = (1500_f32 * 1.5_f32) as usize;
+
+/// Receive buffer is used to by the COBS accumulator as packets are received
+static RECV_BUF: ConstStaticCell<[u8; MAX_COBS_SIZE]> = ConstStaticCell::new([0u8; MAX_COBS_SIZE]);
 /// Scratch buffer is used for UDP packet reception, set to the size of the largest UDP packet we expect to receive (ergot overhead + payload)
 static SCRATCH_BUF: ConstStaticCell<[u8; 64]> = ConstStaticCell::new([0u8; 64]);
 
