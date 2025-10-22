@@ -1,5 +1,3 @@
-use crate::tracepin::storage::TRACEPIN;
-
 /// Safety: for speed, any pins used are assumed to be initialized to the correct state.
 pub trait TracePins {
     fn set_pin_on(&mut self, pin: u8);
@@ -16,13 +14,13 @@ pub trait TracePins {
 pub fn on(_pin: u8) {
     #[cfg(feature = "enable")]
     {
-        use crate::tracepin::storage::TRACEPIN;
-        let (restore_state, instance) = TRACEPIN.acquire();
+        use storage::TRACE_PINS;
+        let (restore_state, instance) = TRACE_PINS.acquire();
 
         unsafe {
             (*instance).set_pin_on(_pin);
         }
-        TRACEPIN.release(restore_state);
+        TRACE_PINS.release(restore_state);
     }
 }
 
@@ -30,13 +28,13 @@ pub fn on(_pin: u8) {
 pub fn off(_pin: u8) {
     #[cfg(feature = "enable")]
     {
-        use crate::tracepin::storage::TRACEPIN;
-        let (restore_state, instance) = TRACEPIN.acquire();
+        use storage::TRACE_PINS;
+        let (restore_state, instance) = TRACE_PINS.acquire();
 
         unsafe {
             (*instance).set_pin_off(_pin);
         }
-        TRACEPIN.release(restore_state);
+        TRACE_PINS.release(restore_state);
     }
 }
 
@@ -51,7 +49,7 @@ mod storage {
 
     use crate::tracepin::TracePins;
 
-    pub(crate) static TRACEPIN: TracePin = TracePin::new();
+    pub(crate) static TRACE_PINS: TracePin = TracePin::new();
 
     pub struct TracePin {
         taken: AtomicBool,
@@ -128,5 +126,5 @@ mod storage {
 
 pub fn init<TRACEPINS: TracePins>(trace_pins: TRACEPINS) {
     #[cfg(feature = "enable")]
-    TRACEPIN.init(trace_pins);
+    storage::TRACE_PINS.init(trace_pins);
 }
