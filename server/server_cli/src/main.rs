@@ -24,23 +24,27 @@ topic!(CommandTopic, Command, "topic/command");
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let stack: RouterStack = RouterStack::new();
-    let udp_socket = UdpSocket::bind("192.168.18.41:8000").await.unwrap();
-    let remote_addr = "192.168.18.64:8000";
-
-    udp_socket.connect(remote_addr).await?;
-
-    let port = udp_socket.local_addr().unwrap().port();
-
     env_logger::init();
 
-    tokio::task::spawn(basic_services(stack.clone(), port));
-    tokio::task::spawn(command_sender(stack.clone()));
-    tokio::task::spawn(yeet_listener(stack.clone()));
+    let stack: RouterStack = RouterStack::new();
 
-    register_router_interface(&stack, udp_socket, MAX_ERGOT_PACKET_SIZE, TX_BUFFER_SIZE)
+    let io_board_udp_socket = UdpSocket::bind("192.168.18.41:8000").await.unwrap();
+    let io_board_remote_addr = "192.168.18.64:8000";
+    io_board_udp_socket.connect(io_board_remote_addr).await?;
+    register_router_interface(&stack, io_board_udp_socket, MAX_ERGOT_PACKET_SIZE, TX_BUFFER_SIZE)
         .await
         .unwrap();
+
+    let operator_udp_socket = UdpSocket::bind("192.168.18.41:8001").await.unwrap();
+    let operator_remote_addr = "192.168.18.41:8002";
+    operator_udp_socket.connect(operator_remote_addr).await?;
+    register_router_interface(&stack, operator_udp_socket, MAX_ERGOT_PACKET_SIZE, TX_BUFFER_SIZE)
+        .await
+        .unwrap();
+
+    tokio::task::spawn(basic_services(stack.clone(), 0_u16));
+    tokio::task::spawn(command_sender(stack.clone()));
+    tokio::task::spawn(yeet_listener(stack.clone()));
 
     loop {
         println!("Waiting for messages...");
@@ -94,7 +98,10 @@ async fn do_discovery(stack: RouterStack) {
         }
         seen = new_seen;
 
-        info!("Discovery list: {:?}", seen);
+        info!("Discovery list:");
+        for (index, item) in seen.iter().enumerate() {
+            info!("{}: {:?}", index, item);
+        }
 
         ticker.tick().await;
     }
