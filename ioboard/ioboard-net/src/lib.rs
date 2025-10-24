@@ -318,6 +318,8 @@ async fn yeeter(receiver: YeetCommandReceiver) {
     // Using a target frequency of 320Hz, the same as the HX717 load-cell ADC sensor
     const TARGET_HZ: u16 = 320;
     let mut cycle_ticker: Option<Ticker> = None;
+    let mut report_ticker = Ticker::every(Duration::from_secs(10));
+
     loop {
         let cycle_ticker_fut = async {
             if let Some(ticker) = &mut cycle_ticker {
@@ -327,8 +329,11 @@ async fn yeeter(receiver: YeetCommandReceiver) {
             }
         };
 
-        match embassy_futures::select::select(receiver.receive(), cycle_ticker_fut).await {
-            embassy_futures::select::Either::First(cmd) => {
+        match embassy_futures::select::select3(report_ticker.next(), receiver.receive(), cycle_ticker_fut).await {
+            embassy_futures::select::Either3::First(_) => {
+                info!("Yeet report, counter: {}, errors: {}", counter, error_counter);
+            }
+            embassy_futures::select::Either3::Second(cmd) => {
                 match cmd {
                     YeetCommand::Begin => {
                         cycle_ticker = Some(Ticker::every(Duration::from_micros(1_000_000_u64 / TARGET_HZ as u64)));
@@ -338,12 +343,10 @@ async fn yeeter(receiver: YeetCommandReceiver) {
                     }
                 }
             }
-            embassy_futures::select::Either::Second(_) => {
+            embassy_futures::select::Either3::Third(_) => {
                 let Some(ref mut cycle_ticker) = cycle_ticker else {
                     continue;
                 };
-
-                info!("Sending yeet broadcast message. ctr: {}, errors: {}", counter, error_counter);
 
                 enum Action {
                     Retry,
