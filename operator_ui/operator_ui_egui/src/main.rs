@@ -1,33 +1,90 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use i18n::I18nConfig;
+/// Run as follows:
+/// `run --package planner_gui_egui --bin planner_gui_egui`
+///
+/// To enable logging, set the environment variable appropriately, for example:
+/// `RUST_LOG=debug,eframe=warn,egui_glow=warn,egui=warn`
+use tracing::info;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, fmt};
+
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
-    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+    early_init();
 
-    let native_options = eframe::NativeOptions {
+    let default_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([400.0, 300.0])
-            .with_min_inner_size([300.0, 220.0])
             .with_icon(
                 // NOTE: Adding an icon is optional
                 eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-256.png")[..])
                     .expect("Failed to load icon"),
-            ),
+            )
+            .with_inner_size([1024.0, 768.0])
+            .with_min_inner_size([300.0, 220.0]),
         ..Default::default()
     };
-    eframe::run_native(
-        "eframe template",
-        native_options,
+
+    let app_name = "MakerPnP - Operator UI";
+
+    if let Err(e) = eframe::run_native(
+        app_name,
+        default_options.clone(),
         Box::new(|cc| Ok(Box::new(operator_ui_egui::OperatorUiApp::new(cc)))),
-    )
+    ) {
+        eprintln!(
+            "Failed to run eframe: {:?}, trying with hardware acceleration disabled.",
+            e
+        );
+
+        // Fallback: force software renderer
+        let mut sw_options = default_options.clone();
+        sw_options.hardware_acceleration = eframe::HardwareAcceleration::Off;
+
+        if let Err(e) = eframe::run_native(
+            app_name,
+            default_options.clone(),
+            Box::new(|cc| Ok(Box::new(operator_ui_egui::OperatorUiApp::new(cc)))),
+        ) {
+            eprintln!(
+                "Failed to run eframe with hardware acceleration disabled, cause: {:?}",
+                e
+            );
+
+            return Err(e);
+        }
+    }
+
+    Ok(())
+}
+
+fn early_init() {
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
+
+    info!("Started");
+
+    operator_ui_egui::profiling::init();
+
+    i18n::init(I18nConfig {
+        languages: vec![String::from("es-ES"), String::from("en-US")],
+        default: "en-US".to_string(),
+        fallback: "en-US".to_string(),
+    });
 }
 
 // When compiling to web using trunk:
 #[cfg(target_arch = "wasm32")]
 fn main() {
     use eframe::wasm_bindgen::JsCast as _;
+
+    early_init();
 
     // Redirect `log` message to `console.log` and friends:
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
