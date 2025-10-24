@@ -5,6 +5,7 @@ use egui_mobius::{Slot, Value};
 use egui_mobius::types::{Enqueue, ValueGuard};
 use tracing::trace;
 use crate::config::Config;
+use crate::net::ergot_task;
 use crate::task;
 use crate::runtime::tokio_runtime::TokioRuntime;
 use crate::ui_commands::{handle_command, UiCommand};
@@ -74,6 +75,7 @@ impl OperatorUiApp {
         // Safety: `Self::state()` is now safe to call.
 
         let runtime = TokioRuntime::new();
+        let spawner = runtime.runtime().handle().clone();
 
         // Define a handler function for the slot
         let handler = {
@@ -105,6 +107,8 @@ impl OperatorUiApp {
                 }
             }
         };
+
+        spawner.spawn(ergot_task(spawner.clone(), instance.state.clone()));
 
         // Start the slot with the handler
         app_slot.start(handler);
