@@ -22,7 +22,7 @@ use ergot::exports::bbq2::traits::coordination::cas::AtomicCoord;
 use ergot::interface_manager::profiles::direct_edge::embassy_net_udp_0_7::RxTxWorker;
 use ergot::logging::log_v0_4::LogSink;
 use ergot::toolkits::embassy_net_v0_7 as kit;
-use ergot::well_known::ErgotPingEndpoint;
+use ergot::well_known::{DeviceInfo, ErgotPingEndpoint};
 use ergot::{Address, topic};
 use mutex::raw_impls::cs::CriticalSectionRawMutex;
 
@@ -202,6 +202,7 @@ async fn networking_task(
     // Spawn socket using tasks
     spawner.must_spawn(pingserver());
     spawner.must_spawn(pinger());
+    spawner.must_spawn(discovery_responder());
 
     let yeet_command_sender = YEET_COMMAND_CHANNEL.sender();
     let yeet_command_receiver = YEET_COMMAND_CHANNEL.receiver();
@@ -288,6 +289,20 @@ async fn pingserver() {
     STACK
         .services()
         .ping_handler::<4>()
+        .await;
+}
+
+#[embassy_executor::task]
+async fn discovery_responder() {
+    let info = DeviceInfo {
+        name: Some("IOBoard".try_into().unwrap()),
+        description: Some("MakerPnP - IOBoard".try_into().unwrap()),
+        unique_id: 0,
+    };
+
+    STACK
+        .services()
+        .device_info_handler::<4>(&info)
         .await;
 }
 
