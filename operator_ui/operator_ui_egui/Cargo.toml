@@ -10,9 +10,17 @@ rust-version = "1.90"
 all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
+[features]
+profile-with-puffin = [
+    "profiling/profile-with-puffin",
+    "dep:puffin_http",
+]
+
 [dependencies]
 server_shared = { workspace = true }
+i18n = { git = "https://github.com/MakerPnP/makerpnp.git" }
 
+# gui (egui)
 egui = "0.33.0"
 eframe = { version = "0.33.0", default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
@@ -22,9 +30,30 @@ eframe = { version = "0.33.0", default-features = false, features = [
     "wayland",       # To support Linux (and CI)
     "x11",           # To support older Linux distributions (restores one of the default features)
 ] }
+
+# tracing
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing = { workspace = true }
+
+# logging
 log = "0.4.27"
 
-# You only need serde if you want app persistence:
+# profiling
+profiling = { workspace = true}
+puffin_http = { workspace = true, optional = true}
+
+egui-i18n = { workspace = true }
+egui_mobius = { workspace = true, features = ["serde"] }
+
+# tasks/async
+tokio = { workspace = true, features = ["full"]}
+futures =  { workspace = true }
+async-std =  { workspace = true }
+
+# messaging/comms
+ergot           = { workspace = true }
+
+# serialization
 serde = { version = "1.0.219", features = ["derive"] }
 
 # native:
