@@ -7,19 +7,24 @@ use log::{info, warn, debug};
 use tokio::{net::UdpSocket, select, time, time::sleep};
 
 use std::{io, pin::pin, time::Duration};
+use std::collections::HashSet;
 use std::convert::TryInto;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
-
+use ergot::toolkits::tokio_udp::{register_router_interface, RouterStack};
+use tokio::time::interval;
 use ioboard_shared::yeet::Yeet;
 use ioboard_shared::commands::Command;
+
+// TODO configure these appropriately
+const MAX_ERGOT_PACKET_SIZE: u16 = 1024;
+const TX_BUFFER_SIZE: usize = 4096;
 
 topic!(YeetTopic, Yeet, "topic/yeet");
 topic!(CommandTopic, Command, "topic/command");
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let queue = new_std_queue(4096);
-    let stack: EdgeStack = new_controller_stack(&queue, 1024);
+    let stack: RouterStack = RouterStack::new();
     let udp_socket = UdpSocket::bind("192.168.18.41:8000").await.unwrap();
     let remote_addr = "192.168.18.64:8000";
 
@@ -31,9 +36,9 @@ async fn main() -> io::Result<()> {
 
     tokio::task::spawn(basic_services(stack.clone(), port));
     tokio::task::spawn(command_sender(stack.clone()));
-    tokio::task::spawn(yeet_listener(stack.clone(), 0));
+    tokio::task::spawn(yeet_listener(stack.clone()));
 
-    register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Controller)
+    register_router_interface(&stack, udp_socket, MAX_ERGOT_PACKET_SIZE, TX_BUFFER_SIZE)
         .await
         .unwrap();
 
@@ -44,22 +49,58 @@ async fn main() -> io::Result<()> {
 }
 
 
-async fn basic_services(stack: EdgeStack, port: u16) {
+async fn basic_services(stack: RouterStack, port: u16) {
     let info = DeviceInfo {
-        name: Some("Ergot client".try_into().unwrap()),
-        description: Some("An Ergot Client Device".try_into().unwrap()),
+        name: Some("Ergot router".try_into().unwrap()),
+        description: Some("A central router".try_into().unwrap()),
         unique_id: port.into(),
     };
-    let do_pings = stack.services().ping_handler::<4>();
-    let do_info = stack.services().device_info_handler::<4>(&info);
+    // allow for discovery
+    let disco_answer = stack.services().device_info_handler::<4>(&info);
+    // handle incoming ping requests
+    let ping_answer = stack.services().ping_handler::<4>();
+    // custom service for doing discovery regularly
+    let disco_req = tokio::spawn(do_discovery(stack.clone()));
+    // forward log messages to the log crate output
+    let log_handler = stack.services().log_handler(16);
 
+    // These all run together, we run them in a single task
     select! {
-        _ = do_pings => {}
-        _ = do_info => {}
+        _ = disco_answer => {},
+        _ = ping_answer => {},
+        _ = disco_req => {},
+        _ = log_handler => {},
     }
 }
 
-async fn command_sender(stack: EdgeStack) {
+async fn do_discovery(stack: RouterStack) {
+    let mut max = 16;
+    let mut seen = HashSet::new();
+    let mut ticker = interval(Duration::from_secs(10));
+    loop {
+        let new_seen = stack
+            .discovery()
+            .discover(max, Duration::from_millis(250))
+            .await;
+        max = max.max(seen.len() * 2);
+        let new_seen = HashSet::from_iter(new_seen);
+        let added = new_seen.difference(&seen);
+        for add in added {
+            warn!("Added:   {add:?}");
+        }
+        let removed = seen.difference(&new_seen);
+        for rem in removed {
+            warn!("Removed: {rem:?}");
+        }
+        seen = new_seen;
+
+        info!("Discovery list: {:?}", seen);
+
+        ticker.tick().await;
+    }
+}
+
+async fn command_sender(stack: RouterStack) {
     let mut ctr = 0;
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -75,7 +116,7 @@ async fn command_sender(stack: EdgeStack) {
     }
 }
 
-async fn yeet_listener(stack: EdgeStack, id: u8) {
+async fn yeet_listener(stack: RouterStack) {
     let subber = stack.topics().heap_bounded_receiver::<YeetTopic>(64, None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe();
@@ -91,7 +132,7 @@ async fn yeet_listener(stack: EdgeStack, id: u8) {
             }
             msg = hdl.recv() => {
                 packets_this_interval += 1;
-                debug!("{}: Listener id:{} got {}", msg.hdr, id, msg.t);
+                debug!("{}: got {}", msg.hdr, msg.t);
             }
         }
     }
