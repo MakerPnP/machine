@@ -1,5 +1,5 @@
 use ergot::{
-    toolkits::tokio_udp::{EdgeStack, new_std_queue, new_controller_stack, register_edge_interface},
+    toolkits::tokio_udp::{register_router_interface, RouterStack},
     topic,
     well_known::DeviceInfo,
 };
@@ -9,18 +9,18 @@ use tokio::{net::UdpSocket, select, time, time::sleep};
 use std::{io, pin::pin, time::Duration};
 use std::collections::HashSet;
 use std::convert::TryInto;
-use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
-use ergot::toolkits::tokio_udp::{register_router_interface, RouterStack};
 use tokio::time::interval;
 use ioboard_shared::yeet::Yeet;
-use ioboard_shared::commands::Command;
+use ioboard_shared::commands::IoBoardCommand;
+use operator_shared::commands::OperatorCommand;
 
 // TODO configure these appropriately
 const MAX_ERGOT_PACKET_SIZE: u16 = 1024;
 const TX_BUFFER_SIZE: usize = 4096;
 
 topic!(YeetTopic, Yeet, "topic/yeet");
-topic!(CommandTopic, Command, "topic/command");
+topic!(IoBoardCommandTopic, IoBoardCommand, "topic/ioboard/command");
+topic!(OperatorCommandTopic, OperatorCommand, "topic/operator/command");
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -43,8 +43,9 @@ async fn main() -> io::Result<()> {
         .unwrap();
 
     tokio::task::spawn(basic_services(stack.clone(), 0_u16));
-    tokio::task::spawn(command_sender(stack.clone()));
+    tokio::task::spawn(io_board_command_sender(stack.clone()));
     tokio::task::spawn(yeet_listener(stack.clone()));
+    tokio::task::spawn(operator_listener(stack.clone()));
 
     loop {
         println!("Waiting for messages...");
@@ -107,19 +108,19 @@ async fn do_discovery(stack: RouterStack) {
     }
 }
 
-async fn command_sender(stack: RouterStack) {
+async fn io_board_command_sender(stack: RouterStack) {
     let mut ctr = 0;
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
-        let command = Command::Test(ctr);
-        stack.topics().broadcast::<CommandTopic>(&command, None).unwrap();
+        let command = IoBoardCommand::Test(ctr);
+        stack.topics().broadcast::<IoBoardCommandTopic>(&command, None).unwrap();
         ctr += 1;
 
         tokio::time::sleep(Duration::from_secs(5)).await;
-        stack.topics().broadcast::<CommandTopic>(&Command::BeginYeetTest, None).unwrap();
+        stack.topics().broadcast::<IoBoardCommandTopic>(&IoBoardCommand::BeginYeetTest, None).unwrap();
 
         tokio::time::sleep(Duration::from_secs(5)).await;
-        stack.topics().broadcast::<CommandTopic>(&Command::EndYeetTest, None).unwrap();
+        stack.topics().broadcast::<IoBoardCommandTopic>(&IoBoardCommand::EndYeetTest, None).unwrap();
     }
 }
 
@@ -140,6 +141,30 @@ async fn yeet_listener(stack: RouterStack) {
             msg = hdl.recv() => {
                 packets_this_interval += 1;
                 debug!("{}: got {}", msg.hdr, msg.t);
+            }
+        }
+    }
+}
+
+async fn operator_listener(stack: RouterStack) {
+    let subber = stack.topics().heap_bounded_receiver::<OperatorCommandTopic>(64, None);
+    let subber = pin!(subber);
+    let mut hdl = subber.subscribe();
+
+    let timeout_duration = Duration::from_secs(10);
+    loop {
+        let timeout = tokio::time::sleep(timeout_duration);
+        select! {
+            _ = timeout => {
+                warn!("operator timeout (no command received). duration: {}", timeout_duration.as_secs());
+            }
+            msg = hdl.recv() => {
+                debug!("{}: got {:?}", msg.hdr, msg.t);
+                match msg.t {
+                    OperatorCommand::Heartbeat(value) => {
+                        info!("OperatorCommand::Heartbeat.  value: {}", value);
+                    }
+                }
             }
         }
     }

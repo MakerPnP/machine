@@ -2,17 +2,20 @@
 resolver = "3"
 
 members = [
-    "ioboard-main",
-    "ioboard-net",
-    "ioboard-trace",
-    "ioboard-shared",
+    "ioboard_main",
+    "ioboard_net",
+    "ioboard_trace",
 ]
 
 [workspace.dependencies]
-machine_shared = { path = "ioboard-shared" }
-serde             = { version = "1.0.219", default-features = false }
-postcard-schema   = { version = "0.2.5", features = ["derive"] }
-static_cell = "2.1.1"
-log = "0.4.28"
-defmt = "1.0.1"
-mutex          = "1.0.2"
+ioboard_shared     = { path = "../common/ioboard_shared" }
+
+serde              = { version = "1.0.219", default-features = false }
+postcard-schema    = { version = "0.2.5", features = ["derive"] }
+static_cell        = "2.1.1"
+
+# logging
+log                = "0.4.28"
+defmt              = "1.0.1"
+
+mutex              = "1.0.2"

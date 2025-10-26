@@ -789,7 +789,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
-name = "ioboard-firmware-stm32h743zi"
+name = "ioboard_firmware-stm32h743zi"
 version = "0.1.0"
 dependencies = [
  "cortex-m",
@@ -804,27 +804,27 @@ dependencies = [
  "embedded-alloc",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
- "ioboard-main",
- "ioboard-net",
- "ioboard-trace",
+ "ioboard_main",
+ "ioboard_net",
+ "ioboard_trace",
  "panic-probe",
  "static_cell",
 ]
 
 [[package]]
-name = "ioboard-main"
+name = "ioboard_main"
 version = "0.1.0"
 dependencies = [
  "defmt 1.0.1",
  "embassy-time",
- "ioboard-net",
- "ioboard-trace",
+ "ioboard_net",
+ "ioboard_trace",
  "libm",
  "rsruckig",
 ]
 
 [[package]]
-name = "ioboard-net"
+name = "ioboard_net"
 version = "0.1.0"
 dependencies = [
  "bbq2",
@@ -838,8 +838,8 @@ dependencies = [
  "embedded-nal-async",
  "ergot",
  "heapless 0.9.1",
- "ioboard-shared",
- "ioboard-trace",
+ "ioboard_shared",
+ "ioboard_trace",
  "log",
  "mutex",
  "postcard-schema",
@@ -848,7 +848,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ioboard-shared"
+name = "ioboard_shared"
 version = "0.1.0"
 dependencies = [
  "defmt 1.0.1",
@@ -858,7 +858,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ioboard-trace"
+name = "ioboard_trace"
 version = "0.1.0"
 dependencies = [
  "critical-section",

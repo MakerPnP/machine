@@ -1,9 +1,0 @@
-[package]
-name = "server_shared"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-ergot = { workspace = true }
-serde = { workspace = true, default-features = false, features = ["derive"] }
-postcard-schema = { workspace = true, features = ["derive"] }

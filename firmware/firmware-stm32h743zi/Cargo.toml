@@ -1,6 +1,6 @@
 # cargo manifest format - https://doc.rust-lang.org/cargo/reference/manifest.html
 [package]
-name = "ioboard-firmware-stm32h743zi"
+name = "ioboard_firmware-stm32h743zi"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,40 +8,40 @@ edition = "2024"
 default = ["tracepin"]
 
 tracepin = [
-    "ioboard-trace/enable"
+    "ioboard_trace/enable"
 ]
 
 [dependencies]
-ioboard-main = { path = "../../ioboard/ioboard-main" }
-ioboard-net = { path = "../../ioboard/ioboard-net" }
-ioboard-trace = { path = "../../ioboard/ioboard-trace" }
+ioboard_main       = { path = "../../ioboard/ioboard_main" }
+ioboard_net        = { path = "../../ioboard/ioboard_net" }
+ioboard_trace      = { path = "../../ioboard/ioboard_trace" }
 
-embassy-stm32 = { version = "0.4.0", features = ["defmt", "stm32h743zi", "time-driver-any", "unstable-pac", "exti", "memory-x"] }
-embassy-executor = { version = "0.9.0", features = ["defmt", "arch-cortex-m", "executor-thread", "executor-interrupt"] }
-embassy-time = { version = "0.5.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
-embassy-sync = { version = "0.7.2", features = ["defmt"] }
-embassy-net = { version = "0.7.1", features = ["defmt", "tcp", "udp", "dhcpv4", "medium-ethernet", "proto-ipv4", "proto-ipv6"] }
-#embassy-stm32 = { version = "0.4.0", path = "../../libs/embassy/embassy-stm32", features = ["defmt", "stm32h743zi", "time-driver-any", "unstable-pac", "exti", "memory-x"] }
-#embassy-executor = { version = "0.9.0", path = "../../libs/embassy/embassy-executor", features = ["defmt", "arch-cortex-m", "executor-thread", "executor-interrupt"] }
-#embassy-time = { version = "0.5.0", path = "../../libs/embassy/embassy-time", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
-#embassy-sync = { version = "0.7.2", path = "../../libs/embassy/embassy-sync", features = ["defmt"] }
-#embassy-net = { version = "0.7.1", path = "../../libs/embassy/embassy-net", features = ["defmt", "tcp", "udp", "dhcpv4", "medium-ethernet", "proto-ipv4", "proto-ipv6"] }
+embassy-stm32      = { version = "0.4.0", features = ["defmt", "stm32h743zi", "time-driver-any", "unstable-pac", "exti", "memory-x"] }
+embassy-executor   = { version = "0.9.0", features = ["defmt", "arch-cortex-m", "executor-thread", "executor-interrupt"] }
+embassy-time       = { version = "0.5.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-sync       = { version = "0.7.2", features = ["defmt"] }
+embassy-net        = { version = "0.7.1", features = ["defmt", "tcp", "udp", "dhcpv4", "medium-ethernet", "proto-ipv4", "proto-ipv6"] }
+#embassy-stm32     = { version = "0.4.0", path = "../../libs/embassy/embassy-stm32", features = ["defmt", "stm32h743zi", "time-driver-any", "unstable-pac", "exti", "memory-x"] }
+#embassy-executor  = { version = "0.9.0", path = "../../libs/embassy/embassy-executor", features = ["defmt", "arch-cortex-m", "executor-thread", "executor-interrupt"] }
+#embassy-time      = { version = "0.5.0", path = "../../libs/embassy/embassy-time", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+#embassy-sync      = { version = "0.7.2", path = "../../libs/embassy/embassy-sync", features = ["defmt"] }
+#embassy-net       = { version = "0.7.1", path = "../../libs/embassy/embassy-net", features = ["defmt", "tcp", "udp", "dhcpv4", "medium-ethernet", "proto-ipv4", "proto-ipv6"] }
 
-defmt = "1.0.1"
+defmt              = "1.0.1"
 
-defmt-rtt = "1.0.0"
-cortex-m = {version = "0.7.7", features = ["critical-section-single-core"]}
+defmt-rtt          = "1.0.0"
+cortex-m           = {version = "0.7.7", features = ["critical-section-single-core"]}
 
 # stack painting in combination with flip-link is broken - fixed in https://github.com/knurling-rs/flip-link/pull/126
 # `cargo install --git https://github.com/knurling-rs/flip-link.git`
 # also requires a fixed version of cortex-m-rt which uses both `_stack_start` and `_stack_end`
 #cortex-m-rt = { version = "0.7.0", features = ["set-sp", "paint-stack"] }
-cortex-m-rt = { version = "0.7.0", features = ["set-sp"] }
-panic-probe = { version = "1.0.0", features = ["print-defmt"] }
-embedded-hal = "1.0.0"
+cortex-m-rt        = { version = "0.7.0", features = ["set-sp"] }
+panic-probe        = { version = "1.0.0", features = ["print-defmt"] }
+embedded-hal       = "1.0.0"
 embedded-hal-async = "1.0.0"
-static_cell = "2.1.1"
-embedded-alloc = "0.6.0"
+static_cell        = "2.1.1"
+embedded-alloc     = "0.6.0"
 
 # profiles - https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.release]

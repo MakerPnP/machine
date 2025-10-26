@@ -2713,6 +2713,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
+name = "operator_shared"
+version = "0.1.0"
+dependencies = [
+ "ergot",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
 name = "operator_ui_egui"
 version = "0.1.0"
 dependencies = [
@@ -2726,10 +2735,10 @@ dependencies = [
  "futures",
  "i18n",
  "log",
+ "operator_shared",
  "profiling",
  "puffin_http",
  "serde",
- "server_shared",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3287,15 +3296,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "server_shared"
-version = "0.1.0"
-dependencies = [
- "ergot",
- "postcard-schema",
- "serde",
 ]
 
 [[package]]

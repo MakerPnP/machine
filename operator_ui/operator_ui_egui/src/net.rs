@@ -1,20 +1,20 @@
 use egui_mobius::Value;
 use ergot::{
     toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface},
+    interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind,
     topic,
     well_known::DeviceInfo,
 };
 use log::{debug, info, warn};
 use tokio::{net::UdpSocket, select, time, time::sleep};
 
-use std::{io, pin::pin, time::Duration};
+use std::{pin::pin, time::Duration};
 use std::convert::TryInto;
-use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
-use ergot::toolkits::tokio_udp::RouterStack;
+use operator_shared::commands::OperatorCommand;
 use tokio::runtime::Handle;
 use crate::app::AppState;
 
-pub async fn ergot_task(spawer: Handle, state: Option<Value<AppState>>) {
+pub async fn ergot_task(spawner: Handle, state: Option<Value<AppState>>) {
     let queue = new_std_queue(4096);
     let stack: EdgeStack = new_target_stack(&queue, 1024);
     let udp_socket = UdpSocket::bind("192.168.18.41:8002").await.unwrap();
@@ -26,7 +26,7 @@ pub async fn ergot_task(spawer: Handle, state: Option<Value<AppState>>) {
     let port = udp_socket.local_addr().unwrap().port();
 
     tokio::task::spawn(basic_services(stack.clone(), port));
-    tokio::task::spawn(yeeter(stack.clone()));
+    tokio::task::spawn(command_sender(stack.clone()));
     tokio::task::spawn(yeet_listener(stack.clone()));
 
     register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Target)
@@ -54,18 +54,23 @@ async fn basic_services(stack: EdgeStack, port: u16) {
     }
 }
 
-topic!(YeetTopic, u64, "topic/yeet");
+topic!(OperatorCommandTopic, OperatorCommand, "topic/operator/command");
 
-async fn yeeter(stack: EdgeStack) {
+async fn command_sender(stack: EdgeStack) {
     let mut ctr = 0;
     tokio::time::sleep(Duration::from_secs(1)).await;
+    let heartbeat_timeout_duration = Duration::from_secs(10);
+    let heartbeat_send_interval = heartbeat_timeout_duration / 2;
+    let mut ticker = time::interval(heartbeat_send_interval);
     loop {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        info!("Sending broadcast message");
-        stack.topics().broadcast::<YeetTopic>(&ctr, None).unwrap();
+        stack.topics().broadcast::<OperatorCommandTopic>(&OperatorCommand::Heartbeat(ctr), None).unwrap();
         ctr += 1;
+
+        ticker.tick().await;
     }
 }
+
+topic!(YeetTopic, u64, "topic/yeet");
 
 async fn yeet_listener(stack: EdgeStack) {
     let subber = stack.topics().heap_bounded_receiver::<YeetTopic>(64, None);
