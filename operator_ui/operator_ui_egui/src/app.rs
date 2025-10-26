@@ -1,5 +1,5 @@
 use async_std::prelude::StreamExt;
-use egui::ThemePreference;
+use egui::{Button, Frame, NumExt, Sense, ThemePreference, Vec2};
 use egui_i18n::tr;
 use egui_mobius::{Slot, Value};
 use egui_mobius::types::{Enqueue, ValueGuard};
@@ -10,15 +10,39 @@ use crate::task;
 use crate::runtime::tokio_runtime::TokioRuntime;
 use crate::ui_commands::{handle_command, UiCommand};
 
+const MIN_TOUCH_SIZE: Vec2 = Vec2::splat(24.0);
+
+static TOGGLE_DEFINITIONS: [ToggleDefinition; 3] = [
+    ToggleDefinition { name: "status" },
+    ToggleDefinition { name: "plot" },
+    ToggleDefinition { name: "settings" },
+];
 
 pub struct AppState {
-    command_sender: Enqueue<UiCommand>,
+    pub(crate) command_sender: Enqueue<UiCommand>,
+    pub(crate) left_toggles: Vec<&'static ToggleDefinition>,
+    pub(crate) toggle_states: Vec<ToggleState>,
 }
 
 impl AppState {
     pub fn init(sender: Enqueue<UiCommand>) -> Self {
+
+        let left_toggles = vec![
+            &TOGGLE_DEFINITIONS[0],
+            &TOGGLE_DEFINITIONS[1],
+            &TOGGLE_DEFINITIONS[2],
+        ];
+
+        let mut toggle_states = vec![
+            ToggleState { name: "status", mode: ViewMode::Window, },
+            ToggleState { name: "plot", mode: ViewMode::Disabled, },
+            ToggleState { name: "settings", mode: ViewMode::Disabled, },
+        ];
+
         Self {
             command_sender: sender,
+            left_toggles,
+            toggle_states,
         }
     }
 }
@@ -231,8 +255,102 @@ impl eframe::App for OperatorUiApp {
             });
         });
 
+        let mut state = self.app_state();
+
+        egui::SidePanel::left("left_panel")
+            .min_width(MIN_TOUCH_SIZE.x)
+            .max_width(200.0)
+            .resizable(true)
+            .frame(Frame::NONE)
+            .show(ctx, |ui| {
+                let left_panel_width = ui.available_size_before_wrap().x;
+                egui::ScrollArea::both()
+                    .auto_shrink([false, false])
+                    .min_scrolled_width(MIN_TOUCH_SIZE.x)
+                    .show(ui, |ui| {
+                    for toggle in state.left_toggles.iter() {
+                        let toggle_state = state.toggle_states.iter().find(|candidate| candidate.name == toggle.name).unwrap();
+
+                        let enabled = toggle_state.is_enabled();
+
+                        let response = ui.horizontal(|ui| {
+                            ui.set_width(left_panel_width);
+                            ui.set_height(MIN_TOUCH_SIZE.y);
+
+                            let button_width = left_panel_width
+                                .at_least(MIN_TOUCH_SIZE.x)
+                                .at_most(MIN_TOUCH_SIZE.x * 2.0);
+                            ui.add_sized(Vec2::new(button_width, MIN_TOUCH_SIZE.y), egui::Label::new(tr!(&format!("panel-{}-icon", toggle.name)))
+                                .selectable(false));
+
+                            if left_panel_width > MIN_TOUCH_SIZE.x * 2.0 {
+                                ui.add(egui::Label::new(tr!(&format!("panel-{}-name", toggle.name))).selectable(false));
+                            }
+
+                        }).response;
+                        if response.interact(Sense::click()).clicked() {
+                            let mode = if enabled { ViewMode::Disabled } else { ViewMode::Window };
+                            state.command_sender.send(UiCommand::SetPanelMode(toggle.name.to_string(), mode)).expect("sent");
+                        }
+                    }
+                });
+            });
+
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("MakerPnP - Operator UI");
+            let home_panel_enabled = state.toggle_states.iter().any(|candidate|candidate.name == "status" && candidate.is_windowed());
+            if home_panel_enabled {
+                egui::Window::new(tr!("panel-status-window-title"))
+                    .resizable(true)
+                    .show(ctx, |ui|{
+                    ui.label("Status content");
+                    });
+            }
+
+            let plot_panel_enabled = state.toggle_states.iter().any(|candidate|candidate.name == "plot" && candidate.is_windowed());
+            if plot_panel_enabled {
+                egui::Window::new(tr!("panel-plot-window-title"))
+                    .resizable(true)
+                    .show(ctx, |ui|{
+                        ui.label("Plot content");
+                    });
+            }
+
+            let settings_panel_enabled = state.toggle_states.iter().any(|candidate|candidate.name == "settings" && candidate.is_windowed());
+            if settings_panel_enabled {
+                egui::Window::new(tr!("panel-settings-window-title"))
+                    .resizable(true)
+                    .show(ctx, |ui|{
+                        ui.label("Settings content");
+                    });
+            }
         });
     }
+}
+
+pub struct ToggleDefinition {
+    name: &'static str,
+}
+
+pub struct ToggleState {
+    pub(crate) name: &'static str,
+    pub(crate) mode: ViewMode,
+}
+
+impl ToggleState {
+    pub fn is_windowed(&self) -> bool {
+        self.mode == ViewMode::Window
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.mode != ViewMode::Disabled
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ViewMode {
+    Disabled,
+    //Tile,
+    Window,
+    //Fullscreen,
+    //ViewPort,
 }
