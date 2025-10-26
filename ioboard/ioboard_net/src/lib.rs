@@ -29,7 +29,7 @@ use mutex::raw_impls::cs::CriticalSectionRawMutex;
 use static_cell::{ConstStaticCell, StaticCell};
 
 use ioboard_shared::yeet::Yeet;
-use ioboard_shared::commands::Command;
+use ioboard_shared::commands::IoBoardCommand;
 
 //
 // Ergot configuration
@@ -395,7 +395,7 @@ async fn yeeter(receiver: YeetCommandReceiver) {
     }
 }
 
-topic!(CommandTopic, Command, "topic/command");
+topic!(CommandTopic, IoBoardCommand, "topic/ioboard/command");
 
 #[embassy_executor::task]
 async fn command_listener(yeet_command_sender: YeetCommandSender) {
@@ -411,13 +411,13 @@ async fn command_listener(yeet_command_sender: YeetCommandSender) {
         let msg = hdl.recv().await;
         tracepin::off(3);
         match msg.t {
-            Command::Test(counter) => {
+            IoBoardCommand::Test(counter) => {
                 defmt::info!("Test command received: {}", counter);
             },
-            Command::BeginYeetTest => {
+            IoBoardCommand::BeginYeetTest => {
                 yeet_command_sender.send(YeetCommand::Begin).await;
             },
-            Command::EndYeetTest => {
+            IoBoardCommand::EndYeetTest => {
                 yeet_command_sender.send(YeetCommand::End).await;
             },
         }

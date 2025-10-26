@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-server_shared   = { workspace = true }
-ioboard-shared  = { workspace = true }
+operator_shared    = { workspace = true }
+ioboard_shared     = { workspace = true }
 
-cordyceps       = { workspace = true }
-env_logger      = { workspace = true }
-log             = { workspace = true }
-ergot           = { workspace = true }
-mutex           = { workspace = true }
-tokio           = { workspace = true }
+cordyceps          = { workspace = true }
+env_logger         = { workspace = true }
+log                = { workspace = true }
+ergot              = { workspace = true }
+mutex              = { workspace = true }
+tokio              = { workspace = true }

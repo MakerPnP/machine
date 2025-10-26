@@ -17,7 +17,7 @@ profile-with-puffin = [
 ]
 
 [dependencies]
-server_shared = { workspace = true }
+operator_shared = { workspace = true }
 i18n = { git = "https://github.com/MakerPnP/makerpnp.git" }
 
 # gui (egui)

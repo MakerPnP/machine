@@ -50,8 +50,6 @@ impl Default for OperatorUiApp {
 
 impl OperatorUiApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let (_signal, slot) = egui_mobius::factory::create_signal_slot::<UiCommand>();
-
         let mut instance: OperatorUiApp = if let Some(storage) = cc.storage {
             eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
         } else {

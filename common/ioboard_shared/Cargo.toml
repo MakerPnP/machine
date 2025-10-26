@@ -1,0 +1,13 @@
+[package]
+name = "ioboard_shared"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+defmt = ["dep:defmt"]
+
+[dependencies]
+ergot           = { path = "../../libs/ergot/crates/ergot" }
+serde           = { workspace = true, default-features = false, features = ["derive"] }
+postcard-schema = { workspace = true, features = ["derive"] }
+defmt           = { workspace = true, optional = true }
