@@ -1,7 +1,7 @@
 use egui::{Context, ThemePreference};
 use egui_mobius::Value;
 use tracing::trace;
-use crate::app::{AppState, ViewMode};
+use crate::app::{AppState, PaneKind, ViewMode};
 use crate::config::Config;
 use crate::task::Task;
 
@@ -11,7 +11,7 @@ pub enum UiCommand {
     None,
     LangageChanged(String),
     ThemeChanged(ThemePreference),
-    SetPanelMode(String, ViewMode),
+    SetPanelMode(PaneKind, ViewMode),
 }
 
 pub fn handle_command(
@@ -36,14 +36,11 @@ pub fn handle_command(
             ui_context.set_theme(theme);
             Task::none()
         }
-        UiCommand::SetPanelMode(name, mode) => {
+        UiCommand::SetPanelMode(kind, mode) => {
             let mut state = app_state.lock().unwrap();
 
-            if let Some(toggle_state) = state.toggle_states.iter_mut().find(|candidate|candidate.name == name) {
-
-                if matches!(toggle_state.mode, ViewMode::Disabled) {
-                    toggle_state.mode = mode;
-                }
+            if let Some(toggle_state) = state.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
+                toggle_state.mode = mode;
             }
 
             Task::none()
