@@ -6,7 +6,7 @@ use egui::{CornerRadius, Frame, NumExt, Sense, ThemePreference, Ui, Vec2, Widget
 use egui_i18n::tr;
 use egui_mobius::{Slot, Value};
 use egui_mobius::types::{Enqueue, ValueGuard};
-use egui_tiles::{Tile, TileId, Tree, UiResponse};
+use egui_tiles::{Tile, TileId, Tiles, Tree, UiResponse};
 use tracing::{error, trace};
 use ui::camera::CameraUi;
 use ui::controls::ControlsUi;
@@ -48,10 +48,6 @@ pub struct AppState {
 
 impl PersistentAppState {
     pub(crate) fn update_tree(&self, tree: &mut Tree<PaneKind>) {
-        let Some(root_id) = tree.root() else {
-            unreachable!()
-        };
-
         for toggle_state in self.toggle_states.iter() {
             if !matches!(toggle_state.mode, ViewMode::Tile) {
                 continue;
@@ -63,19 +59,41 @@ impl PersistentAppState {
             });
 
             if !is_open {
-                let tile_id = tree.tiles.insert_pane(toggle_state.kind);
+                // egui_tiles has this annoying behavior where a container will be deleted and replaced
+                // with a non-container tile if the container only has one child, this can lead to
+                // a situation where the root pane is not a container.
+                // in this case we need to create a new container, put the old root in it and then
+                // add the new tile to the container.
 
-                if let Some(root_pane) = tree.tiles.get_mut(root_id) {
-                    match root_pane {
-                        Tile::Pane(_) => {
-                            // FIXME how does this happen?
-                            error!("root pane is a pane, not a container");
+                println!("tree:");
+                let root = tree.root();
+                dump_tiles(&mut tree.tiles, root);
+
+                fn dump_tiles(
+                    tiles: &mut egui_tiles::Tiles<PaneKind>,
+                    tile_id: Option<egui_tiles::TileId>,
+                )
+                {
+                    let Some(tile_id) = tile_id else {
+                        return
+                    };
+
+                    if let Some(tile) = tiles.remove(tile_id) {
+                        println!("{:?}", tile);
+
+                        match &tile {
+                            Tile::Pane(_) => {}
+                            Tile::Container(container) => {
+                                for &tile_id in container.children() {
+                                    dump_tiles(tiles, Some(tile_id));
+                                }
+                            }
                         }
-                        Tile::Container(root_container) => {
-                            root_container.add_child(tile_id);
-                        }
+                        tiles.insert(tile_id, tile);
                     }
                 }
+
+                Self::add_pane_to_root(tree, toggle_state.kind);
             }
         }
 
@@ -93,6 +111,30 @@ impl PersistentAppState {
 
         for id in tiles_to_close.into_iter() {
             tree.remove_recursively(id);
+        }
+    }
+
+    fn add_pane_to_root(tree: &mut Tree<PaneKind>, new_kind: PaneKind) {
+        if let Some(root_id) = tree.root() {
+            let root = tree.tiles.remove(root_id).unwrap();
+            match root {
+                Tile::Pane(old_root_kind) => {
+                    let new_root_pane_id = tree.tiles.insert_pane(old_root_kind);
+                    let new_tile_id = tree.tiles.insert_pane(new_kind);
+                    let children = vec![new_root_pane_id, new_tile_id];
+                    let _new_root_container_id = tree.tiles.insert_grid_tile(children);
+                    tree.root = Some(_new_root_container_id);
+                }
+                Tile::Container(mut container) => {
+                    let new_tile_id = tree.tiles.insert_pane(new_kind);
+                    container.add_child(new_tile_id);
+                    tree.tiles.insert(root_id, Tile::Container(container));
+                }
+            }
+        } else {
+            tree.tiles = Tiles::default();
+            let new_tile_id = tree.tiles.insert_pane(new_kind);
+            tree.root = Some(new_tile_id);
         }
     }
 }
@@ -421,6 +463,7 @@ impl eframe::App for OperatorUiApp {
                             let toggle_state = persistent_app_state.toggle_states.iter().find(|candidate| candidate.kind == *kind).unwrap();
 
                             let enabled = toggle_state.is_enabled();
+                            let mut cycle = false;
 
                             let response = ui.horizontal(|ui| {
                                 ui.set_width(left_panel_width);
@@ -441,9 +484,27 @@ impl eframe::App for OperatorUiApp {
                                     ui.add(egui::Label::new(tr!(&format!("panel-{}-name", toggle_definition.name))).selectable(false));
                                 }
 
+                                if ui.button(">").clicked() {
+                                    cycle = true;
+                                }
+
                             }).response;
-                            if response.interact(Sense::click()).clicked() {
-                                let mode = if enabled { ViewMode::Disabled } else { ViewMode::Window };
+                            // FIXME interacact returns FALSE if an 'inner' button is clicked.
+                            if response.interact(Sense::click()).clicked() || cycle {
+                                let default_mode = ViewMode::Window;
+                                let mode = if cycle {
+                                    match toggle_state.mode {
+                                        ViewMode::Disabled => default_mode,
+                                        ViewMode::Tile => {
+                                            ViewMode::Window
+                                        }
+                                        ViewMode::Window => {
+                                            ViewMode::Tile
+                                        }
+                                    }
+                                } else {
+                                    default_mode
+                                };
 
                                 sender.send(UiCommand::SetPanelMode(*kind, mode)).expect("sent");
                             }
