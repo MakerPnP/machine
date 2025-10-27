@@ -5,7 +5,7 @@ use ergot::{
     topic,
     well_known::DeviceInfo,
 };
-use log::{debug, info, warn};
+use log::{debug, info};
 use tokio::{net::UdpSocket, select, time, time::sleep};
 
 use std::{pin::pin, time::Duration};
@@ -14,7 +14,7 @@ use operator_shared::commands::OperatorCommand;
 use tokio::runtime::Handle;
 use crate::app::AppState;
 
-pub async fn ergot_task(spawner: Handle, state: Option<Value<AppState>>) {
+pub async fn ergot_task(_spawner: Handle, _state: Option<Value<AppState>>) {
     let queue = new_std_queue(4096);
     let stack: EdgeStack = new_target_stack(&queue, 1024);
     let udp_socket = UdpSocket::bind("192.168.18.41:8002").await.unwrap();
