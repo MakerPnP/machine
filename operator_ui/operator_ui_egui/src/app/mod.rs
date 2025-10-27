@@ -6,11 +6,12 @@ use egui::{CornerRadius, Frame, NumExt, Sense, ThemePreference, Ui, Vec2, Widget
 use egui_i18n::tr;
 use egui_mobius::{Slot, Value};
 use egui_mobius::types::{Enqueue, ValueGuard};
-use egui_tiles::{Tile, TileId, Tiles, Tree, UiResponse};
-use tracing::{error, trace};
+use egui_tiles::{ContainerKind, Tile, TileId, Tree, UiResponse};
+use tracing::{debug, trace};
 use ui::camera::CameraUi;
 use ui::controls::ControlsUi;
 use ui::diagnostics::DiagnosticsUi;
+use crate::app::ui::egui_tree::{add_pane_to_root, dump_tiles};
 use crate::config::Config;
 use crate::net::ergot_task;
 use crate::task;
@@ -59,41 +60,11 @@ impl PersistentAppState {
             });
 
             if !is_open {
-                // egui_tiles has this annoying behavior where a container will be deleted and replaced
-                // with a non-container tile if the container only has one child, this can lead to
-                // a situation where the root pane is not a container.
-                // in this case we need to create a new container, put the old root in it and then
-                // add the new tile to the container.
-
-                println!("tree:");
+                debug!("tree:");
                 let root = tree.root();
                 dump_tiles(&mut tree.tiles, root);
 
-                fn dump_tiles(
-                    tiles: &mut egui_tiles::Tiles<PaneKind>,
-                    tile_id: Option<egui_tiles::TileId>,
-                )
-                {
-                    let Some(tile_id) = tile_id else {
-                        return
-                    };
-
-                    if let Some(tile) = tiles.remove(tile_id) {
-                        println!("{:?}", tile);
-
-                        match &tile {
-                            Tile::Pane(_) => {}
-                            Tile::Container(container) => {
-                                for &tile_id in container.children() {
-                                    dump_tiles(tiles, Some(tile_id));
-                                }
-                            }
-                        }
-                        tiles.insert(tile_id, tile);
-                    }
-                }
-
-                Self::add_pane_to_root(tree, toggle_state.kind);
+                add_pane_to_root(tree, toggle_state.kind, ContainerKind::Tabs);
             }
         }
 
@@ -111,30 +82,6 @@ impl PersistentAppState {
 
         for id in tiles_to_close.into_iter() {
             tree.remove_recursively(id);
-        }
-    }
-
-    fn add_pane_to_root(tree: &mut Tree<PaneKind>, new_kind: PaneKind) {
-        if let Some(root_id) = tree.root() {
-            let root = tree.tiles.remove(root_id).unwrap();
-            match root {
-                Tile::Pane(old_root_kind) => {
-                    let new_root_pane_id = tree.tiles.insert_pane(old_root_kind);
-                    let new_tile_id = tree.tiles.insert_pane(new_kind);
-                    let children = vec![new_root_pane_id, new_tile_id];
-                    let _new_root_container_id = tree.tiles.insert_grid_tile(children);
-                    tree.root = Some(_new_root_container_id);
-                }
-                Tile::Container(mut container) => {
-                    let new_tile_id = tree.tiles.insert_pane(new_kind);
-                    container.add_child(new_tile_id);
-                    tree.tiles.insert(root_id, Tile::Container(container));
-                }
-            }
-        } else {
-            tree.tiles = Tiles::default();
-            let new_tile_id = tree.tiles.insert_pane(new_kind);
-            tree.root = Some(new_tile_id);
         }
     }
 }
@@ -207,7 +154,7 @@ pub struct OperatorUiApp {
 
     persistent_app_state: Value<PersistentAppState>,
 
-    tree: egui_tiles::Tree<PaneKind>,
+    tree: Tree<PaneKind>,
 
     // The command slot for handling UI commands
     #[serde(skip)]
