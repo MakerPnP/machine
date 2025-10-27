@@ -1,7 +1,7 @@
 use egui::{Context, ThemePreference};
 use egui_mobius::Value;
 use tracing::trace;
-use crate::app::{AppState, PaneKind, ViewMode};
+use crate::app::{AppState, PaneKind, PersistentAppState, ViewMode};
 use crate::config::Config;
 use crate::task::Task;
 
@@ -18,6 +18,7 @@ pub fn handle_command(
     command: UiCommand,
     app_state: Value<AppState>,
     config: Value<Config>,
+    persistent_app_state: Value<PersistentAppState>,
     ui_context: Context,
 ) -> Task<UiCommand> {
     trace!("Handling command: {:?}", command);
@@ -37,7 +38,7 @@ pub fn handle_command(
             Task::none()
         }
         UiCommand::SetPanelMode(kind, mode) => {
-            let mut state = app_state.lock().unwrap();
+            let mut state = persistent_app_state.lock().unwrap();
 
             if let Some(toggle_state) = state.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
                 toggle_state.mode = mode;

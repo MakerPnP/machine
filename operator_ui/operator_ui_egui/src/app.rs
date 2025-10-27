@@ -29,17 +29,23 @@ static TOGGLE_DEFINITIONS: [ToggleDefinition; 6] = [
     ToggleDefinition { name: "status", kind: PaneKind::Status },
 ];
 
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct PersistentAppState {
+
+    pub(crate) toggle_states: Vec<ToggleState>,
+
+    pub(crate) left_toggles: Vec<PaneKind>,
+}
+
 pub struct AppState {
     pub(crate) command_sender: Enqueue<UiCommand>,
-    pub(crate) left_toggles: Vec<&'static ToggleDefinition>,
-    pub(crate) toggle_states: Vec<ToggleState>,
     pub(crate) tree_behavior: TreeBehavior,
 
     ui_state: Value<UiState>,
 }
 
-impl AppState {
-
+impl PersistentAppState {
     pub(crate) fn update_tree(&self, tree: &mut Tree<PaneKind>) {
         let Some(root_id) = tree.root() else {
             unreachable!()
@@ -64,7 +70,7 @@ impl AppState {
                             // FIXME how does this happen?
                             error!("root pane is a pane, not a container");
                         }
-                        Tile::Container(root_container  ) => {
+                        Tile::Container(root_container) => {
                             root_container.add_child(tile_id);
                         }
                     }
@@ -73,7 +79,7 @@ impl AppState {
         }
 
         // now deal with existing tiles that should be closed
-        let tiles_to_close = tree.tiles.iter().filter_map(|(tile_id, tile)|{
+        let tiles_to_close = tree.tiles.iter().filter_map(|(tile_id, tile)| {
             let should_close = self.toggle_states.iter().any(|candidate| {
                 candidate.mode != ViewMode::Tile && matches!(tile, Tile::Pane(kind) if *kind == candidate.kind)
             });
@@ -90,6 +96,26 @@ impl AppState {
     }
 }
 
+impl Default for PersistentAppState {
+    fn default() -> Self {
+        let left_toggles = TOGGLE_DEFINITIONS.iter().map(|candidate| candidate.kind).collect::<Vec<_>>();
+
+        let toggle_states = vec![
+            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Camera },
+            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Controls },
+            ToggleState { mode: ViewMode::Window, kind: PaneKind::Diagnostics },
+            ToggleState { mode: ViewMode::Disabled, kind: PaneKind::Plot },
+            ToggleState { mode: ViewMode::Window, kind: PaneKind::Settings },
+            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Status },
+        ];
+
+        Self {
+            left_toggles,
+            toggle_states,
+        }
+    }
+}
+
 pub struct UiState {
     pub(crate) camera_ui: CameraUi,
     pub(crate) controls_ui: ControlsUi,
@@ -101,24 +127,6 @@ pub struct UiState {
 
 impl AppState {
     pub fn init(sender: Enqueue<UiCommand>) -> Self {
-
-        let left_toggles = vec![
-            &TOGGLE_DEFINITIONS[0],
-            &TOGGLE_DEFINITIONS[1],
-            &TOGGLE_DEFINITIONS[2],
-            &TOGGLE_DEFINITIONS[3],
-            &TOGGLE_DEFINITIONS[4],
-            &TOGGLE_DEFINITIONS[5],
-        ];
-
-        let toggle_states = vec![
-            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Camera },
-            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Controls },
-            ToggleState { mode: ViewMode::Window, kind: PaneKind::Diagnostics },
-            ToggleState { mode: ViewMode::Disabled, kind: PaneKind::Plot },
-            ToggleState { mode: ViewMode::Window, kind: PaneKind::Settings },
-            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Status },
-        ];
 
         let ui_state = UiState {
             camera_ui: CameraUi::default(),
@@ -133,8 +141,6 @@ impl AppState {
 
         Self {
             command_sender: sender,
-            left_toggles,
-            toggle_states,
             tree_behavior: TreeBehavior::new(ui_state.clone()),
             ui_state,
         }
@@ -156,6 +162,8 @@ pub struct OperatorUiApp {
     #[serde(skip)]
     state: Option<Value<AppState>>,
 
+    persistent_app_state: Value<PersistentAppState>,
+
     tree: egui_tiles::Tree<PaneKind>,
 
     // The command slot for handling UI commands
@@ -172,6 +180,7 @@ impl Default for OperatorUiApp {
         Self {
             config: Default::default(),
             state: None,
+            persistent_app_state: Value::new(PersistentAppState::default()),
             slot,
             tree,
         }
@@ -224,12 +233,14 @@ impl OperatorUiApp {
             let config = instance.config.clone();
             let context = cc.egui_ctx.clone();
             let app_message_sender = app_message_sender.clone();
+            let persistent_app_state = instance.persistent_app_state.clone();
 
             move |command: UiCommand| {
                 let task = handle_command(
                     command,
                     state.clone(),
                     config.clone(),
+                    persistent_app_state.clone(),
                     context.clone(),
                 );
 
@@ -254,7 +265,6 @@ impl OperatorUiApp {
 
         // Start the slot with the handler
         app_slot.start(handler);
-
 
         instance
     }
@@ -287,10 +297,10 @@ impl eframe::App for OperatorUiApp {
                 self.tree = OperatorUiApp::create_tree();
             }
 
-            let state = self.state.as_ref().unwrap().lock().unwrap();
-            state.update_tree(&mut self.tree);
+            self.persistent_app_state.lock().unwrap().update_tree(&mut self.tree);
         }
 
+        let sender = self.app_state().command_sender.clone();
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
 
@@ -324,8 +334,6 @@ impl eframe::App for OperatorUiApp {
                                 }
                             })
                             .show_ui(ui, |ui| {
-                                let sender = self.app_state().command_sender.clone();
-
                                 if ui
                                     .add(egui::Button::selectable(
                                         theme_preference.eq(&ThemePreference::Dark),
@@ -400,10 +408,14 @@ impl eframe::App for OperatorUiApp {
                     .auto_shrink([false, false])
                     .min_scrolled_width(MIN_TOUCH_SIZE.x)
                     .show(ui, |ui| {
-                        let state = self.app_state();
 
-                        for toggle in state.left_toggles.iter() {
-                            let toggle_state = state.toggle_states.iter().find(|candidate| candidate.kind == toggle.kind).unwrap();
+                        let persistent_app_state = self.persistent_app_state.lock().unwrap();
+
+                        for kind in persistent_app_state.left_toggles.iter() {
+
+                            let toggle_definition = TOGGLE_DEFINITIONS.iter().find(|candidate| candidate.kind == *kind).unwrap();
+
+                            let toggle_state = persistent_app_state.toggle_states.iter().find(|candidate| candidate.kind == *kind).unwrap();
 
                             let enabled = toggle_state.is_enabled();
 
@@ -414,17 +426,18 @@ impl eframe::App for OperatorUiApp {
                                 let button_width = left_panel_width
                                     .at_least(MIN_TOUCH_SIZE.x)
                                     .at_most(MIN_TOUCH_SIZE.x * 2.0);
-                                ui.add_sized(Vec2::new(button_width, MIN_TOUCH_SIZE.y), egui::Label::new(tr!(&format!("panel-{}-icon", toggle.name)))
+                                ui.add_sized(Vec2::new(button_width, MIN_TOUCH_SIZE.y), egui::Label::new(tr!(&format!("panel-{}-icon", toggle_definition.name)))
                                     .selectable(false));
 
                                 if left_panel_width > MIN_TOUCH_SIZE.x * 2.0 {
-                                    ui.add(egui::Label::new(tr!(&format!("panel-{}-name", toggle.name))).selectable(false));
+                                    ui.add(egui::Label::new(tr!(&format!("panel-{}-name", toggle_definition.name))).selectable(false));
                                 }
 
                             }).response;
                             if response.interact(Sense::click()).clicked() {
                                 let mode = if enabled { ViewMode::Disabled } else { ViewMode::Window };
-                                state.command_sender.send(UiCommand::SetPanelMode(toggle.kind, mode)).expect("sent");
+
+                                sender.send(UiCommand::SetPanelMode(*kind, mode)).expect("sent");
                             }
                         }
                     });
@@ -445,10 +458,7 @@ impl eframe::App for OperatorUiApp {
         // Windows
         //
 
-        let windows = {
-            let state = self.app_state();
-            state.toggle_states.iter().filter(|candidate| candidate.is_windowed()).cloned().collect::<Vec<_>>()
-        };
+        let windows = self.persistent_app_state.lock().unwrap().toggle_states.iter().filter(|candidate| candidate.is_windowed()).cloned().collect::<Vec<_>>();
 
         for toggle_state in windows.iter() {
             let kind_key = kind_key(&toggle_state.kind);
@@ -484,6 +494,7 @@ pub struct ToggleDefinition {
     kind: PaneKind,
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
 #[derive(Copy, Clone, Debug)]
 pub struct ToggleState {
     pub(crate) kind: PaneKind,
@@ -500,6 +511,7 @@ impl ToggleState {
     }
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewMode {
     Disabled,
