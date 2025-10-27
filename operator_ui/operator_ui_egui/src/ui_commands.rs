@@ -12,6 +12,7 @@ pub enum UiCommand {
     LangageChanged(String),
     ThemeChanged(ThemePreference),
     SetPanelMode(PaneKind, ViewMode),
+    ClosePanel(PaneKind),
 }
 
 pub fn handle_command(
@@ -42,6 +43,20 @@ pub fn handle_command(
 
             if let Some(toggle_state) = state.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
                 toggle_state.mode = mode;
+            }
+
+            Task::none()
+        }
+        UiCommand::ClosePanel(kind) => {
+            let mut state = persistent_app_state.lock().unwrap();
+
+            if let Some(toggle_state) = state.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
+                match toggle_state.mode {
+                    ViewMode::Tile => {
+                        toggle_state.mode = ViewMode::Disabled;
+                    }
+                    _ => unreachable!()
+                }
             }
 
             Task::none()

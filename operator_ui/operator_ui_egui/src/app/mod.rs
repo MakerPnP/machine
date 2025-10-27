@@ -1,12 +1,13 @@
+use std::sync::mpsc::Sender;
 use ui::status::StatusUi;
 use ui::plot::PlotUi;
 use ui::settings::SettingsUi;
 use async_std::prelude::StreamExt;
-use egui::{CornerRadius, Frame, NumExt, Sense, ThemePreference, Ui, Vec2, WidgetText};
+use egui::{Atoms, CornerRadius, Frame, Id, NumExt, Rect, Response, Sense, ThemePreference, Ui, UiBuilder, Vec2, WidgetText};
 use egui_i18n::tr;
 use egui_mobius::{Slot, Value};
 use egui_mobius::types::{Enqueue, ValueGuard};
-use egui_tiles::{ContainerKind, Tile, TileId, Tree, UiResponse};
+use egui_tiles::{ContainerKind, TabState, Tabs, Tile, TileId, Tiles, Tree, UiResponse};
 use tracing::{debug, trace};
 use ui::camera::CameraUi;
 use ui::controls::ControlsUi;
@@ -35,8 +36,10 @@ static TOGGLE_DEFINITIONS: [ToggleDefinition; 6] = [
 #[serde(default)]
 pub struct PersistentAppState {
 
-    pub(crate) toggle_states: Vec<ToggleState>,
+    // TODO workspaces, how does egui_tiles remember the sizes of the tiles between app restarts?
+    //      how to get this information and store/restore it?
 
+    pub(crate) toggle_states: Vec<ToggleState>,
     pub(crate) left_toggles: Vec<PaneKind>,
 }
 
@@ -130,8 +133,8 @@ impl AppState {
         let ui_state = Value::new(ui_state);
 
         Self {
-            command_sender: sender,
-            tree_behavior: TreeBehavior::new(ui_state.clone()),
+            command_sender: sender.clone(),
+            tree_behavior: TreeBehavior::new(ui_state.clone(), sender),
             ui_state,
         }
     }
@@ -268,11 +271,15 @@ impl OperatorUiApp {
             .lock()
             .unwrap()
     }
-
 }
 fn kind_key(kind: &PaneKind) -> &str {
     TOGGLE_DEFINITIONS.iter().find_map(|candidate| if candidate.kind == *kind { Some(candidate.name) } else { None }).unwrap()
 }
+
+fn title_key(kind_key: &str) -> String {
+    format!("panel-{}-window-title", kind_key)
+}
+
 
 impl eframe::App for OperatorUiApp {
     /// Called by the framework to save state before shutdown.
@@ -390,73 +397,87 @@ impl eframe::App for OperatorUiApp {
         let panel_fill_color = ctx.style().visuals.panel_fill.gamma_multiply(0.9);
 
         egui::SidePanel::left("left_panel")
-            .min_width(MIN_TOUCH_SIZE.x)
+            .min_width(MIN_TOUCH_SIZE.x * 2.0)
             .max_width(200.0)
             .resizable(true)
             .frame(Frame::NONE.fill(panel_fill_color))
             .show(ctx, |ui| {
                 let left_panel_width = ui.available_size_before_wrap().x;
-                egui::ScrollArea::both()
-                    .auto_shrink([false, false])
-                    .min_scrolled_width(MIN_TOUCH_SIZE.x)
-                    .show(ui, |ui| {
+                ui.vertical(|ui| {
+                    egui::ScrollArea::both()
+                        // FIXME the 4.0 is a guess at the height of a separator and margins and such
+                        .max_height(ui.available_height() - ((MIN_TOUCH_SIZE.y * 2.0) + 12.0))
+                        .auto_shrink([false, false])
+                        .min_scrolled_width(MIN_TOUCH_SIZE.x)
+                        .show(ui, |ui| {
 
-                        let persistent_app_state = self.persistent_app_state.lock().unwrap();
+                            let persistent_app_state = self.persistent_app_state.lock().unwrap();
 
-                        for kind in persistent_app_state.left_toggles.iter() {
+                            for kind in persistent_app_state.left_toggles.iter() {
 
-                            let toggle_definition = TOGGLE_DEFINITIONS.iter().find(|candidate| candidate.kind == *kind).unwrap();
+                                let toggle_definition = TOGGLE_DEFINITIONS.iter().find(|candidate| candidate.kind == *kind).unwrap();
 
-                            let toggle_state = persistent_app_state.toggle_states.iter().find(|candidate| candidate.kind == *kind).unwrap();
+                                let toggle_state = persistent_app_state.toggle_states.iter().find(|candidate| candidate.kind == *kind).unwrap();
 
-                            let enabled = toggle_state.is_enabled();
-                            let mut cycle = false;
+                                let enabled = toggle_state.is_enabled();
 
-                            let response = ui.horizontal(|ui| {
-                                ui.set_width(left_panel_width);
-                                ui.set_height(MIN_TOUCH_SIZE.y);
+                                let response = ui.horizontal(|ui| {
+                                    ui.set_width(left_panel_width);
+                                    ui.set_height(MIN_TOUCH_SIZE.y * 2.0);
 
-                                let visuals = ui.style().interact_selectable(&ui.response(), enabled);
+                                    let visuals = ui.style().interact_selectable(&ui.response(), enabled);
 
-                                let bg_color = if enabled { visuals.bg_fill } else { visuals.weak_bg_fill };
-                                ui.painter().rect_filled(ui.max_rect(), CornerRadius::ZERO, bg_color);
+                                    let bg_color = if enabled { visuals.bg_fill } else { visuals.weak_bg_fill };
+                                    let mut rect = ui.max_rect();
+                                    rect.max.x = left_panel_width;
+                                    ui.painter().rect_filled(rect, CornerRadius::ZERO, bg_color);
 
-                                let button_width = left_panel_width
-                                    .at_least(MIN_TOUCH_SIZE.x)
-                                    .at_most(MIN_TOUCH_SIZE.x * 2.0);
-                                ui.add_sized(Vec2::new(button_width, MIN_TOUCH_SIZE.y), egui::Label::new(tr!(&format!("panel-{}-icon", toggle_definition.name)))
-                                    .selectable(false));
+                                    let button_width = left_panel_width
+                                        .at_least(MIN_TOUCH_SIZE.x)
+                                        .at_most(MIN_TOUCH_SIZE.x * 2.0);
+                                    ui.add_sized(Vec2::new(button_width, ui.available_height()), egui::Label::new(tr!(&format!("panel-{}-icon", toggle_definition.name)))
+                                        .selectable(false));
 
-                                if left_panel_width > MIN_TOUCH_SIZE.x * 2.0 {
-                                    ui.add(egui::Label::new(tr!(&format!("panel-{}-name", toggle_definition.name))).selectable(false));
-                                }
+                                    if left_panel_width > MIN_TOUCH_SIZE.x * 2.0 {
+                                        ui.add(egui::Label::new(tr!(&format!("panel-{}-name", toggle_definition.name))).selectable(false));
+                                    }
+                                }).response;
 
-                                if ui.button(">").clicked() {
-                                    cycle = true;
-                                }
+                                if response.interact(Sense::click()).clicked() {
 
-                            }).response;
-                            // FIXME interacact returns FALSE if an 'inner' button is clicked.
-                            if response.interact(Sense::click()).clicked() || cycle {
-                                let default_mode = ViewMode::Window;
-                                let mode = if cycle {
+                                    let default_mode = ViewMode::Window;
+
                                     match toggle_state.mode {
-                                        ViewMode::Disabled => default_mode,
+                                        ViewMode::Disabled => {
+                                            // if it's not enabled, enable it
+                                            sender.send(UiCommand::SetPanelMode(*kind, default_mode)).expect("sent");
+                                        }
+
+                                        // otherwise, if it's not active, activate it
                                         ViewMode::Tile => {
-                                            ViewMode::Window
+                                            let tile_id = self.tree.tiles.find_pane(&toggle_state.kind).unwrap();
+                                            if !self.tree.is_visible(tile_id) {
+                                                self.tree.set_visible(tile_id, true);
+                                            }
                                         }
                                         ViewMode::Window => {
-                                            ViewMode::Tile
+                                            // TODO make it top-most, but how?!
                                         }
                                     }
-                                } else {
-                                    default_mode
-                                };
-
-                                sender.send(UiCommand::SetPanelMode(*kind, mode)).expect("sent");
+                                }
                             }
+                        });
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if ui.add_sized(
+                            MIN_TOUCH_SIZE * 2.0,
+                            egui::Button::new("?")
+                                .frame(false)
+                        ).clicked() {
+                            // TODO
                         }
                     });
+                });
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -465,6 +486,9 @@ impl eframe::App for OperatorUiApp {
             //
 
             let mut state = self.state.as_mut().unwrap().lock().unwrap();
+
+            // reset the flag
+            state.tree_behavior.container_is_tabs = false;
 
             self.tree.ui(&mut state.tree_behavior, ui);
         });
@@ -478,24 +502,27 @@ impl eframe::App for OperatorUiApp {
 
         for toggle_state in windows.iter() {
             let kind_key = kind_key(&toggle_state.kind);
-
-            let title_key = format!("panel-{}-window-title", kind_key);
+            let title_key = title_key(kind_key);
+            let title = tr!(&title_key);
 
             let mut open = true;
-            egui::Window::new(tr!(&title_key))
+
+            egui::Window::new(&title)
+                .title_bar(false)
                 .open(&mut open)
                 .resizable(true)
                 .show(ctx, |ui| {
-                    let mut app_state = self.app_state();
-                    let mut ui_state = app_state.ui_state();
-                    match toggle_state.kind {
-                        PaneKind::Camera => ui_state.camera_ui.ui(ui),
-                        PaneKind::Controls => ui_state.controls_ui.ui(ui),
-                        PaneKind::Diagnostics => ui_state.diagnostics_ui.ui(ui),
-                        PaneKind::Plot => ui_state.plot_ui.ui(ui),
-                        PaneKind::Settings => ui_state.settings_ui.ui(ui),
-                        PaneKind::Status => ui_state.status_ui.ui(ui),
-                    }
+                    ui.vertical(|ui| {
+                        let kind = toggle_state.kind;
+                        let mut app_state = self.app_state();
+                        let mut ui_state = app_state.ui_state();
+
+                        let mut dragged = false;
+                        show_panel_title_and_controls(&kind, title, sender.clone(), ui, false, false, true, &mut dragged);
+                        ui.separator();
+                        show_panel_content(&kind, ui, &mut ui_state);
+                    });
+
                 });
 
             if open == false {
@@ -539,12 +566,18 @@ pub enum ViewMode {
 
 pub(crate) struct TreeBehavior {
     ui_state: Value<UiState>,
+    command_sender: Enqueue<UiCommand>,
+    drag: Option<TileId>,
+    container_is_tabs: bool,
 }
 
 impl TreeBehavior {
-    fn new(ui_state: Value<UiState>) -> Self {
+    fn new(ui_state: Value<UiState>, command_sender: Enqueue<UiCommand>) -> Self {
         Self {
-            ui_state
+            ui_state,
+            command_sender,
+            drag: None,
+            container_is_tabs: false,
         }
     }
 }
@@ -560,27 +593,41 @@ pub enum PaneKind {
 }
 
 impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
-    fn pane_ui(&mut self, ui: &mut Ui, _tile_id: TileId, kind: &mut PaneKind) -> UiResponse {
+    fn pane_ui(&mut self, ui: &mut Ui, tile_id: TileId, kind: &mut PaneKind) -> UiResponse {
+        let in_tab = self.container_is_tabs;
+
         let mut ui_state = self.ui_state.lock().unwrap();
-        match kind {
-            PaneKind::Camera => ui_state.camera_ui.ui(ui),
-            PaneKind::Controls => ui_state.controls_ui.ui(ui),
-            PaneKind::Diagnostics => ui_state.diagnostics_ui.ui(ui),
-            PaneKind::Plot => ui_state.plot_ui.ui(ui),
-            PaneKind::Settings => ui_state.settings_ui.ui(ui),
-            PaneKind::Status => ui_state.status_ui.ui(ui),
+
+        let kind_key = kind_key(&kind);
+        let title_key = title_key(kind_key);
+        let title = tr!(&title_key);
+
+        let mut dragged = false;
+
+
+        if !in_tab {
+            show_panel_title_and_controls(&kind, title, self.command_sender.clone(), ui, true, true, false, &mut dragged);
+            ui.separator();
         }
 
-        let dragged = ui
-            .allocate_rect(ui.max_rect(), egui::Sense::click_and_drag())
-            .on_hover_cursor(egui::CursorIcon::Grab)
-            .dragged();
+        show_panel_content(&kind, ui, &mut ui_state);
+
+        dragged |= self.container_is_tabs && matches!(self.drag, Some(drag_id) if drag_id == tile_id);
+
+        // reset for the next container
+        self.container_is_tabs = false;
+
         if dragged {
-            egui_tiles::UiResponse::DragStarted
+            println!("drag started: {:?}", tile_id);
+
+            self.drag = None;
+            UiResponse::DragStarted
         } else {
-            egui_tiles::UiResponse::None
+            UiResponse::None
         }
     }
+
+
 
     fn tab_title_for_pane(&mut self, pane: &PaneKind) -> WidgetText {
         let kind_key = kind_key(pane);
@@ -588,5 +635,82 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
         let title_key = format!("panel-{}-window-title", kind_key);
 
         tr!(&title_key).into()
+    }
+
+    fn is_tab_closable(&self, _tiles: &Tiles<PaneKind>, _tile_id: TileId) -> bool {
+        // TODO use the X buttons in the tab title bar area instead
+        false
+    }
+
+    fn on_tab_close(&mut self, _tiles: &mut Tiles<PaneKind>, _tile_id: TileId) -> bool {
+
+        if let Some(Tile::Pane(kind)) = _tiles.get(_tile_id) {
+            self.command_sender.send(UiCommand::ClosePanel(*kind)).expect("sent");
+        }
+        // always deny, manually handle closing ourselves
+        false
+    }
+
+    fn top_bar_right_ui(&mut self, _tiles: &Tiles<PaneKind>, _ui: &mut Ui, _tile_id: TileId, _tabs: &Tabs, _scroll_offset: &mut f32) {
+        if let Some(tile_id) = _tabs.active {
+
+            if let Some(Tile::Pane(kind)) = _tiles.get(tile_id) {
+                let mut dragged = false;
+                show_panel_controls(&kind, self.command_sender.clone(), _ui, true, true, false, &mut dragged);
+
+                if dragged{
+                    println!("set dragging, from: {:?}", _tile_id);
+                    self.drag = Some(tile_id);
+                }
+            }
+        }
+        self.container_is_tabs = true;
+    }
+}
+
+
+fn show_panel_title_and_controls(kind: &PaneKind, title: String, sender: Sender<UiCommand>, ui: &mut Ui, show_drag_handle: bool, show_make_window: bool, show_make_tile: bool, dragged: &mut bool) {
+    egui::Sides::new().show(ui, |ui| {
+        ui.add(egui::Label::new(title).selectable(false));
+    }, |ui| {
+        show_panel_controls(kind, sender, ui, show_drag_handle, show_make_window, show_make_tile, dragged);
+    });
+}
+
+fn show_panel_controls(kind: &PaneKind, sender: Sender<UiCommand>, ui: &mut Ui, show_drag_handle: bool, show_make_window: bool, show_make_tile: bool, dragged: &mut bool) {
+    ui.horizontal(|ui| {
+        if ui.button("X").clicked() {
+            sender.send(UiCommand::SetPanelMode(*kind, ViewMode::Disabled)).expect("sent");
+        }
+        if show_make_tile {
+            if ui.button("_").clicked() {
+                sender.send(UiCommand::SetPanelMode(*kind, ViewMode::Tile)).expect("sent");
+            }
+        }
+        if show_make_window {
+            if ui.button("^").clicked() {
+                sender.send(UiCommand::SetPanelMode(*kind, ViewMode::Window)).expect("sent");
+            }
+        }
+        if show_drag_handle {
+            if ui.add(egui::Button::new("*")
+                .sense(Sense::click_and_drag())
+            )
+                .on_hover_cursor(egui::CursorIcon::Grab)
+                .dragged() {
+                *dragged = true;
+            }
+        }
+    });
+}
+
+fn show_panel_content(kind: &PaneKind, ui: &mut Ui, ui_state: &mut UiState) {
+    match kind {
+        PaneKind::Camera => ui_state.camera_ui.ui(ui),
+        PaneKind::Controls => ui_state.controls_ui.ui(ui),
+        PaneKind::Diagnostics => ui_state.diagnostics_ui.ui(ui),
+        PaneKind::Plot => ui_state.plot_ui.ui(ui),
+        PaneKind::Settings => ui_state.settings_ui.ui(ui),
+        PaneKind::Status => ui_state.status_ui.ui(ui),
     }
 }
