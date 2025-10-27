@@ -16,7 +16,7 @@ pub enum UiCommand {
 
 pub fn handle_command(
     command: UiCommand,
-    app_state: Value<AppState>,
+    _app_state: Value<AppState>,
     config: Value<Config>,
     persistent_app_state: Value<PersistentAppState>,
     ui_context: Context,
