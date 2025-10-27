@@ -3,11 +3,11 @@ use ui::status::StatusUi;
 use ui::plot::PlotUi;
 use ui::settings::SettingsUi;
 use async_std::prelude::StreamExt;
-use egui::{Atoms, CornerRadius, Frame, Id, NumExt, Rect, Response, Sense, ThemePreference, Ui, UiBuilder, Vec2, WidgetText};
+use egui::{CornerRadius, Frame, NumExt, Sense, ThemePreference, Ui, Vec2, WidgetText};
 use egui_i18n::tr;
 use egui_mobius::{Slot, Value};
 use egui_mobius::types::{Enqueue, ValueGuard};
-use egui_tiles::{ContainerKind, TabState, Tabs, Tile, TileId, Tiles, Tree, UiResponse};
+use egui_tiles::{ContainerKind, SimplificationOptions, Tabs, Tile, TileId, Tiles, Tree, UiResponse};
 use tracing::{debug, trace};
 use ui::camera::CameraUi;
 use ui::controls::ControlsUi;
@@ -394,13 +394,14 @@ impl eframe::App for OperatorUiApp {
             });
         });
 
-        let panel_fill_color = ctx.style().visuals.panel_fill.gamma_multiply(0.9);
+        let panel_fill_color = ctx.style().visuals.panel_fill;
+        let side_panel_fill_color = panel_fill_color.gamma_multiply(0.9);
 
         egui::SidePanel::left("left_panel")
             .min_width(MIN_TOUCH_SIZE.x * 2.0)
             .max_width(200.0)
             .resizable(true)
-            .frame(Frame::NONE.fill(panel_fill_color))
+            .frame(Frame::NONE.fill(side_panel_fill_color))
             .show(ctx, |ui| {
                 let left_panel_width = ui.available_size_before_wrap().x;
                 ui.vertical(|ui| {
@@ -480,7 +481,9 @@ impl eframe::App for OperatorUiApp {
                 });
             });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default()
+            .frame(Frame::NONE.fill(panel_fill_color))
+            .show(ctx, |ui| {
             //
             // Tiles
             //
@@ -565,6 +568,7 @@ pub enum ViewMode {
 }
 
 pub(crate) struct TreeBehavior {
+    simplification_options: egui_tiles::SimplificationOptions,
     ui_state: Value<UiState>,
     command_sender: Enqueue<UiCommand>,
     drag: Option<TileId>,
@@ -574,6 +578,10 @@ pub(crate) struct TreeBehavior {
 impl TreeBehavior {
     fn new(ui_state: Value<UiState>, command_sender: Enqueue<UiCommand>) -> Self {
         Self {
+            simplification_options: SimplificationOptions {
+                all_panes_must_have_tabs: true,
+                ..SimplificationOptions::default()
+            },
             ui_state,
             command_sender,
             drag: None,
@@ -627,8 +635,6 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
         }
     }
 
-
-
     fn tab_title_for_pane(&mut self, pane: &PaneKind) -> WidgetText {
         let kind_key = kind_key(pane);
 
@@ -638,7 +644,13 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
     }
 
     fn is_tab_closable(&self, _tiles: &Tiles<PaneKind>, _tile_id: TileId) -> bool {
-        // TODO use the X buttons in the tab title bar area instead
+        // We use the X buttons in the tab title bar area instead. This is for a few of reasons:
+        // 1. less space consumed when multiple tabs.
+        // 2. less visual clutter
+        // 3. avoids the left/right arrows for longer when tabs don't fit
+        // 4. when tabs don't fit, and arrows appear, when you scroll right and the arrow
+        //    under the cursor disappears the 'X' button would be under the cursor and
+        //    is easily accidentally clicked when repeated clicking to scroll to the right.
         false
     }
 
@@ -666,6 +678,10 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
         }
         self.container_is_tabs = true;
     }
+
+    fn simplification_options(&self) -> egui_tiles::SimplificationOptions {
+        self.simplification_options
+    }
 }
 
 
@@ -678,22 +694,38 @@ fn show_panel_title_and_controls(kind: &PaneKind, title: String, sender: Sender<
 }
 
 fn show_panel_controls(kind: &PaneKind, sender: Sender<UiCommand>, ui: &mut Ui, show_drag_handle: bool, show_make_window: bool, show_make_tile: bool, dragged: &mut bool) {
+    let button_width = MIN_TOUCH_SIZE.x;
+
+    let desired = ui
+        .fonts_mut(|f| {
+            f.layout_no_wrap(
+                "🗙🗖🗕✋".to_string(),
+                egui::TextStyle::Button.resolve(ui.style()),
+                egui::Color32::WHITE,
+            )
+        })
+        .size();
+
+    let button_size = Vec2::new(button_width, ui.spacing().button_padding.y + desired.y + 2.0);
+
     ui.horizontal(|ui| {
-        if ui.button("X").clicked() {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        ui.allocate_space(Vec2::new(0.0, button_size.y));
+        if ui.add_sized(button_size, egui::Button::new("🗙")).clicked() {
             sender.send(UiCommand::SetPanelMode(*kind, ViewMode::Disabled)).expect("sent");
         }
         if show_make_tile {
-            if ui.button("_").clicked() {
+            if ui.add_sized(button_size, egui::Button::new("🗕")).clicked() {
                 sender.send(UiCommand::SetPanelMode(*kind, ViewMode::Tile)).expect("sent");
             }
         }
         if show_make_window {
-            if ui.button("^").clicked() {
+            if ui.add_sized(button_size, egui::Button::new("🗖")).clicked() {
                 sender.send(UiCommand::SetPanelMode(*kind, ViewMode::Window)).expect("sent");
             }
         }
         if show_drag_handle {
-            if ui.add(egui::Button::new("*")
+            if ui.add_sized(button_size, egui::Button::new("✋")
                 .sense(Sense::click_and_drag())
             )
                 .on_hover_cursor(egui::CursorIcon::Grab)
@@ -701,6 +733,7 @@ fn show_panel_controls(kind: &PaneKind, sender: Sender<UiCommand>, ui: &mut Ui, 
                 *dragged = true;
             }
         }
+
     });
 }
 
