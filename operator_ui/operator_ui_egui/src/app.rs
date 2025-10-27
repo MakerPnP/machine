@@ -2,7 +2,7 @@ use crate::app::status::StatusUi;
 use crate::app::plot::PlotUi;
 use crate::app::settings::SettingsUi;
 use async_std::prelude::StreamExt;
-use egui::{Button, Frame, NumExt, Sense, ThemePreference, Ui, Vec2, WidgetText};
+use egui::{Button, Color32, CornerRadius, Frame, NumExt, Sense, ThemePreference, Ui, Vec2, WidgetText};
 use egui_i18n::tr;
 use egui_mobius::{Slot, Value};
 use egui_mobius::types::{Enqueue, ValueGuard};
@@ -397,11 +397,13 @@ impl eframe::App for OperatorUiApp {
             });
         });
 
+        let panel_fill_color = ctx.style().visuals.panel_fill.gamma_multiply(0.9);
+
         egui::SidePanel::left("left_panel")
             .min_width(MIN_TOUCH_SIZE.x)
             .max_width(200.0)
             .resizable(true)
-            .frame(Frame::NONE)
+            .frame(Frame::NONE.fill(panel_fill_color))
             .show(ctx, |ui| {
                 let left_panel_width = ui.available_size_before_wrap().x;
                 egui::ScrollArea::both()
@@ -422,6 +424,11 @@ impl eframe::App for OperatorUiApp {
                             let response = ui.horizontal(|ui| {
                                 ui.set_width(left_panel_width);
                                 ui.set_height(MIN_TOUCH_SIZE.y);
+
+                                let visuals = ui.style().interact_selectable(&ui.response(), enabled);
+
+                                let bg_color = if enabled { visuals.bg_fill } else { visuals.weak_bg_fill };
+                                ui.painter().rect_filled(ui.max_rect(), CornerRadius::ZERO, bg_color);
 
                                 let button_width = left_panel_width
                                     .at_least(MIN_TOUCH_SIZE.x)
@@ -606,7 +613,8 @@ mod camera {
 }
 
 mod controls {
-    use egui::Ui;
+    use egui::{Ui, Vec2};
+    use egui_i18n::tr;
 
     #[derive(Default)]
     pub(crate) struct ControlsUi {
@@ -615,7 +623,85 @@ mod controls {
 
     impl ControlsUi {
         pub fn ui(&mut self, ui: &mut Ui) {
-            ui.label("Controls content");
+
+            egui::ScrollArea::both()
+                .auto_shrink([false, false])
+                .show(ui, |ui|{
+                    ui.vertical(|ui| {
+                        ui.label("Controls content");
+                        ui.group(|ui| {
+                            Self::draw_jog_grid(ui);
+                        });
+                    });
+                });
+        }
+
+        fn draw_jog_grid(ui: &mut Ui) {
+
+            #[repr(usize)]
+            enum JogDirection {
+                YMinus = 0,
+                XMinus = 1,
+                XPlus = 2,
+                YPlus = 3,
+            }
+
+            let labels = [
+                tr!("jog-y-minus"),
+                tr!("jog-x-minus"),
+                tr!("jog-x-plus"),
+                tr!("jog-y-plus"),
+            ];
+            let mut max_size = egui::Vec2::ZERO;
+
+            for label in &labels {
+                let desired = ui
+                    .fonts_mut(|f| {
+                        f.layout_no_wrap(
+                            label.to_string(),
+                            egui::TextStyle::Button.resolve(ui.style()),
+                            egui::Color32::WHITE,
+                        )
+                    })
+                    .size();
+                max_size.x = max_size.x.max(desired.x);
+                max_size.y = max_size.y.max(desired.y);
+            }
+
+            let button_padding = ui.spacing().button_padding;
+            max_size += button_padding * 2.0;
+
+            egui::Grid::new("control_grid")
+                //.num_columns(3)
+                .spacing(egui::vec2(4.0, 4.0))
+                .show(ui, |ui| {
+                    // --- Top row ---
+                    Self::empty_cell(max_size, ui);
+                    if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::YMinus as usize])).clicked() {
+                    }
+                    Self::empty_cell(max_size, ui);
+                    ui.end_row();
+
+                    // --- Middle row ---
+                    if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::XMinus as usize])).clicked() {
+                    }
+                    Self::empty_cell(max_size, ui);
+                    if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::XPlus as usize])).clicked() {
+                    }
+                    ui.end_row();
+
+                    // --- Bottom row ---
+                    Self::empty_cell(max_size, ui);
+                    if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::YPlus as usize])).clicked() {
+
+                    }
+                    Self::empty_cell(max_size, ui);
+                    ui.end_row();
+                });
+        }
+
+        fn empty_cell(max_size: Vec2, ui: &mut Ui) {
+            ui.allocate_ui_with_layout(max_size, egui::Layout::centered_and_justified(egui::Direction::LeftToRight), |_ui| {});
         }
     }
 }

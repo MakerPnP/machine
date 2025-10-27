@@ -29,3 +29,8 @@ panel-diagnostics-window-title = Diagnostics
 panel-plot-window-title = Plot
 panel-settings-window-title = Settings
 panel-status-window-title = Status
+
+jog-y-minus = Y-
+jog-y-plus = Y+
+jog-x-minus = X-
+jog-x-plus = X+
