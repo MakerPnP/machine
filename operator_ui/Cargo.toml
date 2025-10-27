@@ -27,12 +27,13 @@ egui-i18n          = { version = "0.1.2", features = ["fluent"] }
 egui_mobius        = "0.3.0-alpha.32"
 #egui_mobius        = { git = "https://github.com/makerpnp/egui_mobius", rev = "e62f97bfcf97a831bd67dd75ab5eab9585922765" }
 #egui_mobius        = { path = "../../../libraries/rust/egui/egui_mobius/crates/egui_mobius" }
+egui_tiles         = { version = "0.14.0"}
 
 # tasks/async
 tokio              = { version = "1.45.1", features = ["macros", "net", "rt-multi-thread", "time", "io-util"] }
-futures            = {  version = "0.3.31" }
+futures            = { version = "0.3.31" }
 crossbeam-channel  = { version = "0.5.15" }
-async-std          = {  version = "1.13.1" }
+async-std          = { version = "1.13.1" }
 
 cordyceps          = "0.3.4"
 env_logger         = "0.11.8"

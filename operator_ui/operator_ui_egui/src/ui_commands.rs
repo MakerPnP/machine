@@ -40,7 +40,10 @@ pub fn handle_command(
             let mut state = app_state.lock().unwrap();
 
             if let Some(toggle_state) = state.toggle_states.iter_mut().find(|candidate|candidate.name == name) {
-                toggle_state.mode = mode;
+
+                if matches!(toggle_state.mode, ViewMode::Disabled) {
+                    toggle_state.mode = mode;
+                }
             }
 
             Task::none()

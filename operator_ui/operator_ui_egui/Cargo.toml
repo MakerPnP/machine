@@ -30,6 +30,7 @@ eframe = { version = "0.33.0", default-features = false, features = [
     "wayland",       # To support Linux (and CI)
     "x11",           # To support older Linux distributions (restores one of the default features)
 ] }
+egui_tiles         = { workspace = true }
 
 # tracing
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
