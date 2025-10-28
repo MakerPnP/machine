@@ -9,3 +9,5 @@ pub mod config;
 pub mod runtime;
 
 pub mod net;
+
+pub const LOGO: &[u8] = include_bytes!("../../../assets/logos/makerpnp_icon_1_384x384.png");

@@ -3,7 +3,8 @@ use ui::status::StatusUi;
 use ui::plot::PlotUi;
 use ui::settings::SettingsUi;
 use async_std::prelude::StreamExt;
-use egui::{CornerRadius, Frame, NumExt, Sense, ThemePreference, Ui, Vec2, WidgetText};
+use egui::{include_image, Color32, CornerRadius, Frame, Image, NumExt, Sense, ThemePreference, Ui, Vec2, WidgetText};
+use egui_extras::install_image_loaders;
 use egui_i18n::tr;
 use egui_mobius::{Slot, Value};
 use egui_mobius::types::{Enqueue, ValueGuard};
@@ -15,7 +16,7 @@ use ui::diagnostics::DiagnosticsUi;
 use crate::app::ui::egui_tree::{add_pane_to_root, dump_tiles};
 use crate::config::Config;
 use crate::net::ergot_task;
-use crate::task;
+use crate::{task, LOGO};
 use crate::runtime::tokio_runtime::TokioRuntime;
 use crate::ui_commands::{handle_command, UiCommand};
 
@@ -206,6 +207,8 @@ impl OperatorUiApp {
 
             // Safety: now safe to use i18n translation system (e.g. [`egui_i18n::tr!`])
         }
+
+        install_image_loaders(&cc.egui_ctx);
 
         let (app_signal, mut app_slot) = egui_mobius::factory::create_signal_slot::<UiCommand>();
 
@@ -407,7 +410,7 @@ impl eframe::App for OperatorUiApp {
                 ui.vertical(|ui| {
                     egui::ScrollArea::both()
                         // FIXME the 4.0 is a guess at the height of a separator and margins and such
-                        .max_height(ui.available_height() - ((MIN_TOUCH_SIZE.y * 2.0) + 12.0))
+                        .max_height(ui.available_height() - ((MIN_TOUCH_SIZE.y * 2.0) + 2.0))
                         .auto_shrink([false, false])
                         .min_scrolled_width(MIN_TOUCH_SIZE.x)
                         .show(ui, |ui| {
@@ -468,15 +471,21 @@ impl eframe::App for OperatorUiApp {
                                 }
                             }
                         });
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        if ui.add_sized(
-                            MIN_TOUCH_SIZE * 2.0,
-                            egui::Button::new("?")
-                                .frame(false)
-                        ).clicked() {
-                            // TODO
-                        }
+                    egui::Frame::new()
+                        .outer_margin(0.0)
+                        .fill(Color32::WHITE)
+                        .show(ui, |ui| {
+                            ui.set_width(left_panel_width);
+                            ui.vertical_centered(|ui| {
+                                // TODO use a smaller version of the logo, since egui image resizing isn't great
+                                if ui.add_sized(
+                                    MIN_TOUCH_SIZE * 2.0,
+                                    egui::Button::new(Image::from_bytes("bytes://logo", &LOGO[..]))
+                                        .frame(false)
+                                ).clicked() {
+                                    // TODO show an 'about' modal.
+                                }
+                            })
                     });
                 });
             });
