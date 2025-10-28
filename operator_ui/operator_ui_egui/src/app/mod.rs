@@ -616,8 +616,6 @@ impl eframe::App for OperatorUiApp {
             let title_key = title_key(kind_key);
             let title = tr!(&title_key);
 
-            let mut open = true;
-
             let mut applicable_actions = vec![];
 
             {
@@ -652,7 +650,6 @@ impl eframe::App for OperatorUiApp {
             }
 
             let window = window
-                .open(&mut open)
                 .resizable(true)
                 .show(ctx, |ui| {
                     ui.vertical(|ui| {
@@ -696,11 +693,6 @@ impl eframe::App for OperatorUiApp {
                     workspace.toggle_states[toggle_index].window_position.replace(window.response.rect.min);
                     workspace.toggle_states[toggle_index].window_size.replace(window.response.rect.size());
                 }
-            }
-
-            // TODO Remove legacy 'open' handling, we don't use window titlebars any more because we can't draw into them and had to implement our own titlebars
-            if open == false {
-                self.app_state().command_sender.send(UiCommand::SetPanelMode(toggle_state.kind, ViewMode::Disabled)).expect("sent");
             }
         }
 
