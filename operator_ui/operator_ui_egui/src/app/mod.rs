@@ -3,7 +3,7 @@ use ui::status::StatusUi;
 use ui::plot::PlotUi;
 use ui::settings::SettingsUi;
 use async_std::prelude::StreamExt;
-use egui::{include_image, Color32, CornerRadius, Frame, Image, NumExt, Sense, ThemePreference, Ui, Vec2, WidgetText};
+use egui::{Color32, CornerRadius, Frame, Image, NumExt, Sense, ThemePreference, Ui, Vec2, WidgetText};
 use egui_extras::install_image_loaders;
 use egui_i18n::tr;
 use egui_mobius::{Slot, Value};
@@ -17,6 +17,7 @@ use crate::app::ui::egui_tree::{add_pane_to_root, dump_tiles};
 use crate::config::Config;
 use crate::net::ergot_task;
 use crate::{task, LOGO};
+use crate::app::ui::egui::bring_window_to_front;
 use crate::runtime::tokio_runtime::TokioRuntime;
 use crate::ui_commands::{handle_command, UiCommand};
 
@@ -42,6 +43,7 @@ pub struct PersistentAppState {
 
     pub(crate) toggle_states: Vec<ToggleState>,
     pub(crate) left_toggles: Vec<PaneKind>,
+    pub(crate) tree: Tree<PaneKind>,
 }
 
 pub struct AppState {
@@ -52,28 +54,32 @@ pub struct AppState {
 }
 
 impl PersistentAppState {
-    pub(crate) fn update_tree(&self, tree: &mut Tree<PaneKind>) {
+    pub(crate) fn update_tree(&mut self) {
+        if self.tree.is_empty() {
+            self.tree = Self::create_tree();
+        }
+
         for toggle_state in self.toggle_states.iter() {
             if !matches!(toggle_state.mode, ViewMode::Tile) {
                 continue;
             }
 
             // is there a tile for this one?
-            let is_open = tree.tiles.iter().any(|(_tile_id, tile_kind)| {
+            let is_open = self.tree.tiles.iter().any(|(_tile_id, tile_kind)| {
                 matches!(tile_kind, Tile::Pane(pane_kind) if *pane_kind == toggle_state.kind)
             });
 
             if !is_open {
                 debug!("tree:");
-                let root = tree.root();
-                dump_tiles(&mut tree.tiles, root);
+                let root = self.tree.root();
+                dump_tiles(&mut self.tree.tiles, root);
 
-                add_pane_to_root(tree, toggle_state.kind, ContainerKind::Tabs);
+                add_pane_to_root(&mut self.tree, toggle_state.kind, ContainerKind::Tabs);
             }
         }
 
         // now deal with existing tiles that should be closed
-        let tiles_to_close = tree.tiles.iter().filter_map(|(tile_id, tile)| {
+        let tiles_to_close = self.tree.tiles.iter().filter_map(|(tile_id, tile)| {
             let should_close = self.toggle_states.iter().any(|candidate| {
                 candidate.mode != ViewMode::Tile && matches!(tile, Tile::Pane(kind) if *kind == candidate.kind)
             });
@@ -85,8 +91,19 @@ impl PersistentAppState {
         }).collect::<Vec<_>>();
 
         for id in tiles_to_close.into_iter() {
-            tree.remove_recursively(id);
+            self.tree.remove_recursively(id);
         }
+    }
+
+    pub fn create_tree() -> Tree<PaneKind> {
+        let mut tiles = egui_tiles::Tiles::default();
+
+        let root_tabs = vec![];
+        let root = tiles.insert_grid_tile(root_tabs);
+
+        let tree = egui_tiles::Tree::new("tile_tree", root, tiles);
+
+        tree
     }
 }
 
@@ -103,9 +120,12 @@ impl Default for PersistentAppState {
             ToggleState { mode: ViewMode::Tile, kind: PaneKind::Status },
         ];
 
+        let tree = Self::create_tree();
+
         Self {
             left_toggles,
             toggle_states,
+            tree,
         }
     }
 }
@@ -158,8 +178,6 @@ pub struct OperatorUiApp {
 
     persistent_app_state: Value<PersistentAppState>,
 
-    tree: Tree<PaneKind>,
-
     // The command slot for handling UI commands
     #[serde(skip)]
     slot: Slot<UiCommand>,
@@ -169,31 +187,18 @@ impl Default for OperatorUiApp {
     fn default() -> Self {
         let (_signal, slot) = egui_mobius::factory::create_signal_slot::<UiCommand>();
 
-        let tree = OperatorUiApp::create_tree();
 
         Self {
             config: Default::default(),
             state: None,
             persistent_app_state: Value::new(PersistentAppState::default()),
             slot,
-            tree,
         }
     }
 }
 
 
 impl OperatorUiApp {
-    pub fn create_tree() -> Tree<PaneKind> {
-        let mut tiles = egui_tiles::Tiles::default();
-
-        let root_tabs = vec![];
-        let root = tiles.insert_grid_tile(root_tabs);
-
-        let tree = egui_tiles::Tree::new("tile_tree", root, tiles);
-
-        tree
-    }
-
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut instance: OperatorUiApp = if let Some(storage) = cc.storage {
             eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
@@ -293,11 +298,8 @@ impl eframe::App for OperatorUiApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         {
-            if self.tree.is_empty() {
-                self.tree = OperatorUiApp::create_tree();
-            }
-
-            self.persistent_app_state.lock().unwrap().update_tree(&mut self.tree);
+            let mut pas = self.persistent_app_state.lock().unwrap();
+            pas.update_tree();
         }
 
         let sender = self.app_state().command_sender.clone();
@@ -400,6 +402,8 @@ impl eframe::App for OperatorUiApp {
         let panel_fill_color = ctx.style().visuals.panel_fill;
         let side_panel_fill_color = panel_fill_color.gamma_multiply(0.9);
 
+        let mut request_make_visible: Option<ToggleState> = None;
+
         egui::SidePanel::left("left_panel")
             .min_width(MIN_TOUCH_SIZE.x * 2.0)
             .max_width(200.0)
@@ -408,6 +412,8 @@ impl eframe::App for OperatorUiApp {
             .show(ctx, |ui| {
                 let left_panel_width = ui.available_size_before_wrap().x;
                 ui.vertical(|ui| {
+                    let mut persistent_app_state = self.persistent_app_state.lock().unwrap();
+
                     egui::ScrollArea::both()
                         // FIXME the 4.0 is a guess at the height of a separator and margins and such
                         .max_height(ui.available_height() - ((MIN_TOUCH_SIZE.y * 2.0) + 2.0))
@@ -415,10 +421,7 @@ impl eframe::App for OperatorUiApp {
                         .min_scrolled_width(MIN_TOUCH_SIZE.x)
                         .show(ui, |ui| {
 
-                            let persistent_app_state = self.persistent_app_state.lock().unwrap();
-
                             for kind in persistent_app_state.left_toggles.iter() {
-
                                 let toggle_definition = TOGGLE_DEFINITIONS.iter().find(|candidate| candidate.kind == *kind).unwrap();
 
                                 let toggle_state = persistent_app_state.toggle_states.iter().find(|candidate| candidate.kind == *kind).unwrap();
@@ -448,7 +451,6 @@ impl eframe::App for OperatorUiApp {
                                 }).response;
 
                                 if response.interact(Sense::click()).clicked() {
-
                                     let default_mode = ViewMode::Window;
 
                                     match toggle_state.mode {
@@ -459,18 +461,24 @@ impl eframe::App for OperatorUiApp {
 
                                         // otherwise, if it's not active, activate it
                                         ViewMode::Tile => {
-                                            let tile_id = self.tree.tiles.find_pane(&toggle_state.kind).unwrap();
-                                            if !self.tree.is_visible(tile_id) {
-                                                self.tree.set_visible(tile_id, true);
-                                            }
+                                            request_make_visible.replace(*toggle_state);
                                         }
                                         ViewMode::Window => {
-                                            // TODO make it top-most, but how?!
+                                            request_make_visible.replace(*toggle_state);
                                         }
                                     }
                                 }
                             }
                         });
+
+                    match request_make_visible {
+                        Some(toggle_state) if toggle_state.mode == ViewMode::Tile => {
+                            let tile_id = persistent_app_state.tree.tiles.find_pane( &toggle_state.kind).unwrap();
+                            persistent_app_state.tree.make_active( | candidate_id, _tile | candidate_id == tile_id);
+                        }
+                        _ => {}
+                    }
+
                     egui::Frame::new()
                         .outer_margin(0.0)
                         .fill(Color32::WHITE)
@@ -498,11 +506,11 @@ impl eframe::App for OperatorUiApp {
             //
 
             let mut state = self.state.as_mut().unwrap().lock().unwrap();
-
             // reset the flag
             state.tree_behavior.container_is_tabs = false;
 
-            self.tree.ui(&mut state.tree_behavior, ui);
+            let mut pas = self.persistent_app_state.lock().unwrap();
+            pas.tree.ui(&mut state.tree_behavior, ui);
         });
 
 
@@ -519,12 +527,16 @@ impl eframe::App for OperatorUiApp {
 
             let mut open = true;
 
-            egui::Window::new(&title)
+            let window = egui::Window::new(&title)
                 .title_bar(false)
                 .open(&mut open)
                 .resizable(true)
                 .show(ctx, |ui| {
                     ui.vertical(|ui| {
+                        if false {
+                            trace!("window, layer_id: {:?}, toggle_state: {:?}", ui.layer_id(), toggle_state);
+                        }
+
                         let kind = toggle_state.kind;
                         let mut app_state = self.app_state();
                         let mut ui_state = app_state.ui_state();
@@ -536,6 +548,16 @@ impl eframe::App for OperatorUiApp {
                     });
 
                 });
+
+            if let Some(window) = window {
+                match request_make_visible {
+                    Some(requested_toggle_state) if requested_toggle_state.mode == ViewMode::Window && requested_toggle_state.kind == toggle_state.kind => {
+                        trace!("bringing window to front. layer_id: {:?}, toggle_state: {:?}", window.response.layer_id, toggle_state);
+                        bring_window_to_front(ctx, window.response.layer_id);
+                    }
+                    _ => {}
+                }
+            }
 
             if open == false {
                 self.app_state().command_sender.send(UiCommand::SetPanelMode(toggle_state.kind, ViewMode::Disabled)).expect("sent");
