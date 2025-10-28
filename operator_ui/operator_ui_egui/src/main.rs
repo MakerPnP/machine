@@ -11,6 +11,7 @@ use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, fmt};
+use operator_ui_egui::LOGO;
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
@@ -19,11 +20,10 @@ fn main() -> eframe::Result {
 
     let default_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_icon(
-                // NOTE: Adding an icon is optional
-                eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-256.png")[..])
-                    .expect("Failed to load icon"),
-            )
+            .with_icon(std::sync::Arc::new(
+                eframe::icon_data::from_png_bytes(&LOGO[..])
+                    .expect("Failed to load icon")
+            ))
             .with_inner_size([1024.0, 768.0])
             .with_min_inner_size([300.0, 220.0]),
         ..Default::default()
