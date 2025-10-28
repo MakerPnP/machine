@@ -34,13 +34,9 @@ static TOGGLE_DEFINITIONS: [ToggleDefinition; 6] = [
     ToggleDefinition { name: "status", kind: PaneKind::Status },
 ];
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
 #[serde(default)]
-pub struct PersistentAppState {
-
-    // TODO workspaces, how does egui_tiles remember the sizes of the tiles between app restarts?
-    //      how to get this information and store/restore it?
-
+pub struct Workspace {
     pub(crate) toggle_states: Vec<ToggleState>,
     pub(crate) left_toggles: Vec<PaneKind>,
     pub(crate) tree: Tree<PaneKind>,
@@ -53,7 +49,7 @@ pub struct AppState {
     ui_state: Value<UiState>,
 }
 
-impl PersistentAppState {
+impl Workspace {
     pub(crate) fn update_tree(&mut self) {
         if self.tree.is_empty() {
             self.tree = Self::create_tree();
@@ -107,7 +103,7 @@ impl PersistentAppState {
     }
 }
 
-impl Default for PersistentAppState {
+impl Default for Workspace {
     fn default() -> Self {
         let left_toggles = TOGGLE_DEFINITIONS.iter().map(|candidate| candidate.kind).collect::<Vec<_>>();
 
@@ -170,13 +166,85 @@ impl AppState {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
+pub struct Workspaces {
+    workspaces: Vec<Value<Workspace>>,
+    active_workspace: usize,
+}
+
+impl Default for Workspaces {
+    fn default() -> Self {
+        Self {
+            workspaces: vec![Value::new(Workspace::default())],
+            active_workspace: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceError {
+    InvalidWorkspaceIndex,
+    AlreadyActive,
+    CannotRemoveActiveWorkspace,
+}
+
+impl Workspaces {
+    pub fn active(&mut self) -> ValueGuard<'_, Workspace> {
+        self.workspaces[self.active_workspace].lock().unwrap()
+    }
+
+    pub fn active_index(&mut self) -> usize {
+        self.active_workspace
+    }
+
+    pub fn set_active(&mut self, index: usize) -> Result<(), WorkspaceError> {
+        if index >= self.workspaces.len() {
+            return Err(WorkspaceError::InvalidWorkspaceIndex)
+        }
+        if index == self.active_workspace {
+            return Err(WorkspaceError::AlreadyActive)
+        }
+        self.active_workspace = index;
+
+        Ok(())
+    }
+
+    pub fn clone_active(&mut self) -> usize {
+
+        let cloned = {
+            let active = self.active();
+            Value::new((*active).clone())
+        };
+        self.workspaces.push(cloned);
+        self.workspaces.len() - 1
+    }
+
+    pub fn remove(&mut self, index: usize) -> Result<(), WorkspaceError>{
+        if index >= self.workspaces.len() {
+            return Err(WorkspaceError::InvalidWorkspaceIndex)
+        }
+        if index == self.active_workspace {
+            return Err(WorkspaceError::CannotRemoveActiveWorkspace)
+        }
+
+        self.workspaces.remove(index);
+
+        Ok(())
+    }
+
+    pub fn count(&self) -> usize {
+        self.workspaces.len()
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)]
 pub struct OperatorUiApp {
     config: Value<Config>,
 
     #[serde(skip)]
     state: Option<Value<AppState>>,
 
-    persistent_app_state: Value<PersistentAppState>,
+    workspaces: Value<Workspaces>,
 
     // The command slot for handling UI commands
     #[serde(skip)]
@@ -191,7 +259,7 @@ impl Default for OperatorUiApp {
         Self {
             config: Default::default(),
             state: None,
-            persistent_app_state: Value::new(PersistentAppState::default()),
+            workspaces: Value::new(Workspaces::default()),
             slot,
         }
     }
@@ -234,14 +302,14 @@ impl OperatorUiApp {
             let config = instance.config.clone();
             let context = cc.egui_ctx.clone();
             let app_message_sender = app_message_sender.clone();
-            let persistent_app_state = instance.persistent_app_state.clone();
+            let workspaces = instance.workspaces.clone();
 
             move |command: UiCommand| {
                 let task = handle_command(
                     command,
                     state.clone(),
                     config.clone(),
-                    persistent_app_state.clone(),
+                    workspaces.clone(),
                     context.clone(),
                 );
 
@@ -297,9 +365,12 @@ impl eframe::App for OperatorUiApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let mut request_workspace_toggle = false;
         {
-            let mut pas = self.persistent_app_state.lock().unwrap();
-            pas.update_tree();
+            let mut workspaces = self.workspaces.lock().unwrap();
+            let mut workspace = workspaces.active();
+
+            workspace.update_tree();
         }
 
         let sender = self.app_state().command_sender.clone();
@@ -412,7 +483,8 @@ impl eframe::App for OperatorUiApp {
             .show(ctx, |ui| {
                 let left_panel_width = ui.available_size_before_wrap().x;
                 ui.vertical(|ui| {
-                    let mut persistent_app_state = self.persistent_app_state.lock().unwrap();
+                    let mut workspaces = self.workspaces.lock().unwrap();
+                    let mut workspace = workspaces.active();
 
                     egui::ScrollArea::both()
                         // FIXME the 4.0 is a guess at the height of a separator and margins and such
@@ -421,10 +493,10 @@ impl eframe::App for OperatorUiApp {
                         .min_scrolled_width(MIN_TOUCH_SIZE.x)
                         .show(ui, |ui| {
 
-                            for kind in persistent_app_state.left_toggles.iter() {
+                            for kind in workspace.left_toggles.iter() {
                                 let toggle_definition = TOGGLE_DEFINITIONS.iter().find(|candidate| candidate.kind == *kind).unwrap();
 
-                                let toggle_state = persistent_app_state.toggle_states.iter().find(|candidate| candidate.kind == *kind).unwrap();
+                                let toggle_state = workspace.toggle_states.iter().find(|candidate| candidate.kind == *kind).unwrap();
 
                                 let enabled = toggle_state.is_enabled();
 
@@ -473,8 +545,8 @@ impl eframe::App for OperatorUiApp {
 
                     match request_make_visible {
                         Some(toggle_state) if toggle_state.mode == ViewMode::Tile => {
-                            let tile_id = persistent_app_state.tree.tiles.find_pane( &toggle_state.kind).unwrap();
-                            persistent_app_state.tree.make_active( | candidate_id, _tile | candidate_id == tile_id);
+                            let tile_id = workspace.tree.tiles.find_pane( &toggle_state.kind).unwrap();
+                            workspace.tree.make_active( |candidate_id, _tile | candidate_id == tile_id);
                         }
                         _ => {}
                     }
@@ -492,6 +564,8 @@ impl eframe::App for OperatorUiApp {
                                         .frame(false)
                                 ).clicked() {
                                     // TODO show an 'about' modal.
+
+                                    request_workspace_toggle = true;
                                 }
                             })
                     });
@@ -509,8 +583,11 @@ impl eframe::App for OperatorUiApp {
             // reset the flag
             state.tree_behavior.container_is_tabs = false;
 
-            let mut pas = self.persistent_app_state.lock().unwrap();
-            pas.tree.ui(&mut state.tree_behavior, ui);
+
+            let mut workspaces = self.workspaces.lock().unwrap();
+            let mut workspace = workspaces.active();
+
+            workspace.tree.ui(&mut state.tree_behavior, ui);
         });
 
 
@@ -518,7 +595,12 @@ impl eframe::App for OperatorUiApp {
         // Windows
         //
 
-        let windows = self.persistent_app_state.lock().unwrap().toggle_states.iter().filter(|candidate| candidate.is_windowed()).cloned().collect::<Vec<_>>();
+        let windows = {
+            let mut workspaces = self.workspaces.lock().unwrap();
+            let workspace = workspaces.active();
+
+            workspace.toggle_states.iter().filter(|candidate| candidate.is_windowed()).cloned().collect::<Vec<_>>()
+        };
 
         for toggle_state in windows.iter() {
             let kind_key = kind_key(&toggle_state.kind);
@@ -562,6 +644,19 @@ impl eframe::App for OperatorUiApp {
             if open == false {
                 self.app_state().command_sender.send(UiCommand::SetPanelMode(toggle_state.kind, ViewMode::Disabled)).expect("sent");
             }
+        }
+
+        if request_workspace_toggle {
+            let mut workspaces = self.workspaces.lock().unwrap();
+
+            if workspaces.count() == 1 {
+                workspaces.clone_active();
+            }
+            match workspaces.active_index() {
+                0 => workspaces.set_active(1).expect("set active"),
+                1 => workspaces.set_active(0).expect("set active"),
+                _ => unreachable!(),
+            };
         }
     }
 }
