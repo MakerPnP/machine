@@ -1,7 +1,7 @@
 use egui::{Context, ThemePreference};
 use egui_mobius::Value;
 use tracing::trace;
-use crate::app::{AppState, PaneKind, PersistentAppState, ViewMode};
+use crate::app::{AppState, PaneKind, ViewMode, Workspaces};
 use crate::config::Config;
 use crate::task::Task;
 
@@ -19,7 +19,7 @@ pub fn handle_command(
     command: UiCommand,
     _app_state: Value<AppState>,
     config: Value<Config>,
-    persistent_app_state: Value<PersistentAppState>,
+    workspaces: Value<Workspaces>,
     ui_context: Context,
 ) -> Task<UiCommand> {
     trace!("Handling command: {:?}", command);
@@ -39,18 +39,20 @@ pub fn handle_command(
             Task::none()
         }
         UiCommand::SetPanelMode(kind, mode) => {
-            let mut state = persistent_app_state.lock().unwrap();
+            let mut workspaces = workspaces.lock().unwrap();
+            let mut workspace = workspaces.active();
 
-            if let Some(toggle_state) = state.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
+            if let Some(toggle_state) = workspace.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
                 toggle_state.mode = mode;
             }
 
             Task::none()
         }
         UiCommand::ClosePanel(kind) => {
-            let mut state = persistent_app_state.lock().unwrap();
+            let mut workspaces = workspaces.lock().unwrap();
+            let mut workspace = workspaces.active();
 
-            if let Some(toggle_state) = state.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
+            if let Some(toggle_state) = workspace.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
                 match toggle_state.mode {
                     ViewMode::Tile => {
                         toggle_state.mode = ViewMode::Disabled;
