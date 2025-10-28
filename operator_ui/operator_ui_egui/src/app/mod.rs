@@ -3,6 +3,7 @@ use ui::status::StatusUi;
 use ui::plot::PlotUi;
 use ui::settings::SettingsUi;
 use async_std::prelude::StreamExt;
+use eframe::emath::Pos2;
 use egui::{Color32, CornerRadius, Frame, Image, NumExt, Sense, ThemePreference, Ui, Vec2, WidgetText};
 use egui_extras::install_image_loaders;
 use egui_i18n::tr;
@@ -46,7 +47,14 @@ pub struct AppState {
     pub(crate) command_sender: Enqueue<UiCommand>,
     pub(crate) tree_behavior: TreeBehavior,
 
+    pub(crate) workspace_actions: Vec<WorkspaceAction>,
+
     ui_state: Value<UiState>,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum WorkspaceAction {
+    RepositionWindow(PaneKind, Pos2, Vec2)
 }
 
 impl Workspace {
@@ -108,12 +116,12 @@ impl Default for Workspace {
         let left_toggles = TOGGLE_DEFINITIONS.iter().map(|candidate| candidate.kind).collect::<Vec<_>>();
 
         let toggle_states = vec![
-            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Camera },
-            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Controls },
-            ToggleState { mode: ViewMode::Window, kind: PaneKind::Diagnostics },
-            ToggleState { mode: ViewMode::Disabled, kind: PaneKind::Plot },
-            ToggleState { mode: ViewMode::Window, kind: PaneKind::Settings },
-            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Status },
+            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Camera, window_position: None, window_size: None },
+            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Controls, window_position: None, window_size: None },
+            ToggleState { mode: ViewMode::Window, kind: PaneKind::Diagnostics, window_position: None, window_size: None },
+            ToggleState { mode: ViewMode::Disabled, kind: PaneKind::Plot, window_position: None, window_size: None },
+            ToggleState { mode: ViewMode::Window, kind: PaneKind::Settings, window_position: None, window_size: None },
+            ToggleState { mode: ViewMode::Tile, kind: PaneKind::Status, window_position: None, window_size: None },
         ];
 
         let tree = Self::create_tree();
@@ -153,6 +161,7 @@ impl AppState {
             command_sender: sender.clone(),
             tree_behavior: TreeBehavior::new(ui_state.clone(), sender),
             ui_state,
+            workspace_actions: Default::default(),
         }
     }
 
@@ -599,18 +608,50 @@ impl eframe::App for OperatorUiApp {
             let mut workspaces = self.workspaces.lock().unwrap();
             let workspace = workspaces.active();
 
-            workspace.toggle_states.iter().filter(|candidate| candidate.is_windowed()).cloned().collect::<Vec<_>>()
+            workspace.toggle_states.iter().cloned().enumerate().filter(|(_index, candidate)| candidate.is_windowed()).collect::<Vec<_>>()
         };
 
-        for toggle_state in windows.iter() {
+        for (toggle_index, toggle_state) in windows.into_iter() {
             let kind_key = kind_key(&toggle_state.kind);
             let title_key = title_key(kind_key);
             let title = tr!(&title_key);
 
             let mut open = true;
 
-            let window = egui::Window::new(&title)
-                .title_bar(false)
+            let mut applicable_actions = vec![];
+
+            {
+                let mut app_state = self.app_state();
+
+                app_state.workspace_actions.retain(|candidate|{
+
+                    let steal = match candidate {
+                        WorkspaceAction::RepositionWindow(kind, _, _) if *kind == toggle_state.kind => true,
+                        _ => false,
+                    };
+
+                    applicable_actions.push(candidate.clone());
+
+                    !steal
+                })
+            }
+
+            let mut window = egui::Window::new(&title)
+                .title_bar(false);
+
+            for applicable_action in applicable_actions {
+                match applicable_action {
+                    WorkspaceAction::RepositionWindow(kind, position, size) if kind == toggle_state.kind => {
+                        debug!("repositioning window. kind: {:?}, position: {:?}, size: {:?}", kind, position, size);
+                        window = window
+                            .current_pos(position)
+                            .fixed_size(size);
+                    }
+                    _ => {}
+                }
+            }
+
+            let window = window
                 .open(&mut open)
                 .resizable(true)
                 .show(ctx, |ui| {
@@ -639,8 +680,25 @@ impl eframe::App for OperatorUiApp {
                     }
                     _ => {}
                 }
+
+                if false {
+                    trace!("window rect. kind: {:?}, rect: {:?}", toggle_state.kind, window.response.rect);
+                }
+
+                {
+                    // IMPORTANT we can't just use the `toggle_state` from the loop iterator.
+                    // a) because it was cloned
+                    // b) because a message could have been sent to the app to change the window into a tile
+                    // So, we need to update the real one.
+                    let mut workspaces = self.workspaces.lock().unwrap();
+                    let mut workspace = workspaces.active();
+
+                    workspace.toggle_states[toggle_index].window_position.replace(window.response.rect.min);
+                    workspace.toggle_states[toggle_index].window_size.replace(window.response.rect.size());
+                }
             }
 
+            // TODO Remove legacy 'open' handling, we don't use window titlebars any more because we can't draw into them and had to implement our own titlebars
             if open == false {
                 self.app_state().command_sender.send(UiCommand::SetPanelMode(toggle_state.kind, ViewMode::Disabled)).expect("sent");
             }
@@ -657,6 +715,26 @@ impl eframe::App for OperatorUiApp {
                 1 => workspaces.set_active(0).expect("set active"),
                 _ => unreachable!(),
             };
+
+            let workspace = workspaces.active();
+
+            let actions = workspace.toggle_states
+                .iter()
+                .filter_map(|toggle_state| {
+                    match toggle_state {
+                        ToggleState { mode: ViewMode::Window, window_position: Some(window_position), window_size: Some(window_size), .. } => {
+                            Some(WorkspaceAction::RepositionWindow(toggle_state.kind, *window_position, *window_size))
+                        }
+                        _ => None
+                    }
+                }).collect::<Vec<_>>();
+
+            drop(workspace);
+            drop(workspaces);
+
+            let mut app_state = self.app_state();
+            app_state.workspace_actions.extend(actions);
+
         }
     }
 }
@@ -671,6 +749,8 @@ pub struct ToggleDefinition {
 pub struct ToggleState {
     pub(crate) kind: PaneKind,
     pub(crate) mode: ViewMode,
+    pub(crate) window_position: Option<Pos2>,
+    pub(crate) window_size: Option<Vec2>,
 }
 
 impl ToggleState {

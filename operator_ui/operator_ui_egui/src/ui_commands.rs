@@ -1,7 +1,7 @@
 use egui::{Context, ThemePreference};
 use egui_mobius::Value;
 use tracing::trace;
-use crate::app::{AppState, PaneKind, ViewMode, Workspaces};
+use crate::app::{AppState, PaneKind, ViewMode, WorkspaceAction, Workspaces};
 use crate::config::Config;
 use crate::task::Task;
 
@@ -43,6 +43,12 @@ pub fn handle_command(
             let mut workspace = workspaces.active();
 
             if let Some(toggle_state) = workspace.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
+                if toggle_state.mode != ViewMode::Window && mode == ViewMode::Window {
+                    let mut app_state = _app_state.lock().unwrap();
+                    if let (Some(window_position), Some(window_size)) = (toggle_state.window_position, toggle_state.window_size) {
+                        app_state.workspace_actions.push(WorkspaceAction::RepositionWindow(toggle_state.kind, window_position, window_size));
+                    }
+                }
                 toggle_state.mode = mode;
             }
 
