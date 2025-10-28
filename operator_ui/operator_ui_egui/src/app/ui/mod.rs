@@ -63,3 +63,13 @@ pub mod egui_tree {
         }
     }
 }
+
+pub mod egui {
+    use egui::{Context, LayerId};
+
+    pub fn bring_window_to_front(ctx: &Context, window_layer_id: LayerId) {
+        ctx.memory_mut(|memory|{
+            memory.areas_mut().move_to_top(window_layer_id);
+        });
+    }
+}
