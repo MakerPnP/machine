@@ -34,3 +34,7 @@ jog-y-minus = Y-
 jog-y-plus = Y+
 jog-x-minus = X-
 jog-x-plus = X+
+
+jog-z-minus = Z{$index}-
+jog-z-plus = Z{$index}+
+jog-z-park = Z{$index} P
