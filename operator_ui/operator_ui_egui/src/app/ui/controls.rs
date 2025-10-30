@@ -14,6 +14,7 @@ pub(crate) struct ControlsUi {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum LayoutFail {
     Grid,
+    HorizontalTopWithGroups,
     HorizontalWithGroups,
     HorizontalCenteredWithGroups,
     Horizontal,
@@ -22,7 +23,7 @@ enum LayoutFail {
 
 impl Default for LayoutFail {
     fn default() -> Self {
-        Self::Grid
+        Self::HorizontalTopWithGroups
     }
 }
 
@@ -32,36 +33,44 @@ impl ControlsUi {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.label("Controls content");
-                egui::ComboBox::from_id_salt("layout_fail")
-                    .selected_text(format!("{:?}", self.layout_fail))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut self.layout_fail,
-                            LayoutFail::Grid,
-                            format!("{:?}", LayoutFail::Grid),
-                        );
-                        ui.selectable_value(
-                            &mut self.layout_fail,
-                            LayoutFail::HorizontalWithGroups,
-                            format!("{:?}", LayoutFail::HorizontalWithGroups),
-                        );
-                        ui.selectable_value(
-                            &mut self.layout_fail,
-                            LayoutFail::HorizontalCenteredWithGroups,
-                            format!("{:?}", LayoutFail::HorizontalCenteredWithGroups),
-                        );
-                        ui.selectable_value(
-                            &mut self.layout_fail,
-                            LayoutFail::Horizontal,
-                            format!("{:?}", LayoutFail::Horizontal),
-                        );
-                        ui.selectable_value(
-                            &mut self.layout_fail,
-                            LayoutFail::HorizontalCentered,
-                            format!("{:?}", LayoutFail::HorizontalCentered),
-                        );
-                    });
 
+                // XXX
+                if false {
+                    egui::ComboBox::from_id_salt("layout_fail")
+                        .selected_text(format!("{:?}", self.layout_fail))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut self.layout_fail,
+                                LayoutFail::Grid,
+                                format!("{:?}", LayoutFail::Grid),
+                            );
+                            ui.selectable_value(
+                                &mut self.layout_fail,
+                                LayoutFail::HorizontalTopWithGroups,
+                                format!("{:?}", LayoutFail::HorizontalTopWithGroups),
+                            );
+                            ui.selectable_value(
+                                &mut self.layout_fail,
+                                LayoutFail::HorizontalWithGroups,
+                                format!("{:?}", LayoutFail::HorizontalWithGroups),
+                            );
+                            ui.selectable_value(
+                                &mut self.layout_fail,
+                                LayoutFail::HorizontalCenteredWithGroups,
+                                format!("{:?}", LayoutFail::HorizontalCenteredWithGroups),
+                            );
+                            ui.selectable_value(
+                                &mut self.layout_fail,
+                                LayoutFail::Horizontal,
+                                format!("{:?}", LayoutFail::Horizontal),
+                            );
+                            ui.selectable_value(
+                                &mut self.layout_fail,
+                                LayoutFail::HorizontalCentered,
+                                format!("{:?}", LayoutFail::HorizontalCentered),
+                            );
+                        });
+                }
                 match self.layout_fail {
                     LayoutFail::Grid => {
                         // FIXME using a grid with a single row in combination with ui.group() causes the second group to be vertically misalligned.
@@ -76,6 +85,17 @@ impl ControlsUi {
                                 });
                                 ui.end_row();
                             });
+                    }
+                    LayoutFail::HorizontalTopWithGroups => {
+                        // FIXME using ui.horizontal() in combination with ui.group() causes the second group to be vertically misalligned.
+                        ui.horizontal_top(|ui| {
+                            ui.group(|ui| {
+                                Self::draw_jogxy_grid(ui);
+                            });
+                            ui.group(|ui| {
+                                Self::draw_jogz_grid(ui, 0);
+                            });
+                        });
                     }
                     LayoutFail::HorizontalWithGroups => {
                         // FIXME using ui.horizontal() in combination with ui.group() causes the second group to be vertically misalligned.
