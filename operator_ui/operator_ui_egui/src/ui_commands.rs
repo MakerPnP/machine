@@ -88,8 +88,9 @@ pub fn handle_command(
             let app_state = app_state.lock().unwrap();
 
             let mut workspaces = workspaces.lock().unwrap();
+            let viewports = viewports.lock().unwrap();
             if workspaces.set_active(index).is_ok() {
-                for viewport in viewports.lock().unwrap().iter() {
+                for viewport in viewports.iter() {
                     let viewport_id = viewport.lock().unwrap().id;
                     app_state
                         .command_sender
