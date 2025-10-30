@@ -1,18 +1,18 @@
+use std::collections::HashSet;
+use std::convert::TryInto;
+use std::{io, pin::pin, time::Duration};
+
 use ergot::{
-    toolkits::tokio_udp::{register_router_interface, RouterStack},
+    toolkits::tokio_udp::{RouterStack, register_router_interface},
     topic,
     well_known::DeviceInfo,
 };
-use log::{info, warn, debug};
-use tokio::{net::UdpSocket, select, time, time::sleep};
-
-use std::{io, pin::pin, time::Duration};
-use std::collections::HashSet;
-use std::convert::TryInto;
-use tokio::time::interval;
-use ioboard_shared::yeet::Yeet;
 use ioboard_shared::commands::IoBoardCommand;
+use ioboard_shared::yeet::Yeet;
+use log::{debug, info, warn};
 use operator_shared::commands::OperatorCommand;
+use tokio::time::interval;
+use tokio::{net::UdpSocket, select, time, time::sleep};
 
 // TODO configure these appropriately
 const MAX_ERGOT_PACKET_SIZE: u16 = 1024;
@@ -28,16 +28,24 @@ async fn main() -> io::Result<()> {
 
     let stack: RouterStack = RouterStack::new();
 
-    let io_board_udp_socket = UdpSocket::bind("192.168.18.41:8000").await.unwrap();
+    let io_board_udp_socket = UdpSocket::bind("192.168.18.41:8000")
+        .await
+        .unwrap();
     let io_board_remote_addr = "192.168.18.64:8000";
-    io_board_udp_socket.connect(io_board_remote_addr).await?;
+    io_board_udp_socket
+        .connect(io_board_remote_addr)
+        .await?;
     register_router_interface(&stack, io_board_udp_socket, MAX_ERGOT_PACKET_SIZE, TX_BUFFER_SIZE)
         .await
         .unwrap();
 
-    let operator_udp_socket = UdpSocket::bind("192.168.18.41:8001").await.unwrap();
+    let operator_udp_socket = UdpSocket::bind("192.168.18.41:8001")
+        .await
+        .unwrap();
     let operator_remote_addr = "192.168.18.41:8002";
-    operator_udp_socket.connect(operator_remote_addr).await?;
+    operator_udp_socket
+        .connect(operator_remote_addr)
+        .await?;
     register_router_interface(&stack, operator_udp_socket, MAX_ERGOT_PACKET_SIZE, TX_BUFFER_SIZE)
         .await
         .unwrap();
@@ -53,7 +61,6 @@ async fn main() -> io::Result<()> {
     }
 }
 
-
 async fn basic_services(stack: RouterStack, port: u16) {
     let info = DeviceInfo {
         name: Some("Ergot router".try_into().unwrap()),
@@ -61,7 +68,9 @@ async fn basic_services(stack: RouterStack, port: u16) {
         unique_id: port.into(),
     };
     // allow for discovery
-    let disco_answer = stack.services().device_info_handler::<4>(&info);
+    let disco_answer = stack
+        .services()
+        .device_info_handler::<4>(&info);
     // handle incoming ping requests
     let ping_answer = stack.services().ping_handler::<4>();
     // custom service for doing discovery regularly
@@ -113,19 +122,30 @@ async fn io_board_command_sender(stack: RouterStack) {
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let command = IoBoardCommand::Test(ctr);
-        stack.topics().broadcast::<IoBoardCommandTopic>(&command, None).unwrap();
+        stack
+            .topics()
+            .broadcast::<IoBoardCommandTopic>(&command, None)
+            .unwrap();
         ctr += 1;
 
         tokio::time::sleep(Duration::from_secs(5)).await;
-        stack.topics().broadcast::<IoBoardCommandTopic>(&IoBoardCommand::BeginYeetTest, None).unwrap();
+        stack
+            .topics()
+            .broadcast::<IoBoardCommandTopic>(&IoBoardCommand::BeginYeetTest, None)
+            .unwrap();
 
         tokio::time::sleep(Duration::from_secs(5)).await;
-        stack.topics().broadcast::<IoBoardCommandTopic>(&IoBoardCommand::EndYeetTest, None).unwrap();
+        stack
+            .topics()
+            .broadcast::<IoBoardCommandTopic>(&IoBoardCommand::EndYeetTest, None)
+            .unwrap();
     }
 }
 
 async fn yeet_listener(stack: RouterStack) {
-    let subber = stack.topics().heap_bounded_receiver::<YeetTopic>(64, None);
+    let subber = stack
+        .topics()
+        .heap_bounded_receiver::<YeetTopic>(64, None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe();
 
@@ -147,7 +167,9 @@ async fn yeet_listener(stack: RouterStack) {
 }
 
 async fn operator_listener(stack: RouterStack) {
-    let subber = stack.topics().heap_bounded_receiver::<OperatorCommandTopic>(64, None);
+    let subber = stack
+        .topics()
+        .heap_bounded_receiver::<OperatorCommandTopic>(64, None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe();
 

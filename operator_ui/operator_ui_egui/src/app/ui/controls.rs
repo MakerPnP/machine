@@ -28,19 +28,38 @@ impl Default for LayoutFail {
 
 impl ControlsUi {
     pub fn ui(&mut self, ui: &mut Ui) {
-
         egui::ScrollArea::both()
             .auto_shrink([false, false])
-            .show(ui, |ui|{
+            .show(ui, |ui| {
                 ui.label("Controls content");
                 egui::ComboBox::from_id_salt("layout_fail")
                     .selected_text(format!("{:?}", self.layout_fail))
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.layout_fail, LayoutFail::Grid, format!("{:?}", LayoutFail::Grid));
-                        ui.selectable_value(&mut self.layout_fail, LayoutFail::HorizontalWithGroups, format!("{:?}", LayoutFail::HorizontalWithGroups));
-                        ui.selectable_value(&mut self.layout_fail, LayoutFail::HorizontalCenteredWithGroups, format!("{:?}", LayoutFail::HorizontalCenteredWithGroups));
-                        ui.selectable_value(&mut self.layout_fail, LayoutFail::Horizontal, format!("{:?}", LayoutFail::Horizontal));
-                        ui.selectable_value(&mut self.layout_fail, LayoutFail::HorizontalCentered, format!("{:?}", LayoutFail::HorizontalCentered));
+                        ui.selectable_value(
+                            &mut self.layout_fail,
+                            LayoutFail::Grid,
+                            format!("{:?}", LayoutFail::Grid),
+                        );
+                        ui.selectable_value(
+                            &mut self.layout_fail,
+                            LayoutFail::HorizontalWithGroups,
+                            format!("{:?}", LayoutFail::HorizontalWithGroups),
+                        );
+                        ui.selectable_value(
+                            &mut self.layout_fail,
+                            LayoutFail::HorizontalCenteredWithGroups,
+                            format!("{:?}", LayoutFail::HorizontalCenteredWithGroups),
+                        );
+                        ui.selectable_value(
+                            &mut self.layout_fail,
+                            LayoutFail::Horizontal,
+                            format!("{:?}", LayoutFail::Horizontal),
+                        );
+                        ui.selectable_value(
+                            &mut self.layout_fail,
+                            LayoutFail::HorizontalCentered,
+                            format!("{:?}", LayoutFail::HorizontalCentered),
+                        );
                     });
 
                 match self.layout_fail {
@@ -57,7 +76,7 @@ impl ControlsUi {
                                 });
                                 ui.end_row();
                             });
-                    },
+                    }
                     LayoutFail::HorizontalWithGroups => {
                         // FIXME using ui.horizontal() in combination with ui.group() causes the second group to be vertically misalligned.
                         ui.horizontal(|ui| {
@@ -68,7 +87,7 @@ impl ControlsUi {
                                 Self::draw_jogz_grid(ui, 0);
                             });
                         });
-                    },
+                    }
                     LayoutFail::HorizontalCenteredWithGroups => {
                         // FIXME using horizontal_centered() causes the entire window content to be aligned to the bottom.
                         ui.horizontal_centered(|ui| {
@@ -98,13 +117,15 @@ impl ControlsUi {
 
                 ui.horizontal(|ui| {
                     ui.label("Speed %");
-                    ui.add(egui::Slider::new(&mut self.speed_scale, 0.0..=1.0).custom_formatter(|it, _range| format!("{:3.0}", it * 100.0)));
+                    ui.add(
+                        egui::Slider::new(&mut self.speed_scale, 0.0..=1.0)
+                            .custom_formatter(|it, _range| format!("{:3.0}", it * 100.0)),
+                    );
                 });
             });
     }
 
     fn draw_jogxy_grid(ui: &mut Ui) {
-
         #[repr(usize)]
         enum JogDirection {
             YMinus = 0,
@@ -130,23 +151,31 @@ impl ControlsUi {
             .show(ui, |ui| {
                 // --- Top row ---
                 Self::empty_cell(max_size, ui);
-                if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::YMinus as usize])).clicked() {
-                }
+                if ui
+                    .add_sized(max_size, egui::Button::new(&labels[JogDirection::YMinus as usize]))
+                    .clicked()
+                {}
                 Self::empty_cell(max_size, ui);
                 ui.end_row();
 
                 // --- Middle row ---
-                if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::XMinus as usize])).clicked() {
-                }
+                if ui
+                    .add_sized(max_size, egui::Button::new(&labels[JogDirection::XMinus as usize]))
+                    .clicked()
+                {}
                 Self::empty_cell(max_size, ui);
-                if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::XPlus as usize])).clicked() {
-                }
+                if ui
+                    .add_sized(max_size, egui::Button::new(&labels[JogDirection::XPlus as usize]))
+                    .clicked()
+                {}
                 ui.end_row();
 
                 // --- Bottom row ---
                 Self::empty_cell(max_size, ui);
-                if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::YPlus as usize])).clicked() {
-                }
+                if ui
+                    .add_sized(max_size, egui::Button::new(&labels[JogDirection::YPlus as usize]))
+                    .clicked()
+                {}
                 Self::empty_cell(max_size, ui);
                 ui.end_row();
             });
@@ -175,26 +204,30 @@ impl ControlsUi {
             .spacing(egui::vec2(4.0, 4.0))
             .show(ui, |ui| {
                 // --- Top row ---
-                if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::ZMinus as usize])).clicked() {
-                }
+                if ui
+                    .add_sized(max_size, egui::Button::new(&labels[JogDirection::ZMinus as usize]))
+                    .clicked()
+                {}
                 ui.end_row();
 
                 // --- Middle row ---
-                if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::ZPlus as usize])).clicked() {
-                }
+                if ui
+                    .add_sized(max_size, egui::Button::new(&labels[JogDirection::ZPlus as usize]))
+                    .clicked()
+                {}
                 ui.end_row();
 
                 // --- Bottom row ---
-                if ui.add_sized(max_size, egui::Button::new(&labels[JogDirection::ZPark as usize])).clicked() {
-
-                }
+                if ui
+                    .add_sized(max_size, egui::Button::new(&labels[JogDirection::ZPark as usize]))
+                    .clicked()
+                {}
                 ui.end_row();
             });
     }
 
     fn calculate_label_max_size(ui: &mut Ui, labels: &[String]) -> Vec2 {
         let mut max_size = egui::Vec2::ZERO;
-
 
         for label in labels {
             let desired = ui
@@ -214,7 +247,10 @@ impl ControlsUi {
     }
 
     fn empty_cell(max_size: Vec2, ui: &mut Ui) {
-        ui.allocate_ui_with_layout(max_size, egui::Layout::centered_and_justified(egui::Direction::LeftToRight), |_ui| {});
+        ui.allocate_ui_with_layout(
+            max_size,
+            egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+            |_ui| {},
+        );
     }
-
 }

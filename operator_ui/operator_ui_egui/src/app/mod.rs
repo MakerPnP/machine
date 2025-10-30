@@ -1,27 +1,23 @@
-
-use ui::status::StatusUi;
-use ui::plot::PlotUi;
-use ui::settings::SettingsUi;
 use async_std::prelude::StreamExt;
-
 use egui::{Ui, Vec2, ViewportBuilder, ViewportClass, ViewportId};
-
 use egui_extras::install_image_loaders;
-
-use egui_mobius::{Slot, Value};
 use egui_mobius::types::{Enqueue, ValueGuard};
+use egui_mobius::{Slot, Value};
 use egui_tiles::{ContainerKind, Tile, Tiles, Tree};
-
 use tracing::{debug, trace};
 use ui::camera::CameraUi;
 use ui::controls::ControlsUi;
 use ui::diagnostics::DiagnosticsUi;
-use crate::ui_common::egui_tree::{add_pane_to_root, dump_tiles};
+use ui::plot::PlotUi;
+use ui::settings::SettingsUi;
+use ui::status::StatusUi;
+
 use crate::config::Config;
 use crate::net::ergot_task;
-use crate::task;
 use crate::runtime::tokio_runtime::TokioRuntime;
-use crate::ui_commands::{handle_command, UiCommand};
+use crate::task;
+use crate::ui_commands::{UiCommand, handle_command};
+use crate::ui_common::egui_tree::{add_pane_to_root, dump_tiles};
 use crate::workspace::{ToggleDefinition, ToggleState, ViewMode, ViewportState, Workspaces};
 
 mod ui;
@@ -29,12 +25,30 @@ mod ui;
 pub const MIN_TOUCH_SIZE: Vec2 = Vec2::splat(24.0);
 
 pub static TOGGLE_DEFINITIONS: [ToggleDefinition; 6] = [
-    ToggleDefinition { key: "camera", kind: PaneKind::Camera },
-    ToggleDefinition { key: "controls", kind: PaneKind::Controls },
-    ToggleDefinition { key: "diagnostics", kind: PaneKind::Diagnostics },
-    ToggleDefinition { key: "plot", kind: PaneKind::Plot },
-    ToggleDefinition { key: "settings", kind: PaneKind::Settings },
-    ToggleDefinition { key: "status", kind: PaneKind::Status },
+    ToggleDefinition {
+        key: "camera",
+        kind: PaneKind::Camera,
+    },
+    ToggleDefinition {
+        key: "controls",
+        kind: PaneKind::Controls,
+    },
+    ToggleDefinition {
+        key: "diagnostics",
+        kind: PaneKind::Diagnostics,
+    },
+    ToggleDefinition {
+        key: "plot",
+        kind: PaneKind::Plot,
+    },
+    ToggleDefinition {
+        key: "settings",
+        kind: PaneKind::Settings,
+    },
+    ToggleDefinition {
+        key: "status",
+        kind: PaneKind::Status,
+    },
 ];
 
 pub struct AppState {
@@ -53,7 +67,6 @@ pub struct UiState {
 
 impl AppState {
     pub fn init(sender: Enqueue<UiCommand>) -> Self {
-
         let ui_state = UiState {
             camera_ui: CameraUi::default(),
             controls_ui: ControlsUi::default(),
@@ -73,9 +86,7 @@ impl AppState {
 
     /// provide mutable access to the ui state.
     fn ui_state(&mut self) -> ValueGuard<'_, UiState> {
-        self.ui_state
-            .lock()
-            .unwrap()
+        self.ui_state.lock().unwrap()
     }
 }
 
@@ -111,7 +122,6 @@ impl Default for OperatorUiApp {
     }
 }
 
-
 impl OperatorUiApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut instance: OperatorUiApp = if let Some(storage) = cc.storage {
@@ -139,13 +149,23 @@ impl OperatorUiApp {
             let mut viewports = instance.viewports.lock().unwrap();
             if viewports.is_empty() {
                 let id = ViewportId::ROOT;
-                let root_viewport = ViewportState::new(id, app_message_sender.clone(), app_state.ui_state.clone(), instance.workspaces.clone());
+                let root_viewport = ViewportState::new(
+                    id,
+                    app_message_sender.clone(),
+                    app_state.ui_state.clone(),
+                    instance.workspaces.clone(),
+                );
                 viewports.push(Value::new(root_viewport));
             }
 
             {
                 let id = ViewportId::from_hash_of("__test__");
-                let viewport_state = ViewportState::new(id, app_message_sender.clone(), app_state.ui_state.clone(), instance.workspaces.clone());
+                let viewport_state = ViewportState::new(
+                    id,
+                    app_message_sender.clone(),
+                    app_state.ui_state.clone(),
+                    instance.workspaces.clone(),
+                );
                 viewports.push(Value::new(viewport_state));
             }
         }
@@ -199,9 +219,14 @@ impl OperatorUiApp {
         app_slot.start(handler);
 
         {
-            instance.viewports.lock().unwrap().iter_mut().for_each(|viewport| {
-                viewport.lock().unwrap().init();
-            });
+            instance
+                .viewports
+                .lock()
+                .unwrap()
+                .iter_mut()
+                .for_each(|viewport| {
+                    viewport.lock().unwrap().init();
+                });
         }
 
         instance
@@ -241,7 +266,7 @@ impl eframe::App for OperatorUiApp {
                     move |ctx, viewport_class| {
                         if !matches!(viewport_class, ViewportClass::Deferred) {
                             // TODO support for other viewports when deferred are not available?
-                            return
+                            return;
                         }
 
                         let mut viewport = viewport.lock().unwrap();
@@ -254,7 +279,6 @@ impl eframe::App for OperatorUiApp {
     }
 }
 
-
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq, Debug, Clone, Copy)]
 pub enum PaneKind {
     Camera,
@@ -264,7 +288,6 @@ pub enum PaneKind {
     Settings,
     Status,
 }
-
 
 pub(crate) fn show_panel_content(kind: &PaneKind, ui: &mut Ui, ui_state: &mut UiState) {
     match kind {

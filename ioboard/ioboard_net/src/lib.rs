@@ -4,32 +4,29 @@ extern crate alloc;
 use alloc::boxed::Box;
 use core::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use core::pin::pin;
-use ioboard_trace::tracepin;
-use log::{info, error};
 
 use embassy_executor::Spawner;
-use embedded_io_async::Write;
-use embedded_nal_async::TcpConnect;
 use embassy_net::driver::Driver;
-use embassy_net::{IpEndpoint, Ipv4Address, Runner, StackResources};
 use embassy_net::tcp::client::{TcpClient, TcpClientState};
 use embassy_net::udp::{PacketMetadata, UdpSocket};
+use embassy_net::{IpEndpoint, Ipv4Address, Runner, StackResources};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Duration, Ticker, Timer, WithTimeout};
-use embassy_sync::channel::{Channel, Sender, Receiver};
-
+use embedded_io_async::Write;
+use embedded_nal_async::TcpConnect;
 use ergot::exports::bbq2::traits::coordination::cas::AtomicCoord;
 use ergot::interface_manager::profiles::direct_edge::embassy_net_udp_0_7::RxTxWorker;
 use ergot::logging::log_v0_4::LogSink;
 use ergot::toolkits::embassy_net_v0_7 as kit;
 use ergot::well_known::{DeviceInfo, ErgotPingEndpoint};
 use ergot::{Address, topic};
-use mutex::raw_impls::cs::CriticalSectionRawMutex;
-
-use static_cell::{ConstStaticCell, StaticCell};
-
-use ioboard_shared::yeet::Yeet;
 use ioboard_shared::commands::IoBoardCommand;
+use ioboard_shared::yeet::Yeet;
+use ioboard_trace::tracepin;
+use log::{error, info};
+use mutex::raw_impls::cs::CriticalSectionRawMutex;
+use static_cell::{ConstStaticCell, StaticCell};
 
 //
 // Ergot configuration
@@ -110,11 +107,7 @@ impl<CLIENT: TcpConnect> IoConnection<CLIENT> {
     }
 }
 
-pub fn init<'d, D: Driver>(
-    driver: D,
-    random_seed: u64,
-    spawner: Spawner,
-) -> Runner<'d, D> {
+pub fn init<'d, D: Driver>(driver: D, random_seed: u64, spawner: Spawner) -> Runner<'d, D> {
     let config = embassy_net::Config::dhcpv4(Default::default());
     //let config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
     //    address: Ipv4Cidr::new(Ipv4Address::new(10, 42, 0, 61), 24),
@@ -128,7 +121,14 @@ pub fn init<'d, D: Driver>(
 
     defmt::info!("Hardware address: {}", stack.hardware_address());
 
-    spawner.spawn(networking_task(stack, spawner.clone(), RECV_BUF.take(), SCRATCH_BUF.take())).unwrap();
+    spawner
+        .spawn(networking_task(
+            stack,
+            spawner.clone(),
+            RECV_BUF.take(),
+            SCRATCH_BUF.take(),
+        ))
+        .unwrap();
 
     runner
 }
@@ -159,7 +159,9 @@ async fn networking_task(
 
     defmt::info!(
         "IP address: {}, gateway: {}, dns: {}",
-        config.address, config.dns_servers, config.gateway
+        config.address,
+        config.dns_servers,
+        config.gateway
     );
 
     let state: TcpClientState<1, 1024, 1024> = TcpClientState::new();
@@ -229,7 +231,6 @@ async fn networking_task(
     }
 }
 
-
 #[embassy_executor::task]
 async fn run_socket(
     socket: UdpSocket<'static>,
@@ -244,7 +245,6 @@ async fn run_socket(
         _ = rxtx.run(recv_buf, scratch_buf).await;
     }
 }
-
 
 #[embassy_executor::task]
 async fn pinger() {
@@ -348,16 +348,14 @@ async fn yeeter(receiver: YeetCommandReceiver) {
             embassy_futures::select::Either3::First(_) => {
                 info!("Yeet report, counter: {}, errors: {}", counter, error_counter);
             }
-            embassy_futures::select::Either3::Second(cmd) => {
-                match cmd {
-                    YeetCommand::Begin => {
-                        cycle_ticker = Some(Ticker::every(Duration::from_micros(1_000_000_u64 / TARGET_HZ as u64)));
-                    }
-                    YeetCommand::End => {
-                        cycle_ticker = None;
-                    }
+            embassy_futures::select::Either3::Second(cmd) => match cmd {
+                YeetCommand::Begin => {
+                    cycle_ticker = Some(Ticker::every(Duration::from_micros(1_000_000_u64 / TARGET_HZ as u64)));
                 }
-            }
+                YeetCommand::End => {
+                    cycle_ticker = None;
+                }
+            },
             embassy_futures::select::Either3::Third(_) => {
                 let Some(ref mut cycle_ticker) = cycle_ticker else {
                     continue;
@@ -413,13 +411,17 @@ async fn command_listener(yeet_command_sender: YeetCommandSender) {
         match msg.t {
             IoBoardCommand::Test(counter) => {
                 defmt::info!("Test command received: {}", counter);
-            },
+            }
             IoBoardCommand::BeginYeetTest => {
-                yeet_command_sender.send(YeetCommand::Begin).await;
-            },
+                yeet_command_sender
+                    .send(YeetCommand::Begin)
+                    .await;
+            }
             IoBoardCommand::EndYeetTest => {
-                yeet_command_sender.send(YeetCommand::End).await;
-            },
+                yeet_command_sender
+                    .send(YeetCommand::End)
+                    .await;
+            }
         }
     }
 }

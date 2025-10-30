@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 use i18n::I18nConfig;
+use operator_ui_egui::LOGO;
 /// Run as follows:
 /// `run --package planner_gui_egui --bin planner_gui_egui`
 ///
@@ -11,7 +12,6 @@ use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, fmt};
-use operator_ui_egui::LOGO;
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
@@ -21,8 +21,7 @@ fn main() -> eframe::Result {
     let default_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_icon(std::sync::Arc::new(
-                eframe::icon_data::from_png_bytes(&LOGO[..])
-                    .expect("Failed to load icon")
+                eframe::icon_data::from_png_bytes(&LOGO[..]).expect("Failed to load icon"),
             ))
             .with_inner_size([1024.0, 768.0])
             .with_min_inner_size([300.0, 220.0]),
@@ -118,9 +117,7 @@ fn main() {
                     loading_text.remove();
                 }
                 Err(e) => {
-                    loading_text.set_inner_html(
-                        "<p> The app has crashed. See the developer console for details. </p>",
-                    );
+                    loading_text.set_inner_html("<p> The app has crashed. See the developer console for details. </p>");
                     panic!("Failed to start eframe: {e:?}");
                 }
             }

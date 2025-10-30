@@ -1,8 +1,6 @@
-
-
-
 pub mod egui_tree {
     use std::fmt::Debug;
+
     use egui_tiles::{Container, ContainerKind, Tile, TileId, Tiles, Tree};
     use tracing::debug;
 
@@ -15,13 +13,16 @@ pub mod egui_tree {
                     let new_root_pane_id = tree.tiles.insert_pane(old_root_kind);
                     let new_tile_id = tree.tiles.insert_pane(new_kind);
                     let children = vec![new_root_pane_id, new_tile_id];
-                    let _new_root_container_id = tree.tiles.insert_container(Container::new(container_kind, children));
+                    let _new_root_container_id = tree
+                        .tiles
+                        .insert_container(Container::new(container_kind, children));
                     tree.root = Some(_new_root_container_id);
                 }
                 Tile::Container(mut container) => {
                     let new_tile_id = tree.tiles.insert_pane(new_kind);
                     container.add_child(new_tile_id);
-                    tree.tiles.insert(root_id, Tile::Container(container));
+                    tree.tiles
+                        .insert(root_id, Tile::Container(container));
                 }
             }
         } else {
@@ -31,15 +32,8 @@ pub mod egui_tree {
         }
     }
 
-
-    pub fn dump_tiles<Kind: Debug>(
-        tiles: &mut Tiles<Kind>,
-        tile_id: Option<TileId>,
-    )
-    {
-        let Some(tile_id) = tile_id else {
-            return
-        };
+    pub fn dump_tiles<Kind: Debug>(tiles: &mut Tiles<Kind>, tile_id: Option<TileId>) {
+        let Some(tile_id) = tile_id else { return };
 
         if let Some(tile) = tiles.remove(tile_id) {
             debug!("{:?}: {:?}", tile_id, tile);
@@ -61,8 +55,10 @@ pub mod egui {
     use egui::{Context, LayerId};
 
     pub fn bring_window_to_front(ctx: &Context, window_layer_id: LayerId) {
-        ctx.memory_mut(|memory|{
-            memory.areas_mut().move_to_top(window_layer_id);
+        ctx.memory_mut(|memory| {
+            memory
+                .areas_mut()
+                .move_to_top(window_layer_id);
         });
     }
 }
