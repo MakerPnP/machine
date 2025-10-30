@@ -265,13 +265,12 @@ impl ViewportState {
     }
 
     pub fn ui(&mut self, ctx: &egui::Context) {
+        let frame_number = ctx.cumulative_frame_nr();
 
         let ui_id = Id::from(self.id);
 
-        let mut first_frame = false;
         if self.context.is_none() {
             self.context.replace(ctx.clone());
-            first_frame = true;
         }
 
         if ctx.input(|i| i.viewport().close_requested()) {
@@ -292,7 +291,7 @@ impl ViewportState {
                 .unwrap();
 
             // TODO or workspace changed
-            if first_frame {
+            if frame_number == 0 {
                 let actions = workspace
                     .toggle_states
                     .iter()
@@ -603,11 +602,11 @@ impl ViewportState {
 
             let mut applicable_actions: Vec<ViewportAction> = vec![];
 
-            // wait till the UI settles before applying actions
-            // without this check when the app first starts up the window might not be big enough
-            // to show the windows in the right positions.
-
-            if !ctx.will_discard() {
+            // HACK: windows-in-wrong-positions-hack
+            // wait till the UI settles before applying actions.  Without this hack when the app
+            // first starts up the window might not be big enough to show the windows in the right positions.
+            // Currently, it seems that waiting 1 frame is enough, but this is fragile and may break in the future.
+            if frame_number >= 1 {
                 self.viewport_actions
                     .retain(|candidate| {
                         let steal = match candidate {
@@ -619,6 +618,8 @@ impl ViewportState {
 
                         !steal
                     });
+            } else {
+                ctx.request_repaint();
             }
 
             let mut dump_position = false;
@@ -628,6 +629,11 @@ impl ViewportState {
             let window_id = ui_id.with(kind_key);
             ctx.memory(|memory| {
                 if let Some(rect) = memory.area_rect(window_id) {
+                    // IMPORTANT we can't just use the `toggle_state` from the loop iterator.
+                    // a) because it was cloned
+                    // b) because a message could have been sent to the app to change the window into a tile
+                    // So, we need to update the real one.
+
                     let mut workspaces = self.workspaces.lock().unwrap();
                     let mut workspace = workspaces.active();
 
@@ -644,8 +650,6 @@ impl ViewportState {
                         .replace(window_size);
                 }
             });
-            // XXX failing to track window sizes, cleanup commented-out/unused code below.
-
 
             let mut window = egui::Window::new(&title)
                 .id(window_id)
@@ -660,33 +664,21 @@ impl ViewportState {
                 )
                 .title_bar(false);
 
-            if true {
-                for applicable_action in applicable_actions {
-                    match applicable_action {
-                        ViewportAction::RepositionWindow(kind, position, size) if kind == toggle_state.kind => {
-                            debug!(
-                                "repositioning window. kind: {:?}, rect: {:?}",
-                                kind,
-                                Rect::from_min_size(position, size)
-                            );
-                            dump_position = true;
-                            window = window
-                                .current_pos(position)
-                                .fixed_size(size)
-                            // .default_pos(position)
-                            // .default_size(size);
-                        }
-                        _ => {}
+            for applicable_action in applicable_actions {
+                match applicable_action {
+                    ViewportAction::RepositionWindow(kind, position, size) if kind == toggle_state.kind => {
+                        debug!(
+                            "repositioning window. kind: {:?}, rect: {:?}",
+                            kind,
+                            Rect::from_min_size(position, size)
+                        );
+                        dump_position = true;
+                        window = window
+                            .current_pos(position)
+                            .fixed_size(size)
                     }
+                    _ => {}
                 }
-            } else {
-                let mut workspaces = self.workspaces.lock().unwrap();
-                let mut workspace = workspaces.active();
-                let meh = workspace.toggle_states[toggle_index];
-
-                window = window
-                    .current_pos(meh.window_position.unwrap())
-                    .fixed_size(meh.window_size.unwrap())
             }
 
             let window = window.resizable(true).show(ctx, |ui| {
@@ -745,29 +737,6 @@ impl ViewportState {
                         "saving window rect. kind: {:?}, rect: {:?}",
                         toggle_state.kind, window.response.rect
                     );
-                }
-
-                if false {
-                    // IMPORTANT we can't just use the `toggle_state` from the loop iterator.
-                    // a) because it was cloned
-                    // b) because a message could have been sent to the app to change the window into a tile
-                    // So, we need to update the real one.
-                    let mut workspaces = self.workspaces.lock().unwrap();
-                    let mut workspace = workspaces.active();
-
-                    // There's no API to get the window size in egui
-                    let bad_window_rect = window.response.rect;
-                    // TODO magically calculate the actual size of the window
-                    //      the rect seeming contains the shadow, margin size and stroke from the frame
-                    //      currently it's unknown how to reverse the calculations.
-                    let mut actual_rect = bad_window_rect;
-
-                    workspace.toggle_states[toggle_index]
-                        .window_position
-                        .replace(actual_rect.min);
-                    workspace.toggle_states[toggle_index]
-                        .window_size
-                        .replace(actual_rect.size());
                 }
             }
         }
