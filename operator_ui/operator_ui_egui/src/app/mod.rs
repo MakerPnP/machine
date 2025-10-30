@@ -255,7 +255,11 @@ impl eframe::App for OperatorUiApp {
         for viewport in viewports.iter() {
             let (viewport_id, viewport_position, viewport_inner_size) = {
                 let viewport = viewport.lock().unwrap();
-                (viewport.id, viewport.position, viewport.inner_size)
+
+                let mut workspaces = viewport.workspaces.lock().unwrap();
+                let workspace = workspaces.active();
+                let viewport_config = &workspace.viewport_configs[&viewport.id];
+                (viewport.id, viewport_config.position, viewport_config.inner_size)
             };
 
             if viewport_id == ViewportId::ROOT {
@@ -286,35 +290,13 @@ impl eframe::App for OperatorUiApp {
 
                         viewport.ui(ctx);
 
-                        let viewport_frame_number = ctx.cumulative_frame_nr_for(viewport_id);
-
-                        let (new_position, new_inner_size) = {
-                            let maybe_position = {
-                                // FIXME new_position is *always* [0,0], we need the NATIVE WINDOW position, currently unable to determine this.
-                                let position = ctx.viewport_rect().min;
-                                if position == Pos2::ZERO { None } else { Some(position) }
-                            };
-                            (maybe_position, Some(ctx.content_rect().size()))
-                        };
-                        debug!(
-                            "viewport: {:?}, frame: {}, position: {:?}, size: {:?}",
-                            viewport_id, viewport_frame_number, new_position, new_inner_size
-                        );
-
-                        if new_position != viewport_position {
-                            debug!(
-                                "viewport: {:?}, position: [old: {:?}, new: {:?}]",
-                                viewport_id, viewport_position, new_position
-                            );
-                            viewport.position = new_position;
-                        }
-                        if new_inner_size != viewport_inner_size {
-                            debug!(
-                                "viewport: {:?}, inner_size: [old: {:?}, new: {:?}]",
-                                viewport_id, viewport_inner_size, new_inner_size
-                            );
-                            viewport.inner_size = new_inner_size;
-                        }
+                        let mut workspaces = viewport.workspaces.lock().unwrap();
+                        let mut workspace = workspaces.active();
+                        workspace
+                            .viewport_configs
+                            .get_mut(&viewport_id)
+                            .unwrap()
+                            .update_size_and_position(&ctx);
                     }
                 });
             }
