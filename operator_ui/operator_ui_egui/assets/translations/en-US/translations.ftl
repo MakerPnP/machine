@@ -9,6 +9,9 @@ language-en-US = English (United States)
 menu-top-level-file = File
 menu-item-quit = Quit
 
+main-window-title = MakerPnP - OperatorUI
+viewport-title = MakerPnP - OperatorUI ({$id})
+
 panel-camera-name = Camera
 panel-controls-name = Controls
 panel-diagnostics-name = Diagnostics

@@ -1,6 +1,7 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use egui_i18n::tr;
 use i18n::I18nConfig;
 use operator_ui_egui::LOGO;
 /// Run as follows:
@@ -28,10 +29,10 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
 
-    let app_name = "MakerPnP - Operator UI";
+    let app_name = tr!("main-window-title");
 
     if let Err(e) = eframe::run_native(
-        app_name,
+        &app_name,
         default_options.clone(),
         Box::new(|cc| Ok(Box::new(operator_ui_egui::OperatorUiApp::new(cc)))),
     ) {
@@ -45,7 +46,7 @@ fn main() -> eframe::Result {
         sw_options.hardware_acceleration = eframe::HardwareAcceleration::Off;
 
         if let Err(e) = eframe::run_native(
-            app_name,
+            &app_name,
             default_options.clone(),
             Box::new(|cc| Ok(Box::new(operator_ui_egui::OperatorUiApp::new(cc)))),
         ) {

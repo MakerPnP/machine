@@ -1,9 +1,10 @@
 use async_std::prelude::StreamExt;
-use egui::{Ui, Vec2, ViewportBuilder, ViewportClass, ViewportId};
+use egui::{Pos2, Ui, Vec2, ViewportBuilder, ViewportClass, ViewportId};
 use egui_extras::install_image_loaders;
+use egui_i18n::tr;
 use egui_mobius::types::{Enqueue, ValueGuard};
 use egui_mobius::{Slot, Value};
-use tracing::trace;
+use tracing::{debug, trace};
 use ui::camera::CameraUi;
 use ui::controls::ControlsUi;
 use ui::diagnostics::DiagnosticsUi;
@@ -252,13 +253,27 @@ impl eframe::App for OperatorUiApp {
         let viewports = self.viewports.lock().unwrap();
 
         for viewport in viewports.iter() {
-            let viewport_id = viewport.lock().unwrap().id;
+            let (viewport_id, viewport_position, viewport_inner_size) = {
+                let viewport = viewport.lock().unwrap();
+                (viewport.id, viewport.position, viewport.inner_size)
+            };
 
             if viewport_id == ViewportId::ROOT {
                 let mut viewport = viewport.lock().unwrap();
                 viewport.ui(ctx);
             } else {
-                ctx.show_viewport_deferred(viewport_id, ViewportBuilder::default(), {
+                let unformatted_viewport_id = format!("{:?}", viewport_id);
+                let formatted_viewport_id = unformatted_viewport_id.trim_matches('\"');
+                let mut viewport_builder =
+                    ViewportBuilder::default().with_title(tr!("viewport-title", {id: formatted_viewport_id}));
+                if let Some(position) = viewport_position {
+                    viewport_builder = viewport_builder.with_position(position)
+                }
+                if let Some(inner_size) = viewport_inner_size {
+                    viewport_builder = viewport_builder.with_inner_size(inner_size);
+                }
+
+                ctx.show_viewport_deferred(viewport_id, viewport_builder, {
                     let viewport = viewport.clone();
 
                     move |ctx, viewport_class| {
@@ -270,6 +285,36 @@ impl eframe::App for OperatorUiApp {
                         let mut viewport = viewport.lock().unwrap();
 
                         viewport.ui(ctx);
+
+                        let viewport_frame_number = ctx.cumulative_frame_nr_for(viewport_id);
+
+                        let (new_position, new_inner_size) = {
+                            let maybe_position = {
+                                // FIXME new_position is *always* [0,0], we need the NATIVE WINDOW position, currently unable to determine this.
+                                let position = ctx.viewport_rect().min;
+                                if position == Pos2::ZERO { None } else { Some(position) }
+                            };
+                            (maybe_position, Some(ctx.content_rect().size()))
+                        };
+                        debug!(
+                            "viewport: {:?}, frame: {}, position: {:?}, size: {:?}",
+                            viewport_id, viewport_frame_number, new_position, new_inner_size
+                        );
+
+                        if new_position != viewport_position {
+                            debug!(
+                                "viewport: {:?}, position: [old: {:?}, new: {:?}]",
+                                viewport_id, viewport_position, new_position
+                            );
+                            viewport.position = new_position;
+                        }
+                        if new_inner_size != viewport_inner_size {
+                            debug!(
+                                "viewport: {:?}, inner_size: [old: {:?}, new: {:?}]",
+                                viewport_id, viewport_inner_size, new_inner_size
+                            );
+                            viewport.inner_size = new_inner_size;
+                        }
                     }
                 });
             }

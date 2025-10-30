@@ -106,6 +106,9 @@ pub struct ViewportState {
     pub(crate) workspaces: Value<Workspaces>,
     pub(crate) context: Option<egui::Context>,
     pub(crate) ui_state: Value<UiState>,
+
+    pub(crate) position: Option<Pos2>,
+    pub(crate) inner_size: Option<Vec2>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -133,6 +136,8 @@ impl ViewportState {
             workspaces,
             context: None,
             ui_state,
+            position: None,
+            inner_size: None,
         }
     }
 
@@ -195,7 +200,7 @@ impl ViewportState {
 
                 None
             }
-            ViewportUiCommand::WorkspaceChanged(index) => {
+            ViewportUiCommand::WorkspaceChanged(_index) => {
                 let mut workspaces = self.workspaces.lock().unwrap();
                 let workspace = workspaces.active();
 
