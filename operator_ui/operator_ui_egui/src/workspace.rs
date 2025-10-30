@@ -1,18 +1,20 @@
 use std::sync::mpsc::Sender;
-use egui::{Frame, Image, Rect, Sense, ThemePreference, Ui, ViewportId, WidgetText};
-use egui_tiles::{ContainerKind, SimplificationOptions, Tabs, Tile, TileId, Tiles, Tree, UiResponse};
-use egui_i18n::tr;
+
 use eframe::emath::{NumExt, Pos2, Vec2};
-use egui_mobius::types::{Enqueue, ValueGuard};
-use egui_mobius::Value;
-use tracing::{debug, trace};
-use eframe::epaint::{Color32, CornerRadius};
 use eframe::epaint::ahash::HashMap;
-use crate::{app, LOGO};
-use crate::app::{PaneKind, UiState, MIN_TOUCH_SIZE, TOGGLE_DEFINITIONS};
-use crate::ui_common::egui::bring_window_to_front;
+use eframe::epaint::{Color32, CornerRadius};
+use egui::{Frame, Image, Rect, Sense, ThemePreference, Ui, ViewportId, WidgetText};
+use egui_i18n::tr;
+use egui_mobius::Value;
+use egui_mobius::types::{Enqueue, ValueGuard};
+use egui_tiles::{ContainerKind, SimplificationOptions, Tabs, Tile, TileId, Tiles, Tree, UiResponse};
+use tracing::{debug, trace};
+
+use crate::app::{MIN_TOUCH_SIZE, PaneKind, TOGGLE_DEFINITIONS, UiState};
 use crate::ui_commands::{UiCommand, ViewportUiAction, ViewportUiCommand};
+use crate::ui_common::egui::bring_window_to_front;
 use crate::ui_common::egui_tree::{add_pane_to_root, dump_tiles};
+use crate::{LOGO, app};
 
 /// Stores the tree of panes, and the state of each pane (position, size, etc)
 ///
@@ -40,15 +42,16 @@ impl ViewportTreeConfig {
         }
 
         for toggle_state in toggle_states.iter() {
-            if !matches!(toggle_state.mode, ViewMode::Tile(candidate_viewport_id) if candidate_viewport_id == viewport_id) {
+            if !matches!(toggle_state.mode, ViewMode::Tile(candidate_viewport_id) if candidate_viewport_id == viewport_id)
+            {
                 // not a tile, or not for this viewport
                 continue;
             }
 
             // is there a tile for this one?
-            let is_open = self.tree.tiles.iter().any(|(_tile_id, tile_kind)| {
-                matches!(tile_kind, Tile::Pane(pane_kind) if *pane_kind == toggle_state.kind)
-            });
+            let is_open = self.tree.tiles.iter().any(
+                |(_tile_id, tile_kind)| matches!(tile_kind, Tile::Pane(pane_kind) if *pane_kind == toggle_state.kind),
+            );
 
             if !is_open {
                 debug!("tree:");
@@ -111,8 +114,16 @@ pub enum ViewportAction {
 }
 
 impl ViewportState {
-    pub fn new(id: ViewportId, command_sender: Enqueue<UiCommand>, ui_state: Value<UiState>, workspaces: Value<Workspaces>) -> Self {
-        workspaces.lock().unwrap().add_viewport(id);
+    pub fn new(
+        id: ViewportId,
+        command_sender: Enqueue<UiCommand>,
+        ui_state: Value<UiState>,
+        workspaces: Value<Workspaces>,
+    ) -> Self {
+        workspaces
+            .lock()
+            .unwrap()
+            .add_viewport(id);
 
         Self {
             command_sender: command_sender.clone(),
@@ -139,14 +150,25 @@ impl ViewportState {
                 let mut workspaces = self.workspaces.lock().unwrap();
                 let mut workspace = workspaces.active();
 
-                if let Some(toggle_state) = workspace.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
-
-                    let new_mode_is_window = matches!(mode, ViewMode::Window(mode_view_port) if mode_view_port == self.id);
+                if let Some(toggle_state) = workspace
+                    .toggle_states
+                    .iter_mut()
+                    .find(|candidate| candidate.kind == kind)
+                {
+                    let new_mode_is_window =
+                        matches!(mode, ViewMode::Window(mode_view_port) if mode_view_port == self.id);
                     let old_mode_is_window = matches!(toggle_state.mode, ViewMode::Window(_));
 
                     if !old_mode_is_window && new_mode_is_window {
-                        if let (Some(window_position), Some(window_size)) = (toggle_state.window_position, toggle_state.window_size) {
-                            self.viewport_actions.push(ViewportAction::RepositionWindow(toggle_state.kind, window_position, window_size));
+                        if let (Some(window_position), Some(window_size)) =
+                            (toggle_state.window_position, toggle_state.window_size)
+                        {
+                            self.viewport_actions
+                                .push(ViewportAction::RepositionWindow(
+                                    toggle_state.kind,
+                                    window_position,
+                                    window_size,
+                                ));
                         }
                     }
                     toggle_state.mode = mode;
@@ -158,12 +180,16 @@ impl ViewportState {
                 let mut workspaces = self.workspaces.lock().unwrap();
                 let mut workspace = workspaces.active();
 
-                if let Some(toggle_state) = workspace.toggle_states.iter_mut().find(|candidate|candidate.kind == kind) {
+                if let Some(toggle_state) = workspace
+                    .toggle_states
+                    .iter_mut()
+                    .find(|candidate| candidate.kind == kind)
+                {
                     match toggle_state.mode {
                         ViewMode::Tile(viewport_id) if viewport_id == self.id => {
                             toggle_state.mode = ViewMode::Disabled;
                         }
-                        _ => unreachable!()
+                        _ => unreachable!(),
                     }
                 }
 
@@ -184,18 +210,23 @@ impl ViewportState {
     fn build_window_reposition_actions(toggle_states: &[ToggleState], viewport_id: ViewportId) -> Vec<ViewportAction> {
         toggle_states
             .iter()
-            .filter_map(|toggle_state| {
-                match toggle_state {
-                    ToggleState { mode: ViewMode::Window(id), window_position: Some(window_position), window_size: Some(window_size), .. } if *id == viewport_id => {
-                        Some(ViewportAction::RepositionWindow(toggle_state.kind, *window_position, *window_size))
-                    }
-                    _ => None
-                }
-            }).collect::<Vec<_>>()
+            .filter_map(|toggle_state| match toggle_state {
+                ToggleState {
+                    mode: ViewMode::Window(id),
+                    window_position: Some(window_position),
+                    window_size: Some(window_size),
+                    ..
+                } if *id == viewport_id => Some(ViewportAction::RepositionWindow(
+                    toggle_state.kind,
+                    *window_position,
+                    *window_size,
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
     }
 
     pub fn ui(&mut self, ctx: &egui::Context) {
-
         let mut first_frame = false;
         if self.context.is_none() {
             self.context.replace(ctx.clone());
@@ -204,7 +235,9 @@ impl ViewportState {
 
         if ctx.input(|i| i.viewport().close_requested()) {
             println!("close requested");
-            self.command_sender.send(UiCommand::CloseViewport(self.id)).expect("sent");
+            self.command_sender
+                .send(UiCommand::CloseViewport(self.id))
+                .expect("sent");
         }
 
         {
@@ -212,27 +245,39 @@ impl ViewportState {
             let mut workspace = workspaces.active();
 
             // temporarily remove to satisfy the borrow checker
-            let mut workspace_viewport_config = workspace.viewport_configs.remove(&self.id).unwrap();
+            let mut workspace_viewport_config = workspace
+                .viewport_configs
+                .remove(&self.id)
+                .unwrap();
 
             // TODO or workspace changed
             if first_frame {
-                let actions = workspace.toggle_states
+                let actions = workspace
+                    .toggle_states
                     .iter()
-                    .filter_map(|toggle_state| {
-                        match toggle_state {
-                            ToggleState { mode: ViewMode::Window(toggle_viewport_id), window_position: Some(window_position), window_size: Some(window_size), .. } if *toggle_viewport_id == self.id => {
-                                Some(ViewportAction::RepositionWindow(toggle_state.kind, *window_position, *window_size))
-                            }
-                            _ => None
-                        }
-                    }).collect::<Vec<_>>();
+                    .filter_map(|toggle_state| match toggle_state {
+                        ToggleState {
+                            mode: ViewMode::Window(toggle_viewport_id),
+                            window_position: Some(window_position),
+                            window_size: Some(window_size),
+                            ..
+                        } if *toggle_viewport_id == self.id => Some(ViewportAction::RepositionWindow(
+                            toggle_state.kind,
+                            *window_position,
+                            *window_size,
+                        )),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
                 debug!("actions: {:?}", actions);
                 self.viewport_actions.extend(actions);
             }
 
             workspace_viewport_config.update_tree(self.id, workspace.toggle_states.as_slice());
 
-            workspace.viewport_configs.insert(self.id, workspace_viewport_config);
+            workspace
+                .viewport_configs
+                .insert(self.id, workspace_viewport_config);
         }
 
         let mut request_workspace_toggle = false;
@@ -484,15 +529,18 @@ impl ViewportState {
                 // reset the flag
                 self.tree_behavior.container_is_tabs = false;
 
-
                 let mut workspaces = self.workspaces.lock().unwrap();
                 let mut workspace = workspaces.active();
 
-                let workspace_viewport_config = workspace.viewport_configs.get_mut(&self.id).unwrap();
+                let workspace_viewport_config = workspace
+                    .viewport_configs
+                    .get_mut(&self.id)
+                    .unwrap();
 
-                workspace_viewport_config.tree.ui(&mut self.tree_behavior, ui);
+                workspace_viewport_config
+                    .tree
+                    .ui(&mut self.tree_behavior, ui);
             });
-
 
         //
         // Windows
@@ -519,27 +567,31 @@ impl ViewportState {
             // to show the windows in the right positions.
 
             if !ctx.will_discard() {
-                self.viewport_actions.retain(|candidate| {
-                    let steal = match candidate {
-                        ViewportAction::RepositionWindow(kind, _, _) if *kind == toggle_state.kind => true,
-                        _ => false,
-                    };
+                self.viewport_actions
+                    .retain(|candidate| {
+                        let steal = match candidate {
+                            ViewportAction::RepositionWindow(kind, _, _) if *kind == toggle_state.kind => true,
+                            _ => false,
+                        };
 
-                    applicable_actions.push(*candidate);
+                        applicable_actions.push(*candidate);
 
-                    !steal
-                });
+                        !steal
+                    });
             }
 
             let mut dump_position = false;
 
-            let mut window = egui::Window::new(&title)
-                .title_bar(false);
+            let mut window = egui::Window::new(&title).title_bar(false);
 
             for applicable_action in applicable_actions {
                 match applicable_action {
                     ViewportAction::RepositionWindow(kind, position, size) if kind == toggle_state.kind => {
-                        debug!("repositioning window. kind: {:?}, rect: {:?}", kind, Rect::from_min_size(position, size));
+                        debug!(
+                            "repositioning window. kind: {:?}, rect: {:?}",
+                            kind,
+                            Rect::from_min_size(position, size)
+                        );
                         dump_position = true;
                         window = window
                             .current_pos(position)
@@ -551,38 +603,62 @@ impl ViewportState {
                 }
             }
 
-            let window = window
-                .resizable(true)
-                .show(ctx, |ui| {
-                    ui.vertical(|ui| {
-                        if false {
-                            trace!("window, layer_id: {:?}, toggle_state: {:?}", ui.layer_id(), toggle_state);
-                        }
+            let window = window.resizable(true).show(ctx, |ui| {
+                ui.vertical(|ui| {
+                    if false {
+                        trace!(
+                            "window, layer_id: {:?}, toggle_state: {:?}",
+                            ui.layer_id(),
+                            toggle_state
+                        );
+                    }
 
-                        let kind = toggle_state.kind;
-                        let mut ui_state = self.ui_state.lock().unwrap();
+                    let kind = toggle_state.kind;
+                    let mut ui_state = self.ui_state.lock().unwrap();
 
-                        let mut dragged = false;
-                        let result = show_panel_title_and_controls(self.id, &kind, title, sender.clone(), ui, false, false, true, &mut dragged, |ui, button_size|{
-                            ui.add_sized(button_size, egui::Button::new("?")).clicked()
-                        });
-                        ui.separator();
-                        app::show_panel_content(&kind, ui, &mut ui_state);
-                        result
-                    }).inner
-                });
+                    let mut dragged = false;
+                    let result = show_panel_title_and_controls(
+                        self.id,
+                        &kind,
+                        title,
+                        sender.clone(),
+                        ui,
+                        false,
+                        false,
+                        true,
+                        &mut dragged,
+                        |ui, button_size| {
+                            ui.add_sized(button_size, egui::Button::new("?"))
+                                .clicked()
+                        },
+                    );
+                    ui.separator();
+                    app::show_panel_content(&kind, ui, &mut ui_state);
+                    result
+                })
+                .inner
+            });
 
             if let Some(window) = window {
                 match request_make_visible {
-                    Some(requested_toggle_state) if requested_toggle_state.mode == ViewMode::Window(self.id) && requested_toggle_state.kind == toggle_state.kind => {
-                        trace!("bringing window to front. layer_id: {:?}, toggle_state: {:?}", window.response.layer_id, toggle_state);
+                    Some(requested_toggle_state)
+                        if requested_toggle_state.mode == ViewMode::Window(self.id)
+                            && requested_toggle_state.kind == toggle_state.kind =>
+                    {
+                        trace!(
+                            "bringing window to front. layer_id: {:?}, toggle_state: {:?}",
+                            window.response.layer_id, toggle_state
+                        );
                         bring_window_to_front(ctx, window.response.layer_id);
                     }
                     _ => {}
                 }
 
                 if dump_position || window.inner.unwrap() {
-                    debug!("saving window rect. kind: {:?}, rect: {:?}", toggle_state.kind, window.response.rect);
+                    debug!(
+                        "saving window rect. kind: {:?}, rect: {:?}",
+                        toggle_state.kind, window.response.rect
+                    );
                 }
 
                 {
@@ -596,10 +672,19 @@ impl ViewportState {
                     // There's no API to get the window size in egui, and the rect contains the shadow size too
                     // so we have to undo that.
                     let window_rect_with_shadow = window.response.rect;
-                    let actual_rect = window_rect_with_shadow - ctx.style().visuals.window_shadow.margin();
+                    let actual_rect = window_rect_with_shadow
+                        - ctx
+                            .style()
+                            .visuals
+                            .window_shadow
+                            .margin();
 
-                    workspace.toggle_states[toggle_index].window_position.replace(actual_rect.min);
-                    workspace.toggle_states[toggle_index].window_size.replace(actual_rect.size());
+                    workspace.toggle_states[toggle_index]
+                        .window_position
+                        .replace(actual_rect.min);
+                    workspace.toggle_states[toggle_index]
+                        .window_size
+                        .replace(actual_rect.size());
                 }
             }
         }
@@ -616,7 +701,9 @@ impl ViewportState {
                 _ => unreachable!(),
             };
 
-            self.command_sender.send(UiCommand::ChangeWorkspace(index)).expect("sent");
+            self.command_sender
+                .send(UiCommand::ChangeWorkspace(index))
+                .expect("sent");
         }
     }
 }
@@ -626,8 +713,7 @@ pub struct ToggleDefinition {
     pub kind: PaneKind,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
-#[derive(Copy, Clone, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, Copy, Clone, Debug)]
 pub struct ToggleState {
     pub(crate) kind: PaneKind,
     pub(crate) mode: ViewMode,
@@ -635,8 +721,7 @@ pub struct ToggleState {
     pub(crate) window_size: Option<Vec2>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewMode {
     Disabled,
     Tile(ViewportId),
@@ -680,9 +765,19 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
 
         let mut dragged = false;
 
-
         if !in_tab {
-            show_panel_title_and_controls(self.viewport_id, &kind, title, self.command_sender.clone(), ui, true, true, false, &mut dragged, |_,_|());
+            show_panel_title_and_controls(
+                self.viewport_id,
+                &kind,
+                title,
+                self.command_sender.clone(),
+                ui,
+                true,
+                true,
+                false,
+                &mut dragged,
+                |_, _| (),
+            );
             ui.separator();
         }
 
@@ -723,22 +818,42 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
     }
 
     fn on_tab_close(&mut self, _tiles: &mut Tiles<PaneKind>, _tile_id: TileId) -> bool {
-
         if let Some(Tile::Pane(kind)) = _tiles.get(_tile_id) {
-            self.command_sender.send(UiCommand::ViewportUiCommand(self.viewport_id, ViewportUiCommand::ClosePanel(*kind))).expect("sent");
+            self.command_sender
+                .send(UiCommand::ViewportUiCommand(
+                    self.viewport_id,
+                    ViewportUiCommand::ClosePanel(*kind),
+                ))
+                .expect("sent");
         }
         // always deny, manually handle closing ourselves
         false
     }
 
-    fn top_bar_right_ui(&mut self, _tiles: &Tiles<PaneKind>, _ui: &mut Ui, _tile_id: TileId, _tabs: &Tabs, _scroll_offset: &mut f32) {
+    fn top_bar_right_ui(
+        &mut self,
+        _tiles: &Tiles<PaneKind>,
+        _ui: &mut Ui,
+        _tile_id: TileId,
+        _tabs: &Tabs,
+        _scroll_offset: &mut f32,
+    ) {
         if let Some(tile_id) = _tabs.active {
-
             if let Some(Tile::Pane(kind)) = _tiles.get(tile_id) {
                 let mut dragged = false;
-                show_panel_controls(self.viewport_id, &kind, self.command_sender.clone(), _ui, true, true, false, &mut dragged, |_,_|());
+                show_panel_controls(
+                    self.viewport_id,
+                    &kind,
+                    self.command_sender.clone(),
+                    _ui,
+                    true,
+                    true,
+                    false,
+                    &mut dragged,
+                    |_, _| (),
+                );
 
-                if dragged{
+                if dragged {
                     println!("set dragging, from: {:?}", _tile_id);
                     self.drag = Some(tile_id);
                 }
@@ -752,18 +867,52 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
     }
 }
 
-
-fn show_panel_title_and_controls<T>(viewport_id: ViewportId, kind: &PaneKind, title: String, sender: Sender<UiCommand>, ui: &mut Ui, show_drag_handle: bool, show_make_window: bool, show_make_tile: bool, dragged: &mut bool, controls_ui: impl FnOnce(&mut Ui, Vec2) -> T) -> T {
-    let (_, result) = egui::Sides::new().show(ui, |ui| {
-        ui.add(egui::Label::new(title).selectable(false));
-    }, |ui| {
-        show_panel_controls(viewport_id, kind, sender, ui, show_drag_handle, show_make_window, show_make_tile, dragged, controls_ui)
-    });
+fn show_panel_title_and_controls<T>(
+    viewport_id: ViewportId,
+    kind: &PaneKind,
+    title: String,
+    sender: Sender<UiCommand>,
+    ui: &mut Ui,
+    show_drag_handle: bool,
+    show_make_window: bool,
+    show_make_tile: bool,
+    dragged: &mut bool,
+    controls_ui: impl FnOnce(&mut Ui, Vec2) -> T,
+) -> T {
+    let (_, result) = egui::Sides::new().show(
+        ui,
+        |ui| {
+            ui.add(egui::Label::new(title).selectable(false));
+        },
+        |ui| {
+            show_panel_controls(
+                viewport_id,
+                kind,
+                sender,
+                ui,
+                show_drag_handle,
+                show_make_window,
+                show_make_tile,
+                dragged,
+                controls_ui,
+            )
+        },
+    );
 
     result
 }
 
-fn show_panel_controls<T>(viewport_id: ViewportId, kind: &PaneKind, sender: Sender<UiCommand>, ui: &mut Ui, show_drag_handle: bool, show_make_window: bool, show_make_tile: bool, dragged: &mut bool, controls_ui: impl FnOnce(&mut Ui, Vec2) -> T) -> T {
+fn show_panel_controls<T>(
+    viewport_id: ViewportId,
+    kind: &PaneKind,
+    sender: Sender<UiCommand>,
+    ui: &mut Ui,
+    show_drag_handle: bool,
+    show_make_window: bool,
+    show_make_tile: bool,
+    dragged: &mut bool,
+    controls_ui: impl FnOnce(&mut Ui, Vec2) -> T,
+) -> T {
     let button_width = MIN_TOUCH_SIZE.x;
 
     let desired = ui
@@ -781,34 +930,58 @@ fn show_panel_controls<T>(viewport_id: ViewportId, kind: &PaneKind, sender: Send
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         ui.allocate_space(Vec2::new(0.0, button_size.y));
-        if ui.add_sized(button_size, egui::Button::new("🗙")).clicked() {
-            sender.send(UiCommand::ViewportUiCommand(viewport_id, ViewportUiCommand::SetPanelMode(*kind, ViewMode::Disabled))).expect("sent");
+        if ui
+            .add_sized(button_size, egui::Button::new("🗙"))
+            .clicked()
+        {
+            sender
+                .send(UiCommand::ViewportUiCommand(
+                    viewport_id,
+                    ViewportUiCommand::SetPanelMode(*kind, ViewMode::Disabled),
+                ))
+                .expect("sent");
         }
         if show_make_tile {
-            if ui.add_sized(button_size, egui::Button::new("🗕")).clicked() {
-                sender.send(UiCommand::ViewportUiCommand(viewport_id, ViewportUiCommand::SetPanelMode(*kind, ViewMode::Tile(viewport_id)))).expect("sent");
+            if ui
+                .add_sized(button_size, egui::Button::new("🗕"))
+                .clicked()
+            {
+                sender
+                    .send(UiCommand::ViewportUiCommand(
+                        viewport_id,
+                        ViewportUiCommand::SetPanelMode(*kind, ViewMode::Tile(viewport_id)),
+                    ))
+                    .expect("sent");
             }
         }
         if show_make_window {
-            if ui.add_sized(button_size, egui::Button::new("🗖")).clicked() {
-                sender.send(UiCommand::ViewportUiCommand(viewport_id, ViewportUiCommand::SetPanelMode(*kind, ViewMode::Window(viewport_id)))).expect("sent");
+            if ui
+                .add_sized(button_size, egui::Button::new("🗖"))
+                .clicked()
+            {
+                sender
+                    .send(UiCommand::ViewportUiCommand(
+                        viewport_id,
+                        ViewportUiCommand::SetPanelMode(*kind, ViewMode::Window(viewport_id)),
+                    ))
+                    .expect("sent");
             }
         }
         if show_drag_handle {
-            if ui.add_sized(button_size, egui::Button::new("✋")
-                .sense(Sense::click_and_drag())
-            )
+            if ui
+                .add_sized(button_size, egui::Button::new("✋").sense(Sense::click_and_drag()))
                 .on_hover_cursor(egui::CursorIcon::Grab)
-                .dragged() {
+                .dragged()
+            {
                 *dragged = true;
             }
         }
         let result = controls_ui(ui, button_size);
 
         result
-    }).inner
+    })
+    .inner
 }
-
 
 /// Persisted
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -816,20 +989,53 @@ fn show_panel_controls<T>(viewport_id: ViewportId, kind: &PaneKind, sender: Send
 pub struct WorkspaceConfig {
     pub(crate) toggle_states: Vec<ToggleState>,
     pub(crate) left_toggles: Vec<PaneKind>,
-    pub(crate) viewport_configs: HashMap<ViewportId, ViewportTreeConfig>
+    pub(crate) viewport_configs: HashMap<ViewportId, ViewportTreeConfig>,
 }
 
 impl Default for WorkspaceConfig {
     fn default() -> Self {
-        let left_toggles = TOGGLE_DEFINITIONS.iter().map(|candidate| candidate.kind).collect::<Vec<_>>();
+        let left_toggles = TOGGLE_DEFINITIONS
+            .iter()
+            .map(|candidate| candidate.kind)
+            .collect::<Vec<_>>();
 
         let toggle_states = vec![
-            ToggleState { mode: ViewMode::Tile(ViewportId::ROOT), kind: PaneKind::Camera, window_position: None, window_size: None },
-            ToggleState { mode: ViewMode::Tile(ViewportId::ROOT), kind: PaneKind::Controls, window_position: None, window_size: None },
-            ToggleState { mode: ViewMode::Window(ViewportId::ROOT), kind: PaneKind::Diagnostics, window_position: None, window_size: None },
-            ToggleState { mode: ViewMode::Disabled, kind: PaneKind::Plot, window_position: None, window_size: None },
-            ToggleState { mode: ViewMode::Window(ViewportId::ROOT), kind: PaneKind::Settings, window_position: None, window_size: None },
-            ToggleState { mode: ViewMode::Tile(ViewportId::ROOT), kind: PaneKind::Status, window_position: None, window_size: None },
+            ToggleState {
+                mode: ViewMode::Tile(ViewportId::ROOT),
+                kind: PaneKind::Camera,
+                window_position: None,
+                window_size: None,
+            },
+            ToggleState {
+                mode: ViewMode::Tile(ViewportId::ROOT),
+                kind: PaneKind::Controls,
+                window_position: None,
+                window_size: None,
+            },
+            ToggleState {
+                mode: ViewMode::Window(ViewportId::ROOT),
+                kind: PaneKind::Diagnostics,
+                window_position: None,
+                window_size: None,
+            },
+            ToggleState {
+                mode: ViewMode::Disabled,
+                kind: PaneKind::Plot,
+                window_position: None,
+                window_size: None,
+            },
+            ToggleState {
+                mode: ViewMode::Window(ViewportId::ROOT),
+                kind: PaneKind::Settings,
+                window_position: None,
+                window_size: None,
+            },
+            ToggleState {
+                mode: ViewMode::Tile(ViewportId::ROOT),
+                kind: PaneKind::Status,
+                window_position: None,
+                window_size: None,
+            },
         ];
 
         Self {
@@ -864,15 +1070,20 @@ pub enum WorkspaceError {
 }
 
 impl Workspaces {
-
     pub fn add_viewport(&mut self, viewport_id: ViewportId) {
         for workspace in self.workspaces.iter_mut() {
-            workspace.lock().unwrap().viewport_configs.insert(viewport_id, ViewportTreeConfig::default());
+            workspace
+                .lock()
+                .unwrap()
+                .viewport_configs
+                .insert(viewport_id, ViewportTreeConfig::default());
         }
     }
 
     pub fn active(&mut self) -> ValueGuard<'_, WorkspaceConfig> {
-        self.workspaces[self.active_workspace].lock().unwrap()
+        self.workspaces[self.active_workspace]
+            .lock()
+            .unwrap()
     }
 
     pub fn active_index(&mut self) -> usize {
@@ -881,10 +1092,10 @@ impl Workspaces {
 
     pub fn set_active(&mut self, index: usize) -> Result<(), WorkspaceError> {
         if index >= self.workspaces.len() {
-            return Err(WorkspaceError::InvalidWorkspaceIndex)
+            return Err(WorkspaceError::InvalidWorkspaceIndex);
         }
         if index == self.active_workspace {
-            return Err(WorkspaceError::AlreadyActive)
+            return Err(WorkspaceError::AlreadyActive);
         }
         self.active_workspace = index;
 
@@ -892,7 +1103,6 @@ impl Workspaces {
     }
 
     pub fn clone_active(&mut self) -> usize {
-
         let cloned = {
             let active = self.active();
             Value::new((*active).clone())
@@ -901,12 +1111,12 @@ impl Workspaces {
         self.workspaces.len() - 1
     }
 
-    pub fn remove(&mut self, index: usize) -> Result<(), WorkspaceError>{
+    pub fn remove(&mut self, index: usize) -> Result<(), WorkspaceError> {
         if index >= self.workspaces.len() {
-            return Err(WorkspaceError::InvalidWorkspaceIndex)
+            return Err(WorkspaceError::InvalidWorkspaceIndex);
         }
         if index == self.active_workspace {
-            return Err(WorkspaceError::CannotRemoveActiveWorkspace)
+            return Err(WorkspaceError::CannotRemoveActiveWorkspace);
         }
 
         self.workspaces.remove(index);
@@ -920,7 +1130,16 @@ impl Workspaces {
 }
 
 pub(crate) fn kind_key(kind: &PaneKind) -> &str {
-    TOGGLE_DEFINITIONS.iter().find_map(|candidate| if candidate.kind == *kind { Some(candidate.key) } else { None }).unwrap()
+    TOGGLE_DEFINITIONS
+        .iter()
+        .find_map(|candidate| {
+            if candidate.kind == *kind {
+                Some(candidate.key)
+            } else {
+                None
+            }
+        })
+        .unwrap()
 }
 
 //

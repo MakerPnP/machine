@@ -1,6 +1,7 @@
 use egui::{Context, ThemePreference, ViewportId};
 use egui_mobius::Value;
 use tracing::trace;
+
 use crate::app::{AppState, PaneKind};
 use crate::config::Config;
 use crate::task::Task;
@@ -60,9 +61,10 @@ pub fn handle_command(
         }
         UiCommand::ViewportUiCommand(id, command) => {
             let viewports = viewports.lock().unwrap();
-            if let Some(viewport) = viewports.iter().find(|candidate| {
-                candidate.lock().unwrap().id == id
-            }) {
+            if let Some(viewport) = viewports
+                .iter()
+                .find(|candidate| candidate.lock().unwrap().id == id)
+            {
                 let action = viewport.lock().unwrap().update(command);
                 match action {
                     None => Task::none(),
@@ -75,9 +77,7 @@ pub fn handle_command(
         UiCommand::CloseViewport(id) => {
             let mut viewports = viewports.lock().unwrap();
 
-            viewports.retain(|candidate|{
-                candidate.lock().unwrap().id != id
-            });
+            viewports.retain(|candidate| candidate.lock().unwrap().id != id);
 
             Task::none()
         }
@@ -91,7 +91,13 @@ pub fn handle_command(
             if workspaces.set_active(index).is_ok() {
                 for viewport in viewports.lock().unwrap().iter() {
                     let viewport_id = viewport.lock().unwrap().id;
-                    app_state.command_sender.send(UiCommand::ViewportUiCommand(viewport_id, ViewportUiCommand::WorkspaceChanged(index))).expect("sent");
+                    app_state
+                        .command_sender
+                        .send(UiCommand::ViewportUiCommand(
+                            viewport_id,
+                            ViewportUiCommand::WorkspaceChanged(index),
+                        ))
+                        .expect("sent");
                 }
             }
             Task::none()

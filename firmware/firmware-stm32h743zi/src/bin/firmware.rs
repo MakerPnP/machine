@@ -8,6 +8,7 @@
 extern crate alloc;
 
 use core::ptr;
+
 use cortex_m_rt::entry;
 use defmt::*;
 use embassy_executor::SendSpawner;
@@ -34,9 +35,7 @@ use ioboard_main::stepper::Stepper;
 use ioboard_trace::tracepin;
 #[cfg(feature = "tracepin")]
 use ioboard_trace::tracepin::TracePins;
-
 use static_cell::StaticCell;
-
 use {defmt_rtt as _, panic_probe as _};
 
 use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
@@ -336,7 +335,6 @@ fn init_heap() {
 #[unsafe(no_mangle)]
 //pub static __stack_chk_guard: usize = 0b10101010101010101010101010101010;
 pub static __stack_chk_guard: usize = 0b01010101010101010101010101010101;
-
 
 #[unsafe(no_mangle)]
 extern "C" fn __stack_chk_fail() {

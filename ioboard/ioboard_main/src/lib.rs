@@ -7,15 +7,14 @@ pub mod stepper;
 use alloc::vec::Vec;
 
 use defmt::info;
+use embassy_time::{Duration, Instant, Ticker, Timer};
 use ioboard_trace::tracepin;
 use libm::round;
 use rsruckig::prelude::*;
-use embassy_time::{Duration, Instant, Ticker, Timer};
+
 use crate::stepper::{Stepper, StepperDirection, StepperError};
 
-pub async fn run<STEPPER: Stepper>(
-    mut stepper: STEPPER,
-) {
+pub async fn run<STEPPER: Stepper>(mut stepper: STEPPER) {
     let step_frequency_khz = 20_000;
     let step_period_us = 1_000_000 / step_frequency_khz;
     let step_pulse_width_us = 4;
@@ -76,10 +75,7 @@ pub async fn run<STEPPER: Stepper>(
     }
 }
 
-async fn run_simple_loop(
-    stepper: &mut impl Stepper,
-    move_steps: i32,
-) -> Result<(), StepperError> {
+async fn run_simple_loop(stepper: &mut impl Stepper, move_steps: i32) -> Result<(), StepperError> {
     let cycle_interval_micros = 175;
     let direction_change_delay_ms = 250;
 
@@ -242,8 +238,7 @@ async fn run_trajectory_loop(
         last_position_steps = new_position_steps;
 
         // Sleep until next RT cycle
-        cycle_ticker.next()
-            .await;
+        cycle_ticker.next().await;
     }
 
     Ok::<(), StepperError>(())
