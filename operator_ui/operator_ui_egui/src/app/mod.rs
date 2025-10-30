@@ -3,8 +3,7 @@ use egui::{Ui, Vec2, ViewportBuilder, ViewportClass, ViewportId};
 use egui_extras::install_image_loaders;
 use egui_mobius::types::{Enqueue, ValueGuard};
 use egui_mobius::{Slot, Value};
-use egui_tiles::{ContainerKind, Tile, Tiles, Tree};
-use tracing::{debug, trace};
+use tracing::trace;
 use ui::camera::CameraUi;
 use ui::controls::ControlsUi;
 use ui::diagnostics::DiagnosticsUi;
@@ -17,8 +16,7 @@ use crate::net::ergot_task;
 use crate::runtime::tokio_runtime::TokioRuntime;
 use crate::task;
 use crate::ui_commands::{UiCommand, handle_command};
-use crate::ui_common::egui_tree::{add_pane_to_root, dump_tiles};
-use crate::workspace::{ToggleDefinition, ToggleState, ViewMode, ViewportState, Workspaces};
+use crate::workspace::{ToggleDefinition, ViewportState, Workspaces};
 
 mod ui;
 
