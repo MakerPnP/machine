@@ -623,25 +623,48 @@ impl ViewportState {
 
             let mut dump_position = false;
 
-            let mut window = egui::Window::new(&title).title_bar(false);
+            // XXX failing to track window sizes, cleanup commented-out/unused code below.
 
-            for applicable_action in applicable_actions {
-                match applicable_action {
-                    ViewportAction::RepositionWindow(kind, position, size) if kind == toggle_state.kind => {
-                        debug!(
-                            "repositioning window. kind: {:?}, rect: {:?}",
-                            kind,
-                            Rect::from_min_size(position, size)
-                        );
-                        dump_position = true;
-                        window = window
-                            .current_pos(position)
-                            .fixed_size(size)
-                            .default_pos(position)
-                            .default_size(size);
+            let style = &ctx.style();
+
+            let mut window = egui::Window::new(&title)
+                // .frame(Frame::NONE)
+                // .frame(Frame::group(&ctx.style()))
+                // .frame(Frame::new()
+                //     .fill(style.visuals.panel_fill)
+                    //.inner_margin(style.spacing.window_margin)
+                    //.stroke(style.visuals.window_stroke)
+                    //.shadow(style.visuals.window_shadow)
+                // )
+                .title_bar(false);
+
+            if true {
+                for applicable_action in applicable_actions {
+                    match applicable_action {
+                        ViewportAction::RepositionWindow(kind, position, size) if kind == toggle_state.kind => {
+                            debug!(
+                                "repositioning window. kind: {:?}, rect: {:?}",
+                                kind,
+                                Rect::from_min_size(position, size)
+                            );
+                            dump_position = true;
+                            window = window
+                                .current_pos(position)
+                                .fixed_size(size)
+                            // .default_pos(position)
+                            // .default_size(size);
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
+            } else {
+                let mut workspaces = self.workspaces.lock().unwrap();
+                let mut workspace = workspaces.active();
+                let meh = workspace.toggle_states[toggle_index];
+
+                window = window
+                    .current_pos(meh.window_position.unwrap())
+                    .fixed_size(meh.window_size.unwrap())
             }
 
             let window = window.resizable(true).show(ctx, |ui| {
@@ -710,15 +733,12 @@ impl ViewportState {
                     let mut workspaces = self.workspaces.lock().unwrap();
                     let mut workspace = workspaces.active();
 
-                    // There's no API to get the window size in egui, and the rect contains the shadow size too
-                    // so we have to undo that.
-                    let window_rect_with_shadow = window.response.rect;
-                    let actual_rect = window_rect_with_shadow
-                        - ctx
-                            .style()
-                            .visuals
-                            .window_shadow
-                            .margin();
+                    // There's no API to get the window size in egui
+                    let bad_window_rect = window.response.rect;
+                    // TODO magically calculate the actual size of the window
+                    //      the rect seeming contains the shadow, margin size and stroke from the frame
+                    //      currently it's unknown how to reverse the calculations.
+                    let mut actual_rect = bad_window_rect;
 
                     workspace.toggle_states[toggle_index]
                         .window_position
