@@ -623,19 +623,41 @@ impl ViewportState {
 
             let mut dump_position = false;
 
-            // XXX failing to track window sizes, cleanup commented-out/unused code below.
-
             let style = &ctx.style();
 
+            let window_id = ui_id.with(kind_key);
+            ctx.memory(|memory| {
+                if let Some(rect) = memory.area_rect(window_id) {
+                    let mut workspaces = self.workspaces.lock().unwrap();
+                    let mut workspace = workspaces.active();
+
+                    workspace.toggle_states[toggle_index]
+                        .window_position
+                        .replace(rect.min);
+
+                    let window_size = rect.size()
+                        - style.spacing.window_margin.sum()
+                        //- style.visuals.window_shadow.margin().right_bottom() / 2.0
+                        - Vec2::splat(style.visuals.window_stroke.width * 2.0);
+                    workspace.toggle_states[toggle_index]
+                        .window_size
+                        .replace(window_size);
+                }
+            });
+            // XXX failing to track window sizes, cleanup commented-out/unused code below.
+
+
             let mut window = egui::Window::new(&title)
+                .id(window_id)
                 // .frame(Frame::NONE)
-                // .frame(Frame::group(&ctx.style()))
-                // .frame(Frame::new()
-                //     .fill(style.visuals.panel_fill)
-                    //.inner_margin(style.spacing.window_margin)
-                    //.stroke(style.visuals.window_stroke)
-                    //.shadow(style.visuals.window_shadow)
-                // )
+                .frame(
+                    Frame::new()
+                        .fill(style.visuals.panel_fill)
+                        .inner_margin(style.spacing.window_margin)
+                        .stroke(style.visuals.window_stroke)
+                        .shadow(style.visuals.window_shadow)
+                        .corner_radius(style.visuals.window_corner_radius),
+                )
                 .title_bar(false);
 
             if true {
@@ -725,7 +747,7 @@ impl ViewportState {
                     );
                 }
 
-                {
+                if false {
                     // IMPORTANT we can't just use the `toggle_state` from the loop iterator.
                     // a) because it was cloned
                     // b) because a message could have been sent to the app to change the window into a tile
