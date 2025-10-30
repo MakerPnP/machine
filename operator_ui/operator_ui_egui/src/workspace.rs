@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use eframe::emath::{NumExt, Pos2, Vec2};
 use eframe::epaint::ahash::HashMap;
 use eframe::epaint::{Color32, CornerRadius};
-use egui::{Frame, Id, Image, Rect, Sense, ThemePreference, Ui, ViewportId, WidgetText};
+use egui::{Context, Frame, Id, Image, Rect, Sense, ThemePreference, Ui, ViewportId, WidgetText};
 use egui_i18n::tr;
 use egui_mobius::Value;
 use egui_mobius::types::{Enqueue, ValueGuard};
@@ -15,6 +15,44 @@ use crate::ui_commands::{UiCommand, ViewportUiAction, ViewportUiCommand};
 use crate::ui_common::egui::bring_window_to_front;
 use crate::ui_common::egui_tree::{add_pane_to_root, dump_tiles};
 use crate::{LOGO, app};
+
+#[derive(serde::Deserialize, serde::Serialize, Default, Clone)]
+#[serde(default)]
+pub struct ViewportConfig {
+    pub(crate) position: Option<Pos2>,
+    pub(crate) inner_size: Option<Vec2>,
+}
+
+impl ViewportConfig {
+    pub fn update_size_and_position(&mut self, ctx: &Context) {
+        let viewport_id = ctx.viewport_id();
+        let viewport_frame_number = ctx.cumulative_frame_nr_for(viewport_id);
+
+        let (new_position, new_inner_size) = {
+            let maybe_position = ctx.input(|i| i.viewport().outer_rect.map(|it| it.min));
+            (maybe_position, Some(ctx.content_rect().size()))
+        };
+        debug!(
+            "viewport: {:?}, frame: {}, position: {:?}, size: {:?}",
+            viewport_id, viewport_frame_number, new_position, new_inner_size
+        );
+
+        if new_position != self.position {
+            debug!(
+                "viewport: {:?}, position: [old: {:?}, new: {:?}]",
+                viewport_id, self.position, new_position
+            );
+            self.position = new_position;
+        }
+        if new_inner_size != self.inner_size {
+            debug!(
+                "viewport: {:?}, inner_size: [old: {:?}, new: {:?}]",
+                viewport_id, self.inner_size, new_inner_size
+            );
+            self.inner_size = new_inner_size;
+        }
+    }
+}
 
 /// Stores the tree of panes, and the state of each pane (position, size, etc)
 ///
@@ -106,9 +144,6 @@ pub struct ViewportState {
     pub(crate) workspaces: Value<Workspaces>,
     pub(crate) context: Option<egui::Context>,
     pub(crate) ui_state: Value<UiState>,
-
-    pub(crate) position: Option<Pos2>,
-    pub(crate) inner_size: Option<Vec2>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -126,7 +161,7 @@ impl ViewportState {
         workspaces
             .lock()
             .unwrap()
-            .add_viewport(id);
+            .ensure_viewport(id);
 
         Self {
             command_sender: command_sender.clone(),
@@ -136,8 +171,6 @@ impl ViewportState {
             workspaces,
             context: None,
             ui_state,
-            position: None,
-            inner_size: None,
         }
     }
 
@@ -254,7 +287,7 @@ impl ViewportState {
 
             // temporarily remove to satisfy the borrow checker
             let mut workspace_viewport_config = workspace
-                .viewport_configs
+                .viewport_tree_configs
                 .remove(&self.id)
                 .unwrap();
 
@@ -284,7 +317,7 @@ impl ViewportState {
             workspace_viewport_config.update_tree(self.id, workspace.toggle_states.as_slice());
 
             workspace
-                .viewport_configs
+                .viewport_tree_configs
                 .insert(self.id, workspace_viewport_config);
         }
 
@@ -402,7 +435,7 @@ impl ViewportState {
                 ui.vertical(|ui| {
                     let mut workspaces = self.workspaces.lock().unwrap();
                     let mut workspace = workspaces.active();
-                    let mut workspace_viewport_config = workspace.viewport_configs.remove(&self.id).unwrap();
+                    let mut workspace_viewport_tree_config = workspace.viewport_tree_configs.remove(&self.id).unwrap();
 
                     egui::ScrollArea::both()
                         // FIXME the 4.0 is a guess at the height of a separator and margins and such
@@ -496,15 +529,15 @@ impl ViewportState {
                     match request_make_visible {
                         Some(toggle_state) if matches!(toggle_state.mode, ViewMode::Tile(r_viewport_id) if r_viewport_id == self.id) => {
 
-                            let tile_id = workspace_viewport_config.tree.tiles.find_pane( &toggle_state.kind).unwrap();
-                            workspace_viewport_config.tree.make_active( |candidate_id, _tile | candidate_id == tile_id);
+                            let tile_id = workspace_viewport_tree_config.tree.tiles.find_pane( &toggle_state.kind).unwrap();
+                            workspace_viewport_tree_config.tree.make_active( |candidate_id, _tile | candidate_id == tile_id);
 
 
                         }
                         _ => {}
                     }
 
-                    workspace.viewport_configs.insert(self.id, workspace_viewport_config);
+                    workspace.viewport_tree_configs.insert(self.id, workspace_viewport_tree_config);
 
                     egui::Frame::new()
                         .outer_margin(0.0)
@@ -541,7 +574,7 @@ impl ViewportState {
                 let mut workspace = workspaces.active();
 
                 let workspace_viewport_config = workspace
-                    .viewport_configs
+                    .viewport_tree_configs
                     .get_mut(&self.id)
                     .unwrap();
 
@@ -997,7 +1030,8 @@ fn show_panel_controls<T>(
 pub struct WorkspaceConfig {
     pub(crate) toggle_states: Vec<ToggleState>,
     pub(crate) left_toggles: Vec<PaneKind>,
-    pub(crate) viewport_configs: HashMap<ViewportId, ViewportTreeConfig>,
+    pub(crate) viewport_tree_configs: HashMap<ViewportId, ViewportTreeConfig>,
+    pub(crate) viewport_configs: HashMap<ViewportId, ViewportConfig>,
 }
 
 impl Default for WorkspaceConfig {
@@ -1049,6 +1083,7 @@ impl Default for WorkspaceConfig {
         Self {
             left_toggles,
             toggle_states,
+            viewport_tree_configs: Default::default(),
             viewport_configs: Default::default(),
         }
     }
@@ -1078,13 +1113,26 @@ pub enum WorkspaceError {
 }
 
 impl Workspaces {
-    pub fn add_viewport(&mut self, viewport_id: ViewportId) {
+    pub fn ensure_viewport(&mut self, viewport_id: ViewportId) {
         for workspace in self.workspaces.iter_mut() {
-            workspace
-                .lock()
-                .unwrap()
+            let mut workspace = workspace.lock().unwrap();
+
+            if !workspace
+                .viewport_tree_configs
+                .contains_key(&viewport_id)
+            {
+                workspace
+                    .viewport_tree_configs
+                    .insert(viewport_id, ViewportTreeConfig::default());
+            }
+            if !workspace
                 .viewport_configs
-                .insert(viewport_id, ViewportTreeConfig::default());
+                .contains_key(&viewport_id)
+            {
+                workspace
+                    .viewport_configs
+                    .insert(viewport_id, ViewportConfig::default());
+            }
         }
     }
 
