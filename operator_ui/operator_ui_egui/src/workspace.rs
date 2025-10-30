@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use eframe::emath::{NumExt, Pos2, Vec2};
 use eframe::epaint::ahash::HashMap;
 use eframe::epaint::{Color32, CornerRadius};
-use egui::{Frame, Image, Rect, Sense, ThemePreference, Ui, ViewportId, WidgetText};
+use egui::{Frame, Id, Image, Rect, Sense, ThemePreference, Ui, ViewportId, WidgetText};
 use egui_i18n::tr;
 use egui_mobius::Value;
 use egui_mobius::types::{Enqueue, ValueGuard};
@@ -232,6 +232,9 @@ impl ViewportState {
     }
 
     pub fn ui(&mut self, ctx: &egui::Context) {
+
+        let ui_id = Id::from(self.id);
+
         let mut first_frame = false;
         if self.context.is_none() {
             self.context.replace(ctx.clone());
@@ -290,7 +293,7 @@ impl ViewportState {
         let sender = self.command_sender.clone();
 
         if self.id == ViewportId::ROOT {
-            egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            egui::TopBottomPanel::top(ui_id.with("top_panel")).show(ctx, |ui| {
                 egui::MenuBar::new().ui(ui, |ui| {
                     egui::Sides::new().show(
                         ui,
@@ -389,7 +392,7 @@ impl ViewportState {
 
         let mut request_make_visible: Option<ToggleState> = None;
 
-        egui::SidePanel::left("left_panel")
+        egui::SidePanel::left(ui_id.with("left_panel"))
             .min_width(MIN_TOUCH_SIZE.x * 2.0)
             .max_width(200.0)
             .resizable(true)
