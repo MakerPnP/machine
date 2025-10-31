@@ -17,9 +17,6 @@ pub enum UiCommand {
     ViewportUiCommand(ViewportId, ViewportUiCommand),
     CloseViewport(ViewportId),
     ChangeWorkspace(usize),
-
-    // internal
-    RefreshAllViewports,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +26,7 @@ pub enum ViewportUiCommand {
 
     // internal
     WorkspaceChanged(usize),
+    Refresh,
 }
 
 pub enum ViewportUiAction {
@@ -43,6 +41,15 @@ pub fn handle_command(
     viewports: Value<Vec<Value<ViewportState>>>,
     ui_context: Context,
 ) -> Task<UiCommand> {
+    ui_context.request_repaint();
+    {
+        let viewports = viewports.lock().unwrap();
+        for viewport in viewports.iter() {
+            let id = viewport.lock().unwrap().id;
+            ui_context.request_repaint_of(id);
+        }
+    }
+
     trace!("Handling command: {:?}", command);
 
     match command {
@@ -80,9 +87,6 @@ pub fn handle_command(
             viewports.retain(|candidate| candidate.lock().unwrap().id != id);
 
             Task::none()
-        }
-        UiCommand::RefreshAllViewports => {
-            todo!()
         }
         UiCommand::ChangeWorkspace(index) => {
             let app_state = app_state.lock().unwrap();
