@@ -1,5 +1,5 @@
 use std::sync::mpsc::Sender;
-
+use std::time::Duration;
 use eframe::emath::{NumExt, Pos2, Vec2};
 use eframe::epaint::ahash::HashMap;
 use eframe::epaint::{Color32, CornerRadius};
