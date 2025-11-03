@@ -3,7 +3,7 @@ use eframe::{egui, App, CreationContext, Frame};
 use image::ImageFormat;
 use std::{net::SocketAddr, thread};
 use eframe::epaint::textures::TextureOptions;
-use egui::Context;
+use egui::{ColorImage, Context};
 use tokio::net::TcpStream;
 use tokio::runtime::Runtime;
 use log::{error, info, trace};
@@ -15,7 +15,7 @@ use crate::fps_stats::FpsStats;
 mod fps_stats;
 const SERVER_ADDR: &str = "127.0.0.1:5000";
 
-fn start_network_thread(tx_out: Sender<Vec<u8>>, context: Context) {
+fn start_network_thread(tx_out: Sender<ColorImage>, context: Context) {
     // run a tokio runtime in background thread
     thread::spawn(move || {
         let rt = Runtime::new().expect("create tokio runtime");
@@ -27,7 +27,7 @@ fn start_network_thread(tx_out: Sender<Vec<u8>>, context: Context) {
     });
 }
 
-async fn network_task(addr: &str, tx_out: Sender<Vec<u8>>, context: Context) -> anyhow::Result<()> {
+async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context) -> anyhow::Result<()> {
     use tokio::io::AsyncReadExt;
     let socket_addr: SocketAddr = addr.parse()?;
 
@@ -44,7 +44,7 @@ async fn network_task(addr: &str, tx_out: Sender<Vec<u8>>, context: Context) -> 
 
         stream.set_nodelay(true)?;
 
-        async fn run_loop(stream: &mut TcpStream, tx_out: &Sender<Vec<u8>>, context: &Context) -> Result<(), anyhow::Error> {
+        async fn run_loop(stream: &mut TcpStream, tx_out: &Sender<ColorImage>, context: &Context) -> Result<(), anyhow::Error> {
             loop {
                 // read 4-byte length
                 let mut len_buf = [0u8; 4];
@@ -52,9 +52,17 @@ async fn network_task(addr: &str, tx_out: Sender<Vec<u8>>, context: Context) -> 
                 let len = u32::from_be_bytes(len_buf) as usize;
                 let mut buf = vec![0u8; len];
                 stream.read_exact(&mut buf).await?;
-                // send to UI
+
+                // decode JPEG OFF the GUI thread
+                let color_image = tokio::task::spawn_blocking(move || -> anyhow::Result<ColorImage> {
+                    let img = image::load_from_memory_with_format(&buf, ImageFormat::Jpeg)?;
+                    let rgba = img.to_rgba8();
+                    let (w, h) = (rgba.width() as usize, rgba.height() as usize);
+                    Ok(ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw()))
+                }).await??;
+
                 // If the receiver is full, drop the frame (non-blocking)
-                tx_out.send(buf)?;
+                tx_out.send(color_image)?;
                 context.request_repaint();
             }
         }
@@ -71,7 +79,7 @@ async fn network_task(addr: &str, tx_out: Sender<Vec<u8>>, context: Context) -> 
 }
 
 struct CameraApp {
-    rx: Receiver<Vec<u8>>,
+    rx: Receiver<ColorImage>,
     texture: Option<egui::TextureHandle>,
 
     gui_fps_stats: FpsStats,
@@ -88,7 +96,7 @@ impl CameraApp {
     fn new(cc: &CreationContext) -> Self {
 
 
-        let (tx, rx) = watch::channel::<Vec<u8>>(Vec::new());
+        let (tx, rx) = watch::channel::<ColorImage>(ColorImage::default());
 
         start_network_thread(tx, cc.egui_ctx.clone());
 
@@ -119,32 +127,21 @@ impl App for CameraApp {
         }
 
         if let Ok(true) = self.rx.has_changed() {
-            let jpeg_bytes = self.rx.borrow_and_update();
+            let color_image = self.rx.borrow_and_update().clone();
             self.camera_frame_number += 1;
             self.camera_fps_snapshot = self.camera_fps_stats.update(now);
-            trace!("received frame, now: {:?}, frame_number: {}", now, self.camera_frame_number);
+            trace!("received frame, now: {:?}, frame_number: {}, snapshot: {:?}", now, self.camera_frame_number, self.camera_fps_snapshot);
 
-            if let Ok(img) = image::load_from_memory_with_format(&jpeg_bytes, ImageFormat::Jpeg) {
-                let rgba = img.to_rgba8();
-                let (w, h) = (rgba.width() as usize, rgba.height() as usize);
-                let pixels = rgba.into_raw(); // Vec<u8> RGBA
-                let color_image = egui::ColorImage::from_rgba_unmultiplied([w, h], &pixels);
-
-                if let Some(tex) = &mut self.texture {
-                    tex.set(color_image, TextureOptions::default());
-                } else {
-                    // create texture first time
-                    self.texture = Some(ctx.load_texture("camera", color_image, Default::default()));
-                }
+            if let Some(tex) = &mut self.texture {
+                tex.set(color_image, TextureOptions::default());
             } else {
-                error!("Failed to decode JPEG frame");
+                // create texture first time
+                self.texture = Some(ctx.load_texture("camera", color_image, Default::default()));
             }
         }
 
         egui::Window::new("Camera").show(ctx, |ui| {
             if let Some(tex) = &self.texture {
-                //let size = tex.size_vec2();
-                //ui.image(tex, size);
                 ui.image(tex);
             } else {
                 ui.label("Waiting for first frame...");
