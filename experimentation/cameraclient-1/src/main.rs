@@ -1,30 +1,32 @@
 // client.rs
 use crossbeam_channel::{Receiver, Sender};
-use eframe::{egui, App, Frame};
+use eframe::{egui, App, CreationContext, Frame};
 use image::ImageFormat;
 use std::{net::SocketAddr, thread};
 use eframe::epaint::textures::TextureOptions;
+use egui::Context;
 use tokio::net::TcpStream;
 use tokio::runtime::Runtime;
-use log::{error, trace};
+use log::{error, info, trace, warn};
+use crate::fps_stats::egui::show_frame_durations;
 use crate::fps_stats::FpsStats;
 
 mod fps_stats;
 const SERVER_ADDR: &str = "127.0.0.1:5000";
 
-fn start_network_thread(tx_out: crossbeam_channel::Sender<Vec<u8>>) {
+fn start_network_thread(tx_out: crossbeam_channel::Sender<Vec<u8>>, context: Context) {
     // run a tokio runtime in background thread
     thread::spawn(move || {
         let rt = Runtime::new().expect("create tokio runtime");
         rt.block_on(async move {
-            if let Err(e) = network_task(SERVER_ADDR, tx_out).await {
+            if let Err(e) = network_task(SERVER_ADDR, tx_out, context).await {
                 eprintln!("network task error: {:?}", e);
             }
         });
     });
 }
 
-async fn network_task(addr: &str, tx_out: crossbeam_channel::Sender<Vec<u8>>) -> anyhow::Result<()> {
+async fn network_task(addr: &str, tx_out: crossbeam_channel::Sender<Vec<u8>>, context: Context) -> anyhow::Result<()> {
     use tokio::io::AsyncReadExt;
     let socket_addr: SocketAddr = addr.parse()?;
 
@@ -41,8 +43,7 @@ async fn network_task(addr: &str, tx_out: crossbeam_channel::Sender<Vec<u8>>) ->
 
         stream.set_nodelay(true)?;
 
-
-        async fn run_loop(stream: &mut TcpStream, tx_out: &Sender<Vec<u8>>) -> Result<(), anyhow::Error> {
+        async fn run_loop(stream: &mut TcpStream, tx_out: &Sender<Vec<u8>>, context: &Context) -> Result<(), anyhow::Error> {
             loop {
                 // read 4-byte length
                 let mut len_buf = [0u8; 4];
@@ -53,11 +54,12 @@ async fn network_task(addr: &str, tx_out: crossbeam_channel::Sender<Vec<u8>>) ->
                 // send to UI
                 // If the receiver is full, drop the frame (non-blocking)
                 let _ = tx_out.try_send(buf);
+                context.request_repaint();
             }
             Ok(())
         }
 
-        match run_loop(&mut stream, &tx_out).await {
+        match run_loop(&mut stream, &tx_out, &context).await {
             Ok(()) => {
                 println!("Disconnected from {}", addr);
             }
@@ -83,8 +85,15 @@ struct CameraApp {
 }
 
 impl CameraApp {
-    fn new(rx: Receiver<Vec<u8>>) -> Self {
+    fn new(cc: &CreationContext) -> Self {
+
+        // bounded channel to avoid OOM; keep one frame only
+        let (tx, rx) = crossbeam_channel::bounded::<Vec<u8>>(4);
+
+        start_network_thread(tx, cc.egui_ctx.clone());
+
         Self {
+
             rx,
             texture: None,
             gui_fps_stats: FpsStats::new(300),
@@ -111,11 +120,18 @@ impl App for CameraApp {
 
         // Drain latest frame (if multiple arrived, take the most recent)
         let mut latest: Option<Vec<u8>> = None;
-        while let Ok(frame) = self.rx.try_recv() {
-            latest = Some(frame);
 
+        if let Ok(mut frame) = self.rx.try_recv() {
             self.camera_frame_number += 1;
+            // Drop old ones, keep only the most recent
+            while let Ok(next) = self.rx.try_recv() {
+                warn!("dropping old frame");
+                frame = next;
+                self.camera_frame_number += 1;
+            }
+
             self.camera_fps_snapshot = self.camera_fps_stats.update(now);
+            latest = Some(frame);
             trace!("received frame, now: {:?}, frame_number: {}", now, self.camera_frame_number);
         }
 
@@ -147,7 +163,9 @@ impl App for CameraApp {
             }
         });
 
-        egui::Window::new("Stats").show(ctx, |ui| {
+        egui::Window::new("Stats")
+            .scroll(true)
+            .show(ctx, |ui| {
             ui.group(|ui| {
                 ui.label("GUI");
                 ui.label(format!("Frame: {}", self.gui_frame_number));
@@ -159,6 +177,8 @@ impl App for CameraApp {
                         snapshot.max,
                         snapshot.avg
                     ));
+
+                    show_frame_durations(ui, &self.gui_fps_stats);
                 }
             });
             ui.separator();
@@ -173,6 +193,8 @@ impl App for CameraApp {
                         snapshot.max,
                         snapshot.avg
                     ));
+
+                    show_frame_durations(ui, &self.camera_fps_stats);
                 }
             });
         });
@@ -183,16 +205,11 @@ impl App for CameraApp {
 }
 
 fn main() -> eframe::Result {
-    // bounded channel to avoid OOM; keep one frame only
-    let (tx, rx) = crossbeam_channel::bounded::<Vec<u8>>(1);
-
-    start_network_thread(tx);
-
     let options = eframe::NativeOptions::default();
     eframe::run_native(
         "Camera Client",
         options,
-        Box::new(|_cc| Ok(Box::new(CameraApp::new(rx)))),
+        Box::new(|cc| Ok(Box::new(CameraApp::new(cc)))),
     )
 }
 
