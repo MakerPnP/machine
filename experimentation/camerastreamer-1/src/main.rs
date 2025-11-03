@@ -8,9 +8,16 @@
 /// for windows/vcpkg build using (requires msvc toolchain):
 /// `cargo build --target x86_64-pc-windows-msvc`
 /// or
-/// `rustup run stable-x86_64-pc-windows-msvc cargo build --target x86_64-pc-windows-msvc`
+/// `rustup run stable-x86_64-pc-windows-msvc cargo build --target x86_64-pc-windows-msvc --release`
 ///
 /// Note: build script copies required dlls from vcpkg into the build directory next to the .exe
+///
+/// if you need a debug build use:
+/// ```
+/// set OPENCV_DISABLE_PROBES=vcpkg_cmake
+/// rustup run stable-x86_64-pc-windows-msvc cargo build --target x86_64-pc-windows-msvc --release
+/// ```
+/// Reference: https://github.com/twistedfall/opencv-rust/issues/307
 ///
 /// no other combinations tested.
 
