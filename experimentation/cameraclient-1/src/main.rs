@@ -198,9 +198,6 @@ impl App for CameraApp {
                 }
             });
         });
-
-        // Request repaint for smooth video
-        ctx.request_repaint();
     }
 }
 
