@@ -32,6 +32,7 @@ use tokio::{
     sync::broadcast::{self, Sender},
     time::{self, Duration},
 };
+use log::{debug, error, info, trace};
 
 const ADDR: &str = "0.0.0.0:5000";
 const WIDTH: i32 = 640;
@@ -58,14 +59,14 @@ async fn main() -> Result<()> {
 
     loop {
         let (socket, peer) = listener.accept().await?;
-        println!("Client connected: {}", peer);
+        info!("Client connected: {}", peer);
         socket.set_nodelay(true)?;
         let mut rx = tx.subscribe();
         tokio::spawn(async move {
             if let Err(e) = handle_client(socket, &mut rx).await {
-                eprintln!("client {} error: {:?}", peer, e);
+                error!("client {} error: {:?}", peer, e);
             } else {
-                println!("client {} disconnected", peer);
+                info!("client {} disconnected", peer);
             }
         });
     }
@@ -111,7 +112,7 @@ async fn capture_loop(tx: Sender<Arc<Bytes>>) -> Result<()> {
         let send_end = time::Instant::now();
         let send_duration = (send_end - send_start).as_micros() as u32;
 
-        println!("now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us", time::Instant::now(), frame_number, encode_duration, send_duration);
+        trace!("now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us", time::Instant::now(), frame_number, encode_duration, send_duration);
         frame_number += 1;
     }
 }
@@ -125,7 +126,7 @@ async fn handle_client(mut socket: tokio::net::TcpStream, rx: &mut tokio::sync::
             Ok(b) => b,
             Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped_frames)) => {
                 // If lagged, try to get the next available
-                println!("lagged, trying to get next frame.  skipped: {}", skipped_frames);
+                debug!("lagged, trying to get next frame.  skipped: {}", skipped_frames);
                 continue;
             }
             Err(e) => return Err(anyhow::anyhow!(e)),
