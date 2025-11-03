@@ -87,11 +87,58 @@ fn detect_vcpkg() -> Option<PathBuf> {
 /// Copy MSVC OpenCV DLLs next to binary
 fn copy_msvc_dlls() {
     let vcpkg_root = env::var("VCPKG_ROOT").unwrap();
-    let bin_dir = PathBuf::from(&vcpkg_root).join("installed/x64-windows/bin");
-
     let out_dir = out_dir();
 
-    let dlls = [
+
+    let profile = env::var("PROFILE").unwrap(); // "debug" or "release"
+    if profile == "release" || profile == "debug" {
+        copy_opencv_release_dlls(&vcpkg_root, &out_dir);
+//    } else if profile == "debug" {
+// disabled, program crashes on startup with the libprotobufd.dll null string error.
+//        copy_opencv_debug_dlls(&vcpkg_root, out_dir);
+    } else {
+        println!("ignoring unknown profile: {}", profile);
+    }
+}
+
+#[allow(dead_code)]
+fn copy_opencv_debug_dlls(vcpkg_root: &String, out_dir: PathBuf) {
+    let bin_dir = PathBuf::from(&vcpkg_root).join("installed/x64-windows/debug/bin");
+    let debug_dlls = [
+        "opencv_world4d",
+        "libwebp",
+        "jpeg62",
+        "libwebpdecoder",
+        "libwebpmux",
+        "libwebpdemux",
+        "libpng16d",
+        "liblzma",
+        "archive",
+        "libcurl-d",
+        "tiffd",
+        "gif",
+        "openjp2",
+        "bz2d",
+        "zstd",
+        "lz4d",
+        "leptonica-1.85.0d",
+        "libcrypto-3-x64",
+        "zlibd1",
+        "szip",
+        "hdf5_D",
+        "abseil_dlld",
+        "tesseract55d",
+        "libsharpyuv",
+        "libprotobufd"
+    ];
+
+    copy_dlls(bin_dir.clone(), out_dir.clone(), &debug_dlls.iter().map(|s| s.to_string() + ".dll").collect::<Vec<_>>());
+}
+
+fn copy_opencv_release_dlls(vcpkg_root: &String, out_dir: &PathBuf) {
+    let bin_dir = PathBuf::from(&vcpkg_root).join("installed/x64-windows/bin");
+
+    let release_dlls = [
         "opencv_world4",
         "libwebp",
         "jpeg62",
@@ -102,7 +149,6 @@ fn copy_msvc_dlls() {
         "liblzma",
         "archive",
         "libcurl",
-        "libcurl-d",
         "tiff",
         "gif",
         "openjp2",
@@ -112,23 +158,15 @@ fn copy_msvc_dlls() {
         "leptonica-1.85.0",
         "libcrypto-3-x64",
         "zlib1",
-        "zlibd1",
         "szip",
         "hdf5",
-        "hdf5_D",
         "abseil_dll",
         "tesseract55",
         "libsharpyuv",
         "libprotobuf"
     ];
 
-    copy_dlls(bin_dir, out_dir.clone(), &dlls.iter().map(|s| (s.to_string() + ".dll")).collect::<Vec<_>>());
-
-    let bin_dir = PathBuf::from(&vcpkg_root).join("installed/x64-windows/debug/bin");
-
-    copy_dlls(bin_dir.clone(), out_dir.clone(), &dlls.iter().map(|s| (s.to_string() + ".dll")).collect::<Vec<_>>());
-    copy_dlls(bin_dir.clone(), out_dir.clone(), &dlls.iter().map(|s| (s.to_string() + "d.dll")).collect::<Vec<_>>());
-
+    copy_dlls(bin_dir, out_dir.clone(), &release_dlls.iter().map(|s| s.to_string() + ".dll").collect::<Vec<_>>());
 }
 
 fn copy_dlls(bin_dir: PathBuf, out_dir: PathBuf, dlls: &[String]) {
@@ -138,7 +176,7 @@ fn copy_dlls(bin_dir: PathBuf, out_dir: PathBuf, dlls: &[String]) {
 
         if src.exists() {
             fs::copy(&src, &dest).expect(&format!("Failed to copy {}", dll));
-            println!("cargo:warning=Copied {} to {}", dll, dest.display());
+            println!("cargo:info=Copied {} to {}", dll, dest.display());
         } else {
             println!("cargo:warning=DLL not found: {}", src.display());
         }
@@ -153,10 +191,10 @@ fn copy_gnu_dlls() {
     let out_dir = out_dir();
 
     let dlls = [
-        "libopencv_core.dll",
-        "libopencv_imgproc.dll",
-        "libopencv_highgui.dll",
-        "libopencv_imgcodecs.dll",
+        "libopencv_core-411.dll",
+        "libopencv_imgproc-411.dll",
+        "libopencv_highgui-411.dll",
+        "libopencv_imgcodecs-411.dll",
         "libprotobuf.dll",
     ];
 

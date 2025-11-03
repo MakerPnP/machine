@@ -1,6 +1,4 @@
 [build]
-# use build.rs for dynamic linking instructions
-build = "build.rs"
 
 # Target-specific settings
 [target.x86_64-pc-windows-gnu]
