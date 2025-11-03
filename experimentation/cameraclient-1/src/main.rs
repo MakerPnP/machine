@@ -1,5 +1,4 @@
 // client.rs
-use crossbeam_channel::{Receiver, Sender};
 use eframe::{egui, App, CreationContext, Frame};
 use image::ImageFormat;
 use std::{net::SocketAddr, thread};
@@ -7,26 +6,28 @@ use eframe::epaint::textures::TextureOptions;
 use egui::Context;
 use tokio::net::TcpStream;
 use tokio::runtime::Runtime;
-use log::{error, info, trace, warn};
+use log::{error, info, trace};
+use tokio::sync::watch;
+use tokio::sync::watch::{Receiver, Sender};
 use crate::fps_stats::egui::show_frame_durations;
 use crate::fps_stats::FpsStats;
 
 mod fps_stats;
 const SERVER_ADDR: &str = "127.0.0.1:5000";
 
-fn start_network_thread(tx_out: crossbeam_channel::Sender<Vec<u8>>, context: Context) {
+fn start_network_thread(tx_out: Sender<Vec<u8>>, context: Context) {
     // run a tokio runtime in background thread
     thread::spawn(move || {
         let rt = Runtime::new().expect("create tokio runtime");
         rt.block_on(async move {
             if let Err(e) = network_task(SERVER_ADDR, tx_out, context).await {
-                eprintln!("network task error: {:?}", e);
+                error!("network task error: {:?}", e);
             }
         });
     });
 }
 
-async fn network_task(addr: &str, tx_out: crossbeam_channel::Sender<Vec<u8>>, context: Context) -> anyhow::Result<()> {
+async fn network_task(addr: &str, tx_out: Sender<Vec<u8>>, context: Context) -> anyhow::Result<()> {
     use tokio::io::AsyncReadExt;
     let socket_addr: SocketAddr = addr.parse()?;
 
@@ -34,12 +35,12 @@ async fn network_task(addr: &str, tx_out: crossbeam_channel::Sender<Vec<u8>>, co
         let mut stream = match tokio::net::TcpStream::connect(socket_addr).await {
             Ok(s) => s,
             Err(e) => {
-                println!("Failed to connect to {}: {:?}", addr, e);
+                error!("Failed to connect to {}: {:?}", addr, e);
                 continue;
             }
         };
 
-        println!("Connected to {}", addr);
+        info!("Connected to {}", addr);
 
         stream.set_nodelay(true)?;
 
@@ -53,18 +54,17 @@ async fn network_task(addr: &str, tx_out: crossbeam_channel::Sender<Vec<u8>>, co
                 stream.read_exact(&mut buf).await?;
                 // send to UI
                 // If the receiver is full, drop the frame (non-blocking)
-                let _ = tx_out.try_send(buf);
+                tx_out.send(buf)?;
                 context.request_repaint();
             }
-            Ok(())
         }
 
         match run_loop(&mut stream, &tx_out, &context).await {
             Ok(()) => {
-                println!("Disconnected from {}", addr);
+                info!("Disconnected from {}", addr);
             }
             Err(e) => {
-                println!("Disconnected from {}, error: {}", addr, e);
+                info!("Disconnected from {}, error: {}", addr, e);
             }
         }
     }
@@ -87,8 +87,8 @@ struct CameraApp {
 impl CameraApp {
     fn new(cc: &CreationContext) -> Self {
 
-        // bounded channel to avoid OOM; keep one frame only
-        let (tx, rx) = crossbeam_channel::bounded::<Vec<u8>>(4);
+
+        let (tx, rx) = watch::channel::<Vec<u8>>(Vec::new());
 
         start_network_thread(tx, cc.egui_ctx.clone());
 
@@ -118,24 +118,12 @@ impl App for CameraApp {
             self.gui_frame_number = ctx.cumulative_frame_nr();
         }
 
-        // Drain latest frame (if multiple arrived, take the most recent)
-        let mut latest: Option<Vec<u8>> = None;
-
-        if let Ok(mut frame) = self.rx.try_recv() {
+        if let Ok(true) = self.rx.has_changed() {
+            let jpeg_bytes = self.rx.borrow_and_update();
             self.camera_frame_number += 1;
-            // Drop old ones, keep only the most recent
-            while let Ok(next) = self.rx.try_recv() {
-                warn!("dropping old frame");
-                frame = next;
-                self.camera_frame_number += 1;
-            }
-
             self.camera_fps_snapshot = self.camera_fps_stats.update(now);
-            latest = Some(frame);
             trace!("received frame, now: {:?}, frame_number: {}", now, self.camera_frame_number);
-        }
 
-        if let Some(jpeg_bytes) = latest {
             if let Ok(img) = image::load_from_memory_with_format(&jpeg_bytes, ImageFormat::Jpeg) {
                 let rgba = img.to_rgba8();
                 let (w, h) = (rgba.width() as usize, rgba.height() as usize);
