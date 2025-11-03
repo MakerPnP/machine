@@ -36,8 +36,8 @@ use tokio::{
 const ADDR: &str = "0.0.0.0:5000";
 const WIDTH: i32 = 640;
 const HEIGHT: i32 = 480;
-const FPS: u32 = 20;
-const BROADCAST_CAP: usize = 16;
+const FPS: u32 = 25;
+const BROADCAST_CAP: usize = (FPS * 2) as usize;
 
 #[tokio::main]
 async fn main() -> Result<()> {
