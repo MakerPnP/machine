@@ -35,8 +35,8 @@ use tokio::{
 use log::{debug, error, info, trace};
 
 const ADDR: &str = "0.0.0.0:5000";
-const WIDTH: i32 = 640;
-const HEIGHT: i32 = 480;
+const WIDTH: i32 = 1280;
+const HEIGHT: i32 = 720;
 const FPS: u32 = 25;
 const BROADCAST_CAP: usize = (FPS * 2) as usize;
 
@@ -112,7 +112,7 @@ async fn capture_loop(tx: Sender<Arc<Bytes>>) -> Result<()> {
         let send_end = time::Instant::now();
         let send_duration = (send_end - send_start).as_micros() as u32;
 
-        trace!("now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us", time::Instant::now(), frame_number, encode_duration, send_duration);
+        println!("now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us", time::Instant::now(), frame_number, encode_duration, send_duration);
         frame_number += 1;
     }
 }
