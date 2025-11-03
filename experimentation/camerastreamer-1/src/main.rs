@@ -25,7 +25,7 @@
 // server.rs
 use anyhow::Result;
 use bytes::Bytes;
-use opencv::{core, imgcodecs, prelude::*, videoio};
+use opencv::{imgcodecs, prelude::*, videoio};
 use std::sync::Arc;
 use tokio::{
     net::TcpListener,
@@ -81,6 +81,7 @@ async fn capture_loop(tx: Sender<Arc<Bytes>>) -> Result<()> {
 
     let period = Duration::from_millis((1000u32 / FPS) as u64);
     let mut interval = time::interval(period);
+    let mut frame_number = 0_usize;
     loop {
         interval.tick().await;
         let mut frame = Mat::default();
@@ -91,14 +92,26 @@ async fn capture_loop(tx: Sender<Arc<Bytes>>) -> Result<()> {
         }
 
         // Encode to JPEG (quality default). You can set params to reduce quality/size.
+        let encode_start = time::Instant::now();
         let mut buf = opencv::core::Vector::new();
         let params = opencv::core::Vector::new(); // default
         imgcodecs::imencode(".jpg", &frame, &mut buf, &params)?;
+
+        let encode_end = time::Instant::now();
+        let encode_duration = (encode_end - encode_start).as_micros() as u32;
+
+        let send_start = time::Instant::now();
 
         // Wrap bytes into Arc so broadcast clones cheap
         let bytes = Arc::new(Bytes::from(buf.to_vec()));
         // Ignore send error (no subscribers)
         let _ = tx.send(bytes);
+
+        let send_end = time::Instant::now();
+        let send_duration = (send_end - send_start).as_micros() as u32;
+
+        println!("now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us", time::Instant::now(), frame_number, encode_duration, send_duration);
+        frame_number += 1;
     }
 }
 
@@ -109,8 +122,9 @@ async fn handle_client(mut socket: tokio::net::TcpStream, rx: &mut tokio::sync::
         // Receive latest frame (await)
         let bytes = match rx.recv().await {
             Ok(b) => b,
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped_frames)) => {
                 // If lagged, try to get the next available
+                println!("lagged, trying to get next frame.  skipped: {}", skipped_frames);
                 continue;
             }
             Err(e) => return Err(anyhow::anyhow!(e)),
