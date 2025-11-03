@@ -47,14 +47,23 @@ fn configure_windows_msys2_gnu() {
     let libs = [
         "opencv_core",
         "opencv_imgproc",
-        "opencv_highgui",
         "opencv_imgcodecs",
+        "opencv_videoio",
     ];
     for lib in &libs {
         println!("cargo:rustc-link-lib=dylib={}", lib);
     }
 
+    println!("cargo:rustc-link-lib=dylib=stdc++");
+
+    // link Windows system libs
+    for lib in ["winmm", "gdi32", "comctl32", "ole32", "uuid", "ws2_32", "opengl32", "shell32"] {
+        println!("cargo:rustc-link-lib=dylib={}", lib);
+    }
+
     println!("cargo:rerun-if-changed={}", lib_dir.display());
+
+    //panic!("DIE")
 }
 
 /// Try to find MSYS2 root from PATH

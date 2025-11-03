@@ -1,7 +1,18 @@
-/// for windows/msys2/ucrt64 build using:
+/// for windows/msys2/ucrt64 build (requires gnu toolchain):
 /// `cargo build --target x86_64-pc-windows-gnu`
-/// for windows/vcpkg build using:
+/// or:
+/// `rustup run stable-x86_64-pc-windows-gnu cargo build --target x86_64-pc-windows-gnu`
+///
+/// run resulting binary only from msys2 environment, requires msys2 .dlls in the path.
+///
+/// for windows/vcpkg build using (requires msvc toolchain):
 /// `cargo build --target x86_64-pc-windows-msvc`
+/// or
+/// `rustup run stable-x86_64-pc-windows-msvc cargo build --target x86_64-pc-windows-msvc`
+///
+/// Note: build script copies required dlls from vcpkg into the build directory next to the .exe
+///
+/// no other combinations tested.
 
 
 // server.rs
