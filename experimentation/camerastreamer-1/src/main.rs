@@ -59,6 +59,7 @@ async fn main() -> Result<()> {
     loop {
         let (socket, peer) = listener.accept().await?;
         println!("Client connected: {}", peer);
+        socket.set_nodelay(true)?;
         let mut rx = tx.subscribe();
         tokio::spawn(async move {
             if let Err(e) = handle_client(socket, &mut rx).await {
