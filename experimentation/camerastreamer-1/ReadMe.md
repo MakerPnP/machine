@@ -53,7 +53,7 @@ create environment variable `VCPKG_HOME` with value `D:\Programs\vcpkg`
 
 add the `%VCPKG_HOME%` to the `PATH` environment variable.
 
-#### Install OpenCV 
+#### Install OpenCV
 
 ##### Via vcpkg
 
@@ -89,6 +89,18 @@ or for static build (for .lib files)
 ```
 vcpkg install opencv[contrib,world]:x64-windows-static
 ```
+
+##### Issues
+
+###### Error `(exit code: 0xc0000135, STATUS_DLL_NOT_FOUND)`
+
+When using release mode non-static linking on builds work fine, but debug builds fail with this error.
+
+for a working debug build this environement variable needs to be set prior to building:
+
+`OPENCV_DISABLE_PROBES=vcpkg_cmake`
+
+Reference: https://github.com/twistedfall/opencv-rust/issues/307
 
 ##### Manually
 

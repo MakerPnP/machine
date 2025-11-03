@@ -28,6 +28,18 @@ fn configure_windows_msvc() {
     println!("cargo:include={}", include_dir.display());
 
     println!("cargo:rerun-if-changed={}", lib_dir.display());
+
+    // https://github.com/twistedfall/opencv-rust/issues/307
+    // needs `OPENCV_DISABLE_PROBES=vcpkg_cmake` for debug builds
+    let profile = env::var("PROFILE").unwrap();
+    if profile == "debug" {
+        let value = env::var("OPENCV_DISABLE_PROBES");
+
+        if Ok("vcpkg_cmake".to_string()) != value {
+            panic!("environment variable OPENCV_DISABLE_PROBES must be set to `vcpkg_cmake` for debug builds");
+        }
+    }
+    println!("cargo::rerun-if-env-changed=OPENCV_DISABLE_PROBES");
 }
 
 fn configure_windows_msys2_gnu() {
@@ -62,8 +74,6 @@ fn configure_windows_msys2_gnu() {
     }
 
     println!("cargo:rerun-if-changed={}", lib_dir.display());
-
-    //panic!("DIE")
 }
 
 /// Try to find MSYS2 root from PATH
