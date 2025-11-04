@@ -24,17 +24,30 @@
 
 // server.rs
 use anyhow::Result;
-use bytes::Bytes;
 use opencv::{imgcodecs, prelude::*, videoio};
 use std::sync::Arc;
 use tokio::{
-    net::TcpListener,
     sync::broadcast::{self, Sender},
-    time::{self, Duration},
+    time::{self, Duration, sleep},
+    net::UdpSocket, select
 };
-use log::{debug, error, info, trace};
+use log::{debug, error, trace};
 
-const ADDR: &str = "0.0.0.0:5000";
+use ergot::{
+    toolkits::tokio_udp::{EdgeStack, new_std_queue, new_controller_stack, register_edge_interface},
+    topic,
+    well_known::DeviceInfo,
+};
+
+use std::convert::TryInto;
+use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
+use camerastreamer_ergot_shared::CameraFrame;
+
+topic!(CameraFrameTopic, CameraFrame, "topic/camera_stream");
+
+
+const REMOTE_ADDR: &str = "127.0.0.1:5001";
+const LOCAL_ADDR: &str = "0.0.0.0:5000";
 const WIDTH: i32 = 1280;
 const HEIGHT: i32 = 720;
 const FPS: u32 = 25;
@@ -42,8 +55,10 @@ const BROADCAST_CAP: usize = (FPS * 2) as usize;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    env_logger::init();
+
     // Create broadcast channel for frames (Arc<Bytes> so we cheaply clone for each client)
-    let (tx, _rx) = broadcast::channel::<Arc<Bytes>>(BROADCAST_CAP);
+    let (tx, rx) = broadcast::channel::<Arc<CameraFrame>>(BROADCAST_CAP);
 
     // Spawn capture loop
     let tx_clone = tx.clone();
@@ -53,26 +68,41 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Start listener
-    let listener = TcpListener::bind(ADDR).await?;
-    println!("Server listening on {}", ADDR);
+    let queue = new_std_queue(1024 * 1024);
+    let stack: EdgeStack = new_controller_stack(&queue, 65535);
+    let udp_socket = UdpSocket::bind(LOCAL_ADDR).await.unwrap();
+
+    udp_socket.connect(REMOTE_ADDR).await?;
+
+    tokio::task::spawn(basic_services(stack.clone(), 0));
+    tokio::task::spawn(camera_streamer(stack.clone(), rx));
+
+    register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Controller)
+        .await
+        .unwrap();
 
     loop {
-        let (socket, peer) = listener.accept().await?;
-        info!("Client connected: {}", peer);
-        socket.set_nodelay(true)?;
-        let mut rx = tx.subscribe();
-        tokio::spawn(async move {
-            if let Err(e) = handle_client(socket, &mut rx).await {
-                error!("client {} error: {:?}", peer, e);
-            } else {
-                info!("client {} disconnected", peer);
-            }
-        });
+        println!("Waiting for messages...");
+        sleep(Duration::from_secs(1)).await;
     }
 }
 
-async fn capture_loop(tx: Sender<Arc<Bytes>>) -> Result<()> {
+async fn basic_services(stack: EdgeStack, port: u16) {
+    let info = DeviceInfo {
+        name: Some("Ergot client".try_into().unwrap()),
+        description: Some("An Ergot Client Device".try_into().unwrap()),
+        unique_id: port.into(),
+    };
+    let do_pings = stack.services().ping_handler::<4>();
+    let do_info = stack.services().device_info_handler::<4>(&info);
+
+    select! {
+        _ = do_pings => {}
+        _ = do_info => {}
+    }
+}
+
+async fn capture_loop(tx: Sender<Arc<CameraFrame>>) -> Result<()> {
     // Open default camera (index 0)
     let mut cam = videoio::VideoCapture::new(0, videoio::CAP_ANY)?; // 0 = default device
     if !videoio::VideoCapture::is_opened(&cam)? {
@@ -105,24 +135,26 @@ async fn capture_loop(tx: Sender<Arc<Bytes>>) -> Result<()> {
         let send_start = time::Instant::now();
 
         // Wrap bytes into Arc so broadcast clones cheap
-        let bytes = Arc::new(Bytes::from(buf.to_vec()));
+        let mut camera_frame = CameraFrame {
+            jpeg_bytes: buf.to_vec()
+        };
+        camera_frame.jpeg_bytes.truncate(1024 * 2);
+        let camera_frame_arc = Arc::new(camera_frame);
         // Ignore send error (no subscribers)
-        let _ = tx.send(bytes);
+        let _ = tx.send(camera_frame_arc);
 
         let send_end = time::Instant::now();
         let send_duration = (send_end - send_start).as_micros() as u32;
 
-        trace!("now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us", time::Instant::now(), frame_number, encode_duration, send_duration);
+        println!("now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us", time::Instant::now(), frame_number, encode_duration, send_duration);
         frame_number += 1;
     }
 }
 
-async fn handle_client(mut socket: tokio::net::TcpStream, rx: &mut tokio::sync::broadcast::Receiver<Arc<Bytes>>) -> Result<()> {
-    use tokio::io::AsyncWriteExt;
-
+async fn camera_streamer(stack: EdgeStack, mut rx: tokio::sync::broadcast::Receiver<Arc<CameraFrame>>) -> Result<()> {
     loop {
         // Receive latest frame (await)
-        let bytes = match rx.recv().await {
+        let camera_frame = match rx.recv().await {
             Ok(b) => b,
             Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped_frames)) => {
                 // If lagged, try to get the next available
@@ -131,8 +163,10 @@ async fn handle_client(mut socket: tokio::net::TcpStream, rx: &mut tokio::sync::
             }
             Err(e) => return Err(anyhow::anyhow!(e)),
         };
-        let len = (bytes.len() as u32).to_be_bytes();
-        socket.write_all(&len).await?;
-        socket.write_all(&bytes).await?;
+
+
+        let _ = stack.topics().broadcast::<CameraFrameTopic>(&camera_frame, None).inspect_err(|e| {
+            error!("Error sending frame: {:?}", e);
+        });
     }
 }

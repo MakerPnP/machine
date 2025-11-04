@@ -1,26 +1,38 @@
 // client.rs
 use eframe::{egui, App, CreationContext, Frame};
 use image::ImageFormat;
-use std::{net::SocketAddr, thread};
+use std::thread;
+use std::pin::pin;
+use std::time::Duration;
 use eframe::epaint::textures::TextureOptions;
 use egui::{ColorImage, Context};
-use tokio::net::TcpStream;
+use ergot::{
+    toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface},
+    topic,
+    well_known::DeviceInfo,
+};
+use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
 use tokio::runtime::Runtime;
-use log::{error, info, trace};
+use log::{error, trace};
+use tokio::{net::UdpSocket, select, time::sleep};
 use tokio::sync::watch;
 use tokio::sync::watch::{Receiver, Sender};
+use camerastreamer_ergot_shared::CameraFrame;
 use crate::fps_stats::egui::show_frame_durations;
 use crate::fps_stats::FpsStats;
 
 mod fps_stats;
-const SERVER_ADDR: &str = "127.0.0.1:5000";
+const REMOTE_ADDR: &str = "127.0.0.1:5000";
+const LOCAL_ADDR: &str = "0.0.0.0:5001";
+
+topic!(CameraFrameTopic, CameraFrame, "topic/camera_stream");
 
 fn start_network_thread(tx_out: Sender<ColorImage>, context: Context) {
     // run a tokio runtime in background thread
     thread::spawn(move || {
         let rt = Runtime::new().expect("create tokio runtime");
         rt.block_on(async move {
-            if let Err(e) = network_task(SERVER_ADDR, tx_out, context).await {
+            if let Err(e) = network_task(REMOTE_ADDR, tx_out, context).await {
                 error!("network task error: {:?}", e);
             }
         });
@@ -28,53 +40,59 @@ fn start_network_thread(tx_out: Sender<ColorImage>, context: Context) {
 }
 
 async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context) -> anyhow::Result<()> {
-    use tokio::io::AsyncReadExt;
-    let socket_addr: SocketAddr = addr.parse()?;
+
+    let queue = new_std_queue(1024 * 1024);
+    let stack: EdgeStack = new_target_stack(&queue, 1024);
+    let udp_socket = UdpSocket::bind(LOCAL_ADDR).await?;
+
+    udp_socket.connect(REMOTE_ADDR).await?;
+
+    tokio::task::spawn(basic_services(stack.clone(), 0));
+    tokio::task::spawn(camera_frame_listener(stack.clone(), 0, tx_out, context));
+
+
+    register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Target)
+        .await
+        .unwrap();
 
     loop {
-        let mut stream = match tokio::net::TcpStream::connect(socket_addr).await {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Failed to connect to {}: {:?}", addr, e);
-                continue;
-            }
-        };
+        println!("Waiting for messages...");
+        sleep(Duration::from_secs(1)).await;
+    }
+}
 
-        info!("Connected to {}", addr);
+async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorImage>, context: Context) -> Result<(), anyhow::Error> {
+    let subber = stack.topics().single_receiver::<CameraFrameTopic>(None);
+    let subber = pin!(subber);
+    let mut hdl = subber.subscribe();
 
-        stream.set_nodelay(true)?;
+    loop {
+        let msg = hdl.recv().await;
 
-        async fn run_loop(stream: &mut TcpStream, tx_out: &Sender<ColorImage>, context: &Context) -> Result<(), anyhow::Error> {
-            loop {
-                // read 4-byte length
-                let mut len_buf = [0u8; 4];
-                stream.read_exact(&mut len_buf).await?;
-                let len = u32::from_be_bytes(len_buf) as usize;
-                let mut buf = vec![0u8; len];
-                stream.read_exact(&mut buf).await?;
+        // decode JPEG OFF the GUI thread
+        let img = image::load_from_memory_with_format(&msg.t.jpeg_bytes, ImageFormat::Jpeg)?;
+        let rgba = img.to_rgba8();
+        let (w, h) = (rgba.width() as usize, rgba.height() as usize);
+        let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
 
-                // decode JPEG OFF the GUI thread
-                let color_image = tokio::task::spawn_blocking(move || -> anyhow::Result<ColorImage> {
-                    let img = image::load_from_memory_with_format(&buf, ImageFormat::Jpeg)?;
-                    let rgba = img.to_rgba8();
-                    let (w, h) = (rgba.width() as usize, rgba.height() as usize);
-                    Ok(ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw()))
-                }).await??;
+        // If the receiver is full, drop the frame (non-blocking)
+        tx_out.send(color_image)?;
+        context.request_repaint();
+    }
+}
 
-                // If the receiver is full, drop the frame (non-blocking)
-                tx_out.send(color_image)?;
-                context.request_repaint();
-            }
-        }
+async fn basic_services(stack: EdgeStack, port: u16) {
+    let info = DeviceInfo {
+        name: Some("Ergot client".try_into().unwrap()),
+        description: Some("An Ergot Client Device".try_into().unwrap()),
+        unique_id: port.into(),
+    };
+    let do_pings = stack.services().ping_handler::<4>();
+    let do_info = stack.services().device_info_handler::<4>(&info);
 
-        match run_loop(&mut stream, &tx_out, &context).await {
-            Ok(()) => {
-                info!("Disconnected from {}", addr);
-            }
-            Err(e) => {
-                info!("Disconnected from {}, error: {}", addr, e);
-            }
-        }
+    select! {
+        _ = do_pings => {}
+        _ = do_info => {}
     }
 }
 
@@ -94,8 +112,6 @@ struct CameraApp {
 
 impl CameraApp {
     fn new(cc: &CreationContext) -> Self {
-
-
         let (tx, rx) = watch::channel::<ColorImage>(ColorImage::default());
 
         start_network_thread(tx, cc.egui_ctx.clone());
@@ -187,6 +203,8 @@ impl App for CameraApp {
 }
 
 fn main() -> eframe::Result {
+    env_logger::init();
+
     let options = eframe::NativeOptions::default();
     eframe::run_native(
         "Camera Client",
