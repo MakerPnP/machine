@@ -178,38 +178,44 @@ impl App for CameraApp {
         egui::Window::new("Stats")
             .scroll(true)
             .show(ctx, |ui| {
-            ui.group(|ui| {
-                ui.label("GUI");
-                ui.label(format!("Frame: {}", self.gui_frame_number));
-                if let Some(snapshot) = &self.gui_fps_snapshot {
-                    ui.label(format!(
-                        "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
-                        snapshot.latest,
-                        snapshot.min,
-                        snapshot.max,
-                        snapshot.avg
-                    ));
+                ui.push_id("gui", |ui| {
+                    ui.group(|ui| {
+                        ui.label("GUI");
+                        ui.label(format!("Frame: {}", self.gui_frame_number));
+                        if let Some(snapshot) = &self.gui_fps_snapshot {
+                            ui.label(format!(
+                                "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
+                                snapshot.latest,
+                                snapshot.min,
+                                snapshot.max,
+                                snapshot.avg
+                            ));
 
-                    show_frame_durations(ui, &self.gui_fps_stats);
-                }
-            });
-            ui.separator();
-            ui.group(|ui| {
-                ui.label("Camera");
-                ui.label(format!("Frame: {}", self.camera_frame_number));
-                if let Some(snapshot) = &self.camera_fps_snapshot {
-                    ui.label(format!(
-                        "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
-                        snapshot.latest,
-                        snapshot.min,
-                        snapshot.max,
-                        snapshot.avg
-                    ));
+                            show_frame_durations(ui, &self.gui_fps_stats);
+                        }
+                    });
+                });
 
-                    show_frame_durations(ui, &self.camera_fps_stats);
-                }
+                ui.separator();
+
+                ui.push_id("camera", |ui| {
+                    ui.group(|ui| {
+                        ui.label("Camera");
+                        ui.label(format!("Frame: {}", self.camera_frame_number));
+                        if let Some(snapshot) = &self.camera_fps_snapshot {
+                            ui.label(format!(
+                                "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
+                                snapshot.latest,
+                                snapshot.min,
+                                snapshot.max,
+                                snapshot.avg
+                            ));
+
+                            show_frame_durations(ui, &self.camera_fps_stats);
+                        }
+                    });
+                });
             });
-        });
     }
 }
 
