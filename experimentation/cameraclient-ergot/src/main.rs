@@ -71,15 +71,25 @@ async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorIma
         let now = std::time::Instant::now();
         trace!("received camera frame from server, frame_number: {}, size: {} bytes, timestamp: {}", msg.t.frame_number, msg.t.jpeg_bytes.len(), now.elapsed().as_millis());
 
-        // decode JPEG OFF the GUI thread
-        let img = image::load_from_memory_with_format(&msg.t.jpeg_bytes, ImageFormat::Jpeg)?;
-        let rgba = img.to_rgba8();
-        let (w, h) = (rgba.width() as usize, rgba.height() as usize);
-        let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
+        // decode JPEG OFF the networking thread and off the GUI thread.
+        // this lets the networking thread process while decoding.
 
-        // If the receiver is full, drop the frame (non-blocking)
-        tx_out.send(color_image)?;
-        context.request_repaint();
+        tokio::task::spawn_blocking({
+            let context = context.clone();
+            let tx_out = tx_out.clone();
+            move || -> anyhow::Result<()> {
+                let img = image::load_from_memory_with_format(&msg.t.jpeg_bytes, ImageFormat::Jpeg)?;
+                let rgba = img.to_rgba8();
+                let (w, h) = (rgba.width() as usize, rgba.height() as usize);
+                let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
+
+                // If the receiver is full, drop the frame (non-blocking)
+                tx_out.send(color_image)?;
+                context.request_repaint();
+                Ok(())
+            }
+        });
+
     }
 }
 
