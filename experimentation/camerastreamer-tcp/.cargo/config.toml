@@ -1,0 +1,12 @@
+[build]
+
+# Target-specific settings
+[target.x86_64-pc-windows-gnu]
+rustflags = [
+    "-C", "link-args=-Wl,-v"
+]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    # You can add additional MSVC-specific linker flags here if needed
+]

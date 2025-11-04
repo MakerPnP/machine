@@ -1,0 +1,9 @@
+[toolchain]
+channel = "stable"
+
+targets = [
+    # for msys2 environments
+    "x86_64-pc-windows-gnu",
+    # for vcpkg environments
+    "x86_64-pc-windows-msvc"
+]

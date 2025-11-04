@@ -596,7 +596,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cameraclient-1"
+name = "cameraclient-tcp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
