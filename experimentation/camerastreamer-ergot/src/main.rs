@@ -113,7 +113,7 @@ async fn capture_loop(tx: Sender<Arc<CameraFrame>>) -> Result<()> {
 
     let period = Duration::from_millis((1000u32 / FPS) as u64);
     let mut interval = time::interval(period);
-    let mut frame_number = 0_usize;
+    let mut frame_number = 0_u64;
     loop {
         interval.tick().await;
         let mut frame = Mat::default();
@@ -136,6 +136,7 @@ async fn capture_loop(tx: Sender<Arc<CameraFrame>>) -> Result<()> {
 
         // Wrap bytes into Arc so broadcast clones cheap
         let mut camera_frame = CameraFrame {
+            frame_number,
             jpeg_bytes: buf.to_vec()
         };
         camera_frame.jpeg_bytes.truncate(1024 * 2);
