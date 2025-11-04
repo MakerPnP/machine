@@ -26,7 +26,6 @@ pub enum ViewportUiCommand {
 
     // internal
     WorkspaceChanged(usize),
-    Refresh,
 }
 
 pub enum ViewportUiAction {
