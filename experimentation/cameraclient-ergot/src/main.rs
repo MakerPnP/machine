@@ -62,7 +62,7 @@ async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context) 
 }
 
 async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorImage>, context: Context) -> Result<(), anyhow::Error> {
-    let subber = stack.topics().single_receiver::<CameraFrameTopic>(None);
+    let subber = stack.topics().bounded_receiver::<CameraFrameTopic, 30>(None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe();
 
