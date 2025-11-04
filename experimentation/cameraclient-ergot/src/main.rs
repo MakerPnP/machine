@@ -74,22 +74,19 @@ async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorIma
         // decode JPEG OFF the networking thread and off the GUI thread.
         // this lets the networking thread process while decoding.
 
-        tokio::task::spawn_blocking({
-            let context = context.clone();
-            let tx_out = tx_out.clone();
-            move || -> anyhow::Result<()> {
-                let img = image::load_from_memory_with_format(&msg.t.jpeg_bytes, ImageFormat::Jpeg)?;
-                let rgba = img.to_rgba8();
-                let (w, h) = (rgba.width() as usize, rgba.height() as usize);
-                let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
+        async fn process_frame(msg: CameraFrame, tx_out: Sender<ColorImage>, context: Context) -> anyhow::Result<()> {
+            let img = image::load_from_memory_with_format(&msg.jpeg_bytes, ImageFormat::Jpeg)?;
+            let rgba = img.to_rgba8();
+            let (w, h) = (rgba.width() as usize, rgba.height() as usize);
+            let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
 
-                // If the receiver is full, drop the frame (non-blocking)
-                tx_out.send(color_image)?;
-                context.request_repaint();
-                Ok(())
-            }
-        });
+            // If the receiver is full, drop the frame (non-blocking)
+            tx_out.send(color_image)?;
+            context.request_repaint();
+            Ok(())
+        }
 
+        tokio::task::spawn(process_frame(msg.t, tx_out.clone(), context.clone()));
     }
 }
 
