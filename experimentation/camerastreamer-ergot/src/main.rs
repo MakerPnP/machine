@@ -50,7 +50,7 @@ const REMOTE_ADDR: &str = "127.0.0.1:5001";
 const LOCAL_ADDR: &str = "0.0.0.0:5000";
 const WIDTH: i32 = 1280;
 const HEIGHT: i32 = 720;
-const FPS: u32 = 25;
+const FPS: u32 = 20;
 const BROADCAST_CAP: usize = (FPS * 2) as usize;
 
 #[tokio::main]
