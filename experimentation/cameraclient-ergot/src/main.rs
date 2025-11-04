@@ -68,6 +68,8 @@ async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorIma
 
     loop {
         let msg = hdl.recv().await;
+        let now = std::time::Instant::now();
+        trace!("received camera frame from server, frame_number: {}, size: {} bytes, timestamp: {}", msg.t.frame_number, msg.t.jpeg_bytes.len(), now.elapsed().as_millis());
 
         // decode JPEG OFF the GUI thread
         let img = image::load_from_memory_with_format(&msg.t.jpeg_bytes, ImageFormat::Jpeg)?;
