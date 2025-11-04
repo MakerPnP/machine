@@ -13,7 +13,7 @@ use ergot::{
 };
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
 use tokio::runtime::Runtime;
-use log::{error, trace};
+use log::{error, info, trace};
 use tokio::{net::UdpSocket, select, time::sleep};
 use tokio::sync::watch;
 use tokio::sync::watch::{Receiver, Sender};
@@ -68,25 +68,27 @@ async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorIma
 
     loop {
         let msg = hdl.recv().await;
-        let now = std::time::Instant::now();
-        trace!("received camera frame from server, frame_number: {}, size: {} bytes, timestamp: {}", msg.t.frame_number, msg.t.jpeg_bytes.len(), now.elapsed().as_millis());
+        let before = std::time::Instant::now();
+        info!("received camera frame from server, frame_number: {}, size: {} bytes, timestamp: {:?}", msg.t.frame_number, msg.t.jpeg_bytes.len(), before);
 
-        // decode JPEG OFF the networking thread and off the GUI thread.
-        // this lets the networking thread process while decoding.
+        let img = image::load_from_memory_with_format(&msg.t.jpeg_bytes, ImageFormat::Jpeg)?;
+        let point1 = std::time::Instant::now();
+        let rgba = img.to_rgba8();
+        let (w, h) = (rgba.width() as usize, rgba.height() as usize);
+        let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
 
-        async fn process_frame(msg: CameraFrame, tx_out: Sender<ColorImage>, context: Context) -> anyhow::Result<()> {
-            let img = image::load_from_memory_with_format(&msg.jpeg_bytes, ImageFormat::Jpeg)?;
-            let rgba = img.to_rgba8();
-            let (w, h) = (rgba.width() as usize, rgba.height() as usize);
-            let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
-
-            // If the receiver is full, drop the frame (non-blocking)
-            tx_out.send(color_image)?;
-            context.request_repaint();
-            Ok(())
-        }
-
-        tokio::task::spawn(process_frame(msg.t, tx_out.clone(), context.clone()));
+        // If the receiver is full, drop the frame (non-blocking)
+        tx_out.send(color_image)?;
+        context.request_repaint();
+        let after = std::time::Instant::now();
+        info!("sent frame to egui, frame_number: {}, size: {} bytes, timestamp: {:?}, decoding: {}us, imagegen+send: {}us, total-elapsed: {}us",
+            msg.t.frame_number,
+            msg.t.jpeg_bytes.len(),
+            after,
+            (point1 - before).as_micros(),
+            (after - point1).as_micros(),
+            (after - before).as_micros(),
+        );
     }
 }
 
