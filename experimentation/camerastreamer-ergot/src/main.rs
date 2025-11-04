@@ -33,17 +33,13 @@ use tokio::{
 };
 use log::{debug, error, trace};
 
-use ergot::{
-    toolkits::tokio_udp::{EdgeStack, new_std_queue, new_controller_stack, register_edge_interface},
-    topic,
-    well_known::DeviceInfo,
-};
+use ergot::{toolkits::tokio_udp::{EdgeStack, new_std_queue, new_controller_stack, register_edge_interface}, topic, well_known::DeviceInfo, NetStackSendError};
 
 use std::convert::TryInto;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
-use camerastreamer_ergot_shared::CameraFrame;
+use camerastreamer_ergot_shared::{CameraFrame, CameraFrameChunk};
 
-topic!(CameraFrameTopic, CameraFrame, "topic/camera_stream");
+topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
 
 const REMOTE_ADDR: &str = "127.0.0.1:5001";
@@ -51,6 +47,9 @@ const LOCAL_ADDR: &str = "0.0.0.0:5000";
 const WIDTH: i32 = 1280;
 const HEIGHT: i32 = 720;
 const FPS: u32 = 25;
+
+// must be less than the MTU of the network interface + udp overhead + ergot overhead + chunking overhead
+const CHUNK_SIZE: usize = 1024;
 const BROADCAST_CAP: usize = (FPS * 2) as usize;
 
 #[tokio::main]
@@ -68,7 +67,7 @@ async fn main() -> Result<()> {
         }
     });
 
-    let queue = new_std_queue(1024 * 1024);
+    let queue = new_std_queue(1024 * 10);
     let stack: EdgeStack = new_controller_stack(&queue, 1400);
     let udp_socket = UdpSocket::bind(LOCAL_ADDR).await?;
 
@@ -139,7 +138,6 @@ async fn capture_loop(tx: Sender<Arc<CameraFrame>>) -> Result<()> {
             frame_number,
             jpeg_bytes: buf.to_vec()
         };
-        camera_frame.jpeg_bytes.truncate(1024);
         let camera_frame_arc = Arc::new(camera_frame);
         // Ignore send error (no subscribers)
         let _ = tx.send(camera_frame_arc);
@@ -165,9 +163,61 @@ async fn camera_streamer(stack: EdgeStack, mut rx: tokio::sync::broadcast::Recei
             Err(e) => return Err(anyhow::anyhow!(e)),
         };
 
+        let CameraFrame { frame_number, jpeg_bytes } = &*camera_frame;
 
-        let _ = stack.topics().broadcast::<CameraFrameTopic>(&camera_frame, None).inspect_err(|e| {
-            error!("Error sending frame: {:?}", e);
-        });
+        let total_bytes = jpeg_bytes.len() as u32;
+        let total_chunks = (total_bytes + (CHUNK_SIZE as u32) - 1) / CHUNK_SIZE as u32;
+
+        let now = time::Instant::now();
+        trace!("Sending frame, now: {:?}, frame_number: {}, total_chunks: {}, len: {}", now, camera_frame.frame_number, total_chunks, total_bytes);
+
+        let mut bail = false;
+        for (i, chunk) in jpeg_bytes.chunks(CHUNK_SIZE).enumerate() {
+            let frame_chunk = CameraFrameChunk {
+                frame_number: *frame_number,
+                chunk_index: i as u32,
+                total_chunks,
+                total_bytes,
+                bytes: chunk.to_vec(),
+            };
+
+            let now = time::Instant::now();
+            loop {
+                match stack.topics().broadcast::<CameraFrameChunkTopic>(&frame_chunk, None) {
+                    Ok(_) => {
+                        break
+                    }
+                    Err(e) => {
+                        if now.elapsed() > Duration::from_millis(100) {
+                            bail = true;
+                            break
+                        } else {
+                            error!("Error sending chunk. chunk: {}/{}, error: {:?}, will retry", i, total_chunks, e);
+                            // IMPORTANT: back-off delay needs to be as short as possible
+                            //            60fps =  16ms total frame time.
+                            //            30fps =  33ms total frame time.
+                            //            25fps =  40ms total frame time.
+                            //            15fps =  66ms total frame time.
+                            //            10fps = 100ms total frame time.
+                            //
+                            //            0.5ms was chosen and seems to work on the test machine with client and server on the same machine.
+                            //            but it may need to be adjusted for different frame rates and network conditions.
+                            time::sleep_until(now + Duration::from_micros(500)).await;
+                        }
+                    }
+                }
+            }
+            if bail {
+                break;
+            } else {
+                tokio::task::yield_now().await;
+            }
+        }
+
+        if !bail {
+            trace!("Sent all chunks. frame_number: {}", frame_number);
+        } else {
+            error!("Error sending frame. frame_number: {}", frame_number);
+        }
     }
 }
