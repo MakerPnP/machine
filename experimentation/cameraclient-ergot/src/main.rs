@@ -42,7 +42,7 @@ fn start_network_thread(tx_out: Sender<ColorImage>, context: Context) {
 async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context) -> anyhow::Result<()> {
 
     let queue = new_std_queue(1024 * 1024);
-    let stack: EdgeStack = new_target_stack(&queue, 1024);
+    let stack: EdgeStack = new_target_stack(&queue, 1400);
     let udp_socket = UdpSocket::bind(LOCAL_ADDR).await?;
 
     udp_socket.connect(REMOTE_ADDR).await?;

@@ -69,8 +69,8 @@ async fn main() -> Result<()> {
     });
 
     let queue = new_std_queue(1024 * 1024);
-    let stack: EdgeStack = new_controller_stack(&queue, 65535);
-    let udp_socket = UdpSocket::bind(LOCAL_ADDR).await.unwrap();
+    let stack: EdgeStack = new_controller_stack(&queue, 1400);
+    let udp_socket = UdpSocket::bind(LOCAL_ADDR).await?;
 
     udp_socket.connect(REMOTE_ADDR).await?;
 
@@ -139,7 +139,7 @@ async fn capture_loop(tx: Sender<Arc<CameraFrame>>) -> Result<()> {
             frame_number,
             jpeg_bytes: buf.to_vec()
         };
-        camera_frame.jpeg_bytes.truncate(1024 * 2);
+        camera_frame.jpeg_bytes.truncate(1024);
         let camera_frame_arc = Arc::new(camera_frame);
         // Ignore send error (no subscribers)
         let _ = tx.send(camera_frame_arc);
