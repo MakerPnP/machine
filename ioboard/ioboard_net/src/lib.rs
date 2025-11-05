@@ -16,7 +16,7 @@ use embassy_time::{Duration, Ticker, Timer, WithTimeout};
 use embedded_io_async::Write;
 use embedded_nal_async::TcpConnect;
 use ergot::exports::bbq2::traits::coordination::cas::AtomicCoord;
-use ergot::interface_manager::profiles::direct_edge::embassy_net_udp_0_7::RxTxWorker;
+use ergot::interface_manager::profiles::direct_edge::embassy_net_udp_0_7::{RxTxWorker, UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX};
 use ergot::logging::log_v0_4::LogSink;
 use ergot::toolkits::embassy_net_v0_7 as kit;
 use ergot::well_known::{DeviceInfo, ErgotPingEndpoint};
@@ -34,24 +34,15 @@ use static_cell::{ConstStaticCell, StaticCell};
 
 const OUT_QUEUE_SIZE: usize = 4096;
 
-// FIXME this depends on the interface being used, maybe need a feature or something
-const MAX_PACKET_SIZE: usize = 1514;
-
-// set to the size of the largest cobs payload we expect to receive (size of largest T + cobs overhead)
-const MAX_COBS_SIZE: usize = (1500_f32 * 1.5_f32) as usize;
-
-/// Receive buffer is used to by the COBS accumulator as packets are received
-static RECV_BUF: ConstStaticCell<[u8; MAX_COBS_SIZE]> = ConstStaticCell::new([0u8; MAX_COBS_SIZE]);
-// FIXME should be be using MAX_PACKET_SIZE here?
-/// Scratch buffer is used for UDP packet reception, set to the size of the largest UDP packet we expect to receive (ergot overhead + payload)
-static SCRATCH_BUF: ConstStaticCell<[u8; 64]> = ConstStaticCell::new([0u8; 64]);
+/// Scratch buffer is used for UDP packet reception
+static SCRATCH_BUF: ConstStaticCell<[u8; UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX]> = ConstStaticCell::new([0u8; UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX]);
 
 type Stack = kit::EdgeStack<&'static Queue, CriticalSectionRawMutex>;
 type Queue = kit::Queue<OUT_QUEUE_SIZE, AtomicCoord>;
 
 // FIXME should we *really* be using MAX_PACKET_SIZE here?
 /// Statically store our netstack
-static STACK: Stack = kit::new_target_stack(OUTQ.stream_producer(), MAX_PACKET_SIZE as u16);
+static STACK: Stack = kit::new_target_stack(OUTQ.framed_producer(), UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX as u16);
 /// Statically store our outgoing packet buffer
 static OUTQ: Queue = kit::Queue::new();
 static LOGSINK: LogSink<&'static Stack> = LogSink::new(&STACK);
@@ -125,7 +116,6 @@ pub fn init<'d, D: Driver>(driver: D, random_seed: u64, spawner: Spawner) -> Run
         .spawn(networking_task(
             stack,
             spawner.clone(),
-            RECV_BUF.take(),
             SCRATCH_BUF.take(),
         ))
         .unwrap();
@@ -137,7 +127,6 @@ pub fn init<'d, D: Driver>(driver: D, random_seed: u64, spawner: Spawner) -> Run
 async fn networking_task(
     stack: embassy_net::Stack<'static>,
     spawner: Spawner,
-    recv_buf: &'static mut [u8],
     scratch_buf: &'static mut [u8],
 ) -> ! {
     defmt::info!("Network task initialized");
@@ -199,7 +188,7 @@ async fn networking_task(
     );
 
     // Spawn I/O worker tasks
-    spawner.must_spawn(run_socket(udp_socket, recv_buf, scratch_buf, remote_endpoint));
+    spawner.must_spawn(run_socket(udp_socket, scratch_buf, remote_endpoint));
 
     // Spawn socket using tasks
     spawner.must_spawn(pingserver());
@@ -234,15 +223,14 @@ async fn networking_task(
 #[embassy_executor::task]
 async fn run_socket(
     socket: UdpSocket<'static>,
-    recv_buf: &'static mut [u8],
     scratch_buf: &'static mut [u8],
     endpoint: IpEndpoint,
 ) {
-    let consumer = OUTQ.stream_consumer();
+    let consumer = OUTQ.framed_consumer();
     let mut rxtx = RxTxWorker::new_target(&STACK, socket, (), consumer, endpoint);
 
     loop {
-        _ = rxtx.run(recv_buf, scratch_buf).await;
+        _ = rxtx.run(scratch_buf).await;
     }
 }
 
