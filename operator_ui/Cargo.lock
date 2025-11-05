@@ -2793,7 +2793,6 @@ dependencies = [
  "futures",
  "i18n",
  "image",
- "log",
  "operator_shared",
  "profiling",
  "puffin_http",
