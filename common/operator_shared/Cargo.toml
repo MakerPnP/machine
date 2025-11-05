@@ -7,3 +7,4 @@ edition = "2024"
 ergot           = { workspace = true }
 serde           = { workspace = true, default-features = false, features = ["derive"] }
 postcard-schema = { workspace = true, features = ["derive"] }
+chrono          = { workspace = true, features = ["serde"] }

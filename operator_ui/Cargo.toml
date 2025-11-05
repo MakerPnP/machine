@@ -29,6 +29,7 @@ egui_mobius        = "0.3.0-alpha.32"
 #egui_mobius        = { path = "../../../libraries/rust/egui/egui_mobius/crates/egui_mobius" }
 egui_tiles         = { version = "0.14.0"}
 egui_extras        = { version = "0.33.0", default-features = false }
+egui_plot          = { version = "0.34.0" }
 
 # images
 image              = { version = "0.25", default-features = false }

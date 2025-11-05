@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 use std::{pin::pin, time::Duration};
-
+use eframe::epaint::ColorImage;
 use egui_mobius::Value;
 use ergot::{
     interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind,
@@ -9,23 +9,29 @@ use ergot::{
     well_known::DeviceInfo,
 };
 use tracing::{debug, info};
-use operator_shared::commands::OperatorCommand;
 use tokio::runtime::Handle;
 use tokio::{net::UdpSocket, select, time, time::sleep};
-
+use tokio::sync::watch::Sender;
 use crate::app::AppState;
+use crate::{LOCAL_ADDR, REMOTE_ADDR};
+use crate::net::camera::camera_frame_listener;
+use crate::net::commands::command_sender;
+use crate::net::services::basic_services;
 
-pub async fn ergot_task(_spawner: Handle, _state: Option<Value<AppState>>) {
+pub mod camera;
+pub mod services;
+pub mod commands;
+
+pub async fn ergot_task(_spawner: Handle, state: Value<AppState>, tx_out: Sender<ColorImage>) {
     let queue = new_std_queue(4096);
     let stack: EdgeStack = new_target_stack(&queue, 1024);
-    let udp_socket = UdpSocket::bind("192.168.18.41:8002")
+    let udp_socket = UdpSocket::bind(LOCAL_ADDR)
         .await
         .unwrap();
-    let remote_addr = "192.168.18.41:8001";
 
     // FIXME show a message in the UI if this fails instead of panicking when the port is already in use
     udp_socket
-        .connect(remote_addr)
+        .connect(REMOTE_ADDR)
         .await
         .unwrap();
 
@@ -35,6 +41,12 @@ pub async fn ergot_task(_spawner: Handle, _state: Option<Value<AppState>>) {
     tokio::task::spawn(command_sender(stack.clone()));
     tokio::task::spawn(yeet_listener(stack.clone()));
 
+    {
+        let context = state.lock().unwrap().context.clone();
+        tokio::task::spawn(camera_frame_listener(stack.clone(), 0, tx_out, context));
+    }
+
+
     register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Target)
         .await
         .unwrap();
@@ -42,46 +54,6 @@ pub async fn ergot_task(_spawner: Handle, _state: Option<Value<AppState>>) {
     loop {
         println!("Waiting for messages...");
         sleep(Duration::from_secs(1)).await;
-    }
-}
-
-async fn basic_services(stack: EdgeStack, port: u16) {
-    let info = DeviceInfo {
-        name: Some("OperatorUI".try_into().unwrap()),
-        description: Some(
-            "MakerPnP - Operator UI"
-                .try_into()
-                .unwrap(),
-        ),
-        unique_id: port.into(),
-    };
-    let do_pings = stack.services().ping_handler::<4>();
-    let do_info = stack
-        .services()
-        .device_info_handler::<4>(&info);
-
-    select! {
-        _ = do_pings => {}
-        _ = do_info => {}
-    }
-}
-
-topic!(OperatorCommandTopic, OperatorCommand, "topic/operator/command");
-
-async fn command_sender(stack: EdgeStack) {
-    let mut ctr = 0;
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    let heartbeat_timeout_duration = Duration::from_secs(10);
-    let heartbeat_send_interval = heartbeat_timeout_duration / 2;
-    let mut ticker = time::interval(heartbeat_send_interval);
-    loop {
-        stack
-            .topics()
-            .broadcast::<OperatorCommandTopic>(&OperatorCommand::Heartbeat(ctr), None)
-            .unwrap();
-        ctr += 1;
-
-        ticker.tick().await;
     }
 }
 
