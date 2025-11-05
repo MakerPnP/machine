@@ -134,7 +134,7 @@ async fn capture_loop(tx: Sender<Arc<CameraFrame>>) -> Result<()> {
         let send_start = time::Instant::now();
 
         // Wrap bytes into Arc so broadcast clones cheap
-        let mut camera_frame = CameraFrame {
+        let camera_frame = CameraFrame {
             frame_number,
             jpeg_bytes: buf.to_vec()
         };
