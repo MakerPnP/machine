@@ -36,6 +36,7 @@ use log::{debug, error, trace};
 use ergot::{toolkits::tokio_udp::{EdgeStack, new_std_queue, new_controller_stack, register_edge_interface}, topic, well_known::DeviceInfo, NetStackSendError};
 
 use std::convert::TryInto;
+use ergot::interface_manager::InterfaceSendError;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
 use camerastreamer_ergot_shared::{CameraFrame, CameraFrameChunk};
 
@@ -172,45 +173,56 @@ async fn camera_streamer(stack: EdgeStack, mut rx: tokio::sync::broadcast::Recei
         trace!("Sending frame, now: {:?}, frame_number: {}, total_chunks: {}, len: {}", now, camera_frame.frame_number, total_chunks, total_bytes);
 
         let mut bail = false;
-        for (i, chunk) in jpeg_bytes.chunks(CHUNK_SIZE).enumerate() {
+        for (chunk_index, chunk) in jpeg_bytes.chunks(CHUNK_SIZE).enumerate() {
             let frame_chunk = CameraFrameChunk {
                 frame_number: *frame_number,
-                chunk_index: i as u32,
+                chunk_index: chunk_index as u32,
                 total_chunks,
                 total_bytes,
                 bytes: chunk.to_vec(),
             };
 
-            let now = time::Instant::now();
-            loop {
+            let chunk_start_at = time::Instant::now();
+
+            // IMPORTANT: back-off delay needs to be as short as possible
+            //            60fps =  16ms total frame time.
+            //            30fps =  33ms total frame time.
+            //            25fps =  40ms total frame time.
+            //            15fps =  66ms total frame time.
+            //            10fps = 100ms total frame time.
+            const INITIAL_BACKOFF: Duration = Duration::from_micros(100);
+            let mut retries = 0;
+
+            let result = loop {
                 match stack.topics().broadcast::<CameraFrameChunkTopic>(&frame_chunk, None) {
-                    Ok(_) => {
-                        break
+                    r @ Ok(_) => {
+                        // reset
+                        break r
                     }
-                    Err(e) => {
-                        if now.elapsed() > Duration::from_millis(100) {
+                    e1 @ Err(NetStackSendError::InterfaceSend(InterfaceSendError::InterfaceFull)) => {
+                        if chunk_start_at.elapsed() > Duration::from_millis(100) {
                             bail = true;
-                            break
+                            break e1
                         } else {
-                            error!("Error sending chunk. chunk: {}/{}, error: {:?}, will retry", i, total_chunks, e);
-                            // IMPORTANT: back-off delay needs to be as short as possible
-                            //            60fps =  16ms total frame time.
-                            //            30fps =  33ms total frame time.
-                            //            25fps =  40ms total frame time.
-                            //            15fps =  66ms total frame time.
-                            //            10fps = 100ms total frame time.
-                            //
-                            //            0.5ms was chosen and seems to work on the test machine with client and server on the same machine.
-                            //            but it may need to be adjusted for different frame rates and network conditions.
-                            time::sleep_until(now + Duration::from_micros(500)).await;
+                            let backoff = INITIAL_BACKOFF * (1 << retries.min(4));
+                            time::sleep_until(chunk_start_at + backoff).await;
                         }
                     }
+                    e2@ Err(_) => {
+                        bail = true;
+                        break e2
+                    }
                 }
-            }
-            if bail {
-                break;
-            } else {
-                tokio::task::yield_now().await;
+
+                retries += 1;
+            };
+
+            match result {
+                Ok(_) => tokio::task::yield_now().await,
+                Err(e) => {
+                    error!("Error sending chunk. chunk: {}/{}, retries: {}, error: {:?}", chunk_index + 1, total_chunks, retries, e);
+                    break
+                }
             }
         }
 
