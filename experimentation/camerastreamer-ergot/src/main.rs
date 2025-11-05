@@ -38,7 +38,7 @@ use ergot::{toolkits::tokio_udp::{EdgeStack, new_std_queue, new_controller_stack
 use std::convert::TryInto;
 use ergot::interface_manager::InterfaceSendError;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
-use camerastreamer_ergot_shared::{CameraFrame, CameraFrameChunk};
+use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind, CameraFrameImageChunk, CameraFrameMeta, TimeStampUTC};
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
@@ -52,6 +52,12 @@ const FPS: u32 = 25;
 // must be less than the MTU of the network interface + udp overhead + ergot overhead + chunking overhead
 const CHUNK_SIZE: usize = 1024;
 const BROADCAST_CAP: usize = (FPS * 2) as usize;
+
+pub struct CameraFrame {
+    pub frame_number: u64,
+    pub jpeg_bytes: Vec<u8>,
+    pub frame_timestamp: chrono::DateTime<chrono::Utc>,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -122,6 +128,7 @@ async fn capture_loop(tx: Sender<Arc<CameraFrame>>) -> Result<()> {
             // skip or try again
             continue;
         }
+        let frame_timestamp = chrono::Utc::now();
 
         // Encode to JPEG (quality default). You can set params to reduce quality/size.
         let encode_start = time::Instant::now();
@@ -137,8 +144,10 @@ async fn capture_loop(tx: Sender<Arc<CameraFrame>>) -> Result<()> {
         // Wrap bytes into Arc so broadcast clones cheap
         let camera_frame = CameraFrame {
             frame_number,
-            jpeg_bytes: buf.to_vec()
+            jpeg_bytes: buf.to_vec(),
+            frame_timestamp,
         };
+
         let camera_frame_arc = Arc::new(camera_frame);
         // Ignore send error (no subscribers)
         let _ = tx.send(camera_frame_arc);
@@ -164,22 +173,37 @@ async fn camera_streamer(stack: EdgeStack, mut rx: tokio::sync::broadcast::Recei
             Err(e) => return Err(anyhow::anyhow!(e)),
         };
 
-        let CameraFrame { frame_number, jpeg_bytes } = &*camera_frame;
+        let CameraFrame { frame_number, jpeg_bytes, frame_timestamp } = &*camera_frame;
 
         let total_bytes = jpeg_bytes.len() as u32;
         let total_chunks = (total_bytes + (CHUNK_SIZE as u32) - 1) / CHUNK_SIZE as u32;
 
         let now = time::Instant::now();
+
         trace!("Sending frame, now: {:?}, frame_number: {}, total_chunks: {}, len: {}", now, camera_frame.frame_number, total_chunks, total_bytes);
 
-        let mut bail = false;
+        let frame_chunk = CameraFrameChunk {
+            frame_number: *frame_number,
+            kind: CameraFrameChunkKind::Meta(CameraFrameMeta {
+                total_chunks,
+                total_bytes,
+                frame_timestamp: (*frame_timestamp).into(),
+            })
+        };
+        if stack.topics().broadcast::<CameraFrameChunkTopic>(&frame_chunk, None).is_err() {
+            trace!("Unable to send first frame chunk. frame_number: {}", frame_number);
+            // no point even trying to send the chunks if the first chunk failed, drop the frame
+            continue
+        }
+
+        let mut ok = true;
         for (chunk_index, chunk) in jpeg_bytes.chunks(CHUNK_SIZE).enumerate() {
             let frame_chunk = CameraFrameChunk {
                 frame_number: *frame_number,
-                chunk_index: chunk_index as u32,
-                total_chunks,
-                total_bytes,
-                bytes: chunk.to_vec(),
+                kind: CameraFrameChunkKind::ImageChunk(CameraFrameImageChunk {
+                    chunk_index: chunk_index as u32,
+                    bytes: chunk.to_vec(),
+                })
             };
 
             let chunk_start_at = time::Instant::now();
@@ -201,7 +225,6 @@ async fn camera_streamer(stack: EdgeStack, mut rx: tokio::sync::broadcast::Recei
                     }
                     e1 @ Err(NetStackSendError::InterfaceSend(InterfaceSendError::InterfaceFull)) => {
                         if chunk_start_at.elapsed() > Duration::from_millis(100) {
-                            bail = true;
                             break e1
                         } else {
                             let backoff = INITIAL_BACKOFF * (1 << retries.min(4));
@@ -209,7 +232,6 @@ async fn camera_streamer(stack: EdgeStack, mut rx: tokio::sync::broadcast::Recei
                         }
                     }
                     e2@ Err(_) => {
-                        bail = true;
                         break e2
                     }
                 }
@@ -220,16 +242,15 @@ async fn camera_streamer(stack: EdgeStack, mut rx: tokio::sync::broadcast::Recei
             match result {
                 Ok(_) => tokio::task::yield_now().await,
                 Err(e) => {
-                    error!("Error sending chunk. chunk: {}/{}, retries: {}, error: {:?}", chunk_index + 1, total_chunks, retries, e);
+                    error!("Aborting frame, error sending chunk. frame_number: {}, chunk: {}/{}, retries: {}, error: {:?}", frame_number, chunk_index + 1, total_chunks, retries, e);
+                    ok = false;
                     break
                 }
             }
         }
 
-        if !bail {
-            trace!("Sent all chunks. frame_number: {}", frame_number);
-        } else {
-            error!("Error sending frame. frame_number: {}", frame_number);
+        if ok {
+            trace!("Frame sent. frame_number: {}", frame_number);
         }
     }
 }

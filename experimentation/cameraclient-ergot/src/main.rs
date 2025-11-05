@@ -19,7 +19,7 @@ use tokio::{net::UdpSocket, select, time::sleep};
 use tokio::sync::watch;
 use tokio::sync::watch::{Receiver, Sender};
 use tokio::time::Instant;
-use camerastreamer_ergot_shared::{CameraFrame, CameraFrameChunk};
+use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind};
 use crate::fps_stats::egui::show_frame_durations;
 use crate::fps_stats::FpsStats;
 
@@ -82,44 +82,41 @@ async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorIma
 
         let chunk = &msg.t;
 
+        let entry_and_image_chunk = match &chunk.kind {
+            CameraFrameChunkKind::Meta(frame_meta) => {
+                in_progress.insert(chunk.frame_number, InProgressFrame {
+                    total_chunks: frame_meta.total_chunks,
+                    chunks: vec![None; frame_meta.total_chunks as usize],
+                    received_count: 0,
+                    start_time: Instant::now(),
+                });
+                continue;
+            }
+            CameraFrameChunkKind::ImageChunk(image_chunk) => {
+                in_progress.get_mut(&chunk.frame_number).map(|entry|(entry, image_chunk))
+            }
+        };
+
+        let Some((entry, image_chunk)) = entry_and_image_chunk else {
+            continue;
+        };
+
         trace!(
             "received frame chunk: frame={} chunk={}/{} size={}",
             chunk.frame_number,
-            chunk.chunk_index + 1,
-            chunk.total_chunks,
-            chunk.bytes.len()
+            image_chunk.chunk_index + 1,
+            entry.total_chunks,
+            image_chunk.bytes.len()
         );
 
-        // Get or create the entry for this frame
-        let entry = in_progress.entry(chunk.frame_number).or_insert_with(|| InProgressFrame {
-            total_chunks: chunk.total_chunks,
-            chunks: vec![None; chunk.total_chunks as usize],
-            received_count: 0,
-            start_time: Instant::now(),
-        });
-
-
-        // Sanity check: mismatched total_chunks means we restart
-        if entry.total_chunks != chunk.total_chunks {
-            trace!(
-                "mismatched total_chunks for frame {} (old={}, new={}), resetting",
-                chunk.frame_number,
-                entry.total_chunks,
-                chunk.total_chunks
-            );
-            in_progress.remove(&chunk.frame_number);
-            continue;
-        }
-
-
         // Insert chunk if not already present
-        let idx = chunk.chunk_index as usize;
+        let idx = image_chunk.chunk_index as usize;
         if idx >= entry.chunks.len() {
             trace!("invalid chunk index {} for frame {}", idx, chunk.frame_number);
             continue;
         }
         if entry.chunks[idx].is_none() {
-            entry.chunks[idx] = Some(chunk.bytes.clone());
+            entry.chunks[idx] = Some(image_chunk.bytes.clone());
             entry.received_count += 1;
         }
 
@@ -138,7 +135,7 @@ async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorIma
             }
 
             let before = std::time::Instant::now();
-            debug!("received camera frame from server, frame_number: {}, chunks: {}, timestamp: {:?}", msg.t.frame_number, msg.t.total_chunks, before);
+            debug!("received camera frame from server, frame_number: {}, chunks: {}, timestamp: {:?}", chunk.frame_number, entry.total_chunks, before);
 
             // Decode JPEG
             let before = std::time::Instant::now();
