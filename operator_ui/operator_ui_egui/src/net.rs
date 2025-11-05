@@ -8,7 +8,7 @@ use ergot::{
     topic,
     well_known::DeviceInfo,
 };
-use log::{debug, info};
+use tracing::{debug, info};
 use operator_shared::commands::OperatorCommand;
 use tokio::runtime::Handle;
 use tokio::{net::UdpSocket, select, time, time::sleep};

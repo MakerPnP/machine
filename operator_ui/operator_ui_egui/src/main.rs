@@ -1,5 +1,9 @@
 #![warn(clippy::all, rust_2018_idioms)]
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+
+// In release mode *without* console_logging → use GUI subsystem (hide console)
+// In debug mode → console always enabled
+// In release mode *with* console_logging → console is enabled
+#![cfg_attr(all(not(debug_assertions), not(feature = "console_logging")), windows_subsystem = "windows")]
 
 use egui_i18n::tr;
 use i18n::I18nConfig;
