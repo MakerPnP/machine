@@ -1,9 +1,13 @@
+use std::thread;
 use async_std::prelude::StreamExt;
-use egui::{Pos2, Ui, Vec2, ViewportBuilder, ViewportClass, ViewportId};
+use eframe::epaint::ColorImage;
+use egui::{Context, Pos2, Ui, Vec2, ViewportBuilder, ViewportClass, ViewportId};
 use egui_extras::install_image_loaders;
 use egui_i18n::tr;
 use egui_mobius::types::{Enqueue, ValueGuard};
 use egui_mobius::{Slot, Value};
+use tokio::sync::watch;
+use tokio::sync::watch::Receiver;
 use tracing::{debug, trace};
 use ui::camera::CameraUi;
 use ui::controls::ControlsUi;
@@ -52,6 +56,7 @@ pub static TOGGLE_DEFINITIONS: [ToggleDefinition; 6] = [
 
 pub struct AppState {
     pub(crate) command_sender: Enqueue<UiCommand>,
+    pub(crate) context: egui::Context,
     ui_state: Value<UiState>,
 }
 
@@ -65,9 +70,9 @@ pub struct UiState {
 }
 
 impl AppState {
-    pub fn init(sender: Enqueue<UiCommand>) -> Self {
+    pub fn init(sender: Enqueue<UiCommand>, context: Context, camera_rx: Receiver<ColorImage>) -> Self {
         let ui_state = UiState {
-            camera_ui: CameraUi::default(),
+            camera_ui: CameraUi::new(camera_rx),
             controls_ui: ControlsUi::default(),
             diagnostics_ui: DiagnosticsUi::default(),
             plot_ui: PlotUi::default(),
@@ -80,6 +85,7 @@ impl AppState {
         Self {
             command_sender: sender.clone(),
             ui_state,
+            context,
         }
     }
 
@@ -138,11 +144,14 @@ impl OperatorUiApp {
 
         install_image_loaders(&cc.egui_ctx);
 
+        // Start camera instance
+        let (camera_tx, camera_rx) = watch::channel::<ColorImage>(ColorImage::default());
+
         let (app_signal, mut app_slot) = egui_mobius::factory::create_signal_slot::<UiCommand>();
 
         let app_message_sender = app_signal.sender.clone();
 
-        let app_state = AppState::init(app_message_sender.clone());
+        let app_state = AppState::init(app_message_sender.clone(), cc.egui_ctx.clone(), camera_rx);
 
         {
             let mut viewports = instance.viewports.lock().unwrap();
@@ -212,10 +221,16 @@ impl OperatorUiApp {
             }
         };
 
-        spawner.spawn(ergot_task(spawner.clone(), instance.state.clone()));
-
         // Start the slot with the handler
         app_slot.start(handler);
+
+        // Start networking
+        thread::spawn({
+            let state = instance.state.as_mut().unwrap().clone();
+            move || {
+                spawner.block_on(ergot_task(spawner.clone(), state, camera_tx));
+            }
+        });
 
         {
             instance

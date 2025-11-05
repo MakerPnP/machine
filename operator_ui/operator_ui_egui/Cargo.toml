@@ -36,10 +36,11 @@ eframe = { version = "0.33.0", default-features = false, features = [
 ] }
 egui_tiles         = { workspace = true }
 egui_extras        = { workspace = true, default-features = false, features = ["image"] }
+egui_plot          = { workspace = true }
 
 # image support
 image = { workspace = true, default-features = false, features = [
-    "png",
+    "png", "jpeg"
 ] }
 
 # tracing
@@ -47,13 +48,14 @@ tracing-subscriber = { workspace = true, features = ["fmt", "env-filter"] }
 tracing            = { workspace = true, features = ["release_max_level_trace"] }
 
 # profiling
-profiling = { workspace = true}
-puffin_http = { workspace = true, optional = true}
+profiling          = { workspace = true}
+puffin_http        = { workspace = true, optional = true}
 
-egui-i18n = { workspace = true }
-egui_mobius = { workspace = true, features = ["serde"] }
+# language
+egui-i18n          = { workspace = true }
 
 # tasks/async
+egui_mobius        = { workspace = true, features = ["serde"] }
 tokio = { workspace = true, features = ["full"]}
 futures =  { workspace = true }
 async-std =  { workspace = true }
