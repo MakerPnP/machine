@@ -1,9 +1,8 @@
 use std::sync::mpsc::Sender;
-use std::time::Duration;
 use eframe::emath::{NumExt, Pos2, Vec2};
 use eframe::epaint::ahash::HashMap;
 use eframe::epaint::{Color32, CornerRadius};
-use egui::{Context, Frame, Id, Image, Rect, Sense, ThemePreference, Ui, ViewportId, WidgetText};
+use egui::{CollapsingHeader, Context, Frame, Id, Image, Rect, Sense, ThemePreference, Ui, ViewportId, WidgetText};
 use egui_i18n::tr;
 use egui_mobius::Value;
 use egui_mobius::types::{Enqueue, ValueGuard};
@@ -14,7 +13,9 @@ use crate::app::{MIN_TOUCH_SIZE, PaneKind, TOGGLE_DEFINITIONS, UiState};
 use crate::ui_commands::{UiCommand, ViewportUiAction, ViewportUiCommand};
 use crate::ui_common::egui::bring_window_to_front;
 use crate::ui_common::egui_tree::{add_pane_to_root, dump_tiles};
-use crate::{LOGO, app};
+use crate::{LOGO, app, fps_stats};
+use crate::fps_stats::{FpsSnapshot, FpsStats};
+use crate::fps_stats::egui::show_frame_durations;
 
 #[derive(serde::Deserialize, serde::Serialize, Default, Clone)]
 #[serde(default)]
@@ -144,6 +145,10 @@ pub struct ViewportState {
     pub(crate) workspaces: Value<Workspaces>,
     pub(crate) context: Option<egui::Context>,
     pub(crate) ui_state: Value<UiState>,
+
+    fps_stats: FpsStats,
+    fps_snapshot: Option<FpsSnapshot>,
+    frame_number: u64,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -171,6 +176,10 @@ impl ViewportState {
             workspaces,
             context: None,
             ui_state,
+
+            fps_stats: FpsStats::new(300),
+            fps_snapshot: None,
+            frame_number: 0,
         }
     }
 
@@ -265,7 +274,11 @@ impl ViewportState {
     }
 
     pub fn ui(&mut self, ctx: &egui::Context) {
-        let frame_number = ctx.cumulative_frame_nr();
+
+        let now = std::time::Instant::now();
+
+        self.fps_snapshot = self.fps_stats.update(now);
+        self.frame_number = ctx.cumulative_frame_nr();
 
         let ui_id = Id::from(self.id);
 
@@ -291,7 +304,7 @@ impl ViewportState {
                 .unwrap();
 
             // TODO or workspace changed
-            if frame_number == 0 {
+            if self.frame_number == 0 {
                 let actions = workspace
                     .toggle_states
                     .iter()
@@ -442,6 +455,22 @@ impl ViewportState {
                         .auto_shrink([false, false])
                         .min_scrolled_width(MIN_TOUCH_SIZE.x)
                         .show(ui, |ui| {
+
+                            CollapsingHeader::new("Stats")
+                                .show_unindented(ui, |ui|{
+                                    ui.label(format!("Frame: {}", self.frame_number));
+                                    if let Some(snapshot) = &self.fps_snapshot {
+                                        ui.label(format!(
+                                            "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
+                                            snapshot.latest,
+                                            snapshot.min,
+                                            snapshot.max,
+                                            snapshot.avg
+                                        ));
+
+                                        show_frame_durations(ui, &self.fps_stats);
+                                    }
+                                });
 
                             for kind in workspace.left_toggles.iter() {
                                 let toggle_definition = TOGGLE_DEFINITIONS.iter().find(|candidate| candidate.kind == *kind).unwrap();
@@ -606,7 +635,7 @@ impl ViewportState {
             // wait till the UI settles before applying actions.  Without this hack when the app
             // first starts up the window might not be big enough to show the windows in the right positions.
             // Currently, it seems that waiting 1 frame is enough, but this is fragile and may break in the future.
-            if frame_number >= 1 {
+            if self.frame_number >= 1 {
                 self.viewport_actions
                     .retain(|candidate| {
                         let steal = match candidate {

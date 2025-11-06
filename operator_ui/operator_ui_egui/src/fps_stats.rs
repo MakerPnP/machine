@@ -85,14 +85,14 @@ pub mod egui {
         ui.label("Frame durations (ms)");
 
 
-        Plot::new("Normal Distribution Demo")
-            .legend(Legend::default())
+        Plot::new("FPS stats")
             .width(ui.available_width())
             .height(100.0)
             .clamp_grid(true)
             .allow_drag(false)
             .allow_zoom(false)
             .allow_scroll(false)
+            .allow_axis_zoom_drag(false)
             .allow_double_click_reset(false)
             .show(ui, |plot_ui| plot_ui.bar_chart(chart))
             .response
