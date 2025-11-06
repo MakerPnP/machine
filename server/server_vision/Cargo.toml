@@ -1,0 +1,22 @@
+[package]
+name = "server_vision"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+server_common      = { path = "../server_common"}
+
+# logging
+log                = { workspace = true }
+
+# errors
+anyhow             = { workspace = true }
+
+# time
+chrono             = { workspace = true}
+
+# vision
+opencv             = { workspace = true, features = ["videoio", "imgcodecs"] }
+
+# tasks
+tokio              = { workspace = true }

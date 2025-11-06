@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
 
     // Spawn capture loop
     let tx_clone = tx.clone();
-    tokio::spawn(async move {
+    tokio::task::spawn(async move {
         if let Err(e) = capture_loop(tx_clone).await {
             eprintln!("capture loop error: {e:?}");
         }

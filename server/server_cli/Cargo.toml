@@ -6,10 +6,23 @@ edition = "2024"
 [dependencies]
 operator_shared    = { workspace = true }
 ioboard_shared     = { workspace = true }
+server_vision      = { path = "../server_vision" }
+server_common      = { path = "../server_common" }
 
-cordyceps          = { workspace = true }
+# logging
 env_logger         = { workspace = true }
 log                = { workspace = true }
+
+# errors
+anyhow             = { workspace = true }
+
+# comms
 ergot              = { workspace = true }
+cordyceps          = { workspace = true }
+
+# tasks
 mutex              = { workspace = true }
 tokio              = { workspace = true }
+
+# time
+chrono             = { workspace = true, features = ["serde"]}
