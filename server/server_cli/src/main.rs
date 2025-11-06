@@ -1,22 +1,38 @@
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::{io, pin::pin, time::Duration};
-
+use std::sync::Arc;
 use ergot::{
     toolkits::tokio_udp::{RouterStack, register_router_interface},
     topic,
     well_known::DeviceInfo,
 };
+use ergot::wire_frames::MAX_HDR_ENCODED_SIZE;
 use ioboard_shared::commands::IoBoardCommand;
 use ioboard_shared::yeet::Yeet;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use operator_shared::commands::OperatorCommand;
 use tokio::time::interval;
 use tokio::{net::UdpSocket, select, time, time::sleep};
+use tokio::sync::{broadcast, Mutex};
+use server_common::camera::{CameraDefinition, CameraSource, CameraStreamConfig, OpenCVCameraConfig};
+use server_vision::{capture_loop, CameraFrame};
+use crate::camera::camera_streamer;
 
-// TODO configure these appropriately
-const MAX_ERGOT_PACKET_SIZE: u16 = 1024;
-const TX_BUFFER_SIZE: usize = 4096;
+pub mod camera;
+
+pub const UDP_OVER_ETH_MTU: usize = 1500;
+pub const IP_OVERHEAD_SIZE: usize = 20;
+pub const UDP_OVERHEAD_SIZE: usize = 8;
+pub const UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX: usize = UDP_OVER_ETH_MTU - IP_OVERHEAD_SIZE - UDP_OVERHEAD_SIZE;
+pub const UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX: usize = UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX - MAX_HDR_ENCODED_SIZE;
+
+// TODO configure these more appropriately
+const OPERATOR_TX_BUFFER_SIZE: usize = 1024 * 10;
+const IOBOARD_TX_BUFFER_SIZE: usize = 4096;
+
+// must be less than the MTU of the network interface + ip + udp + ergot + chunking overhead
+const CAMERA_CHUNK_SIZE: usize = 1024;
 
 topic!(YeetTopic, Yeet, "topic/yeet");
 topic!(IoBoardCommandTopic, IoBoardCommand, "topic/ioboard/command");
@@ -25,6 +41,20 @@ topic!(OperatorCommandTopic, OperatorCommand, "topic/operator/command");
 #[tokio::main]
 async fn main() -> io::Result<()> {
     env_logger::init();
+
+    let camera_definitions = vec![CameraDefinition {
+        name: "Default camera".to_string(),
+        source: CameraSource::OpenCV(OpenCVCameraConfig {
+            identifier: "TODO".to_string(),
+        }),
+        stream_config: CameraStreamConfig {
+            jpeg_quality: 95,
+        },
+        width: 1280,
+        height: 768,
+        fps: 25,
+    }];
+
 
     let stack: RouterStack = RouterStack::new();
 
@@ -35,7 +65,7 @@ async fn main() -> io::Result<()> {
     io_board_udp_socket
         .connect(io_board_remote_addr)
         .await?;
-    register_router_interface(&stack, io_board_udp_socket, MAX_ERGOT_PACKET_SIZE, TX_BUFFER_SIZE)
+    register_router_interface(&stack, io_board_udp_socket, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX as _, IOBOARD_TX_BUFFER_SIZE)
         .await
         .unwrap();
 
@@ -46,19 +76,75 @@ async fn main() -> io::Result<()> {
     operator_udp_socket
         .connect(operator_remote_addr)
         .await?;
-    register_router_interface(&stack, operator_udp_socket, MAX_ERGOT_PACKET_SIZE, TX_BUFFER_SIZE)
+    register_router_interface(&stack, operator_udp_socket, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX as _, OPERATOR_TX_BUFFER_SIZE)
         .await
         .unwrap();
 
     tokio::task::spawn(basic_services(stack.clone(), 0_u16));
-    tokio::task::spawn(io_board_command_sender(stack.clone()));
     tokio::task::spawn(yeet_listener(stack.clone()));
+
+    let mut cameras = Vec::new();
+
+    // TODO move this into a command handler so that cameras can be added/removed dynamically at runtime
+    for (camera_index, camera_definition) in camera_definitions.iter().enumerate() {
+
+        // TODO document the '* 2' magic number, try reducing it too.
+        let broadcast_cap = (camera_definition.fps * 2) as usize;
+
+        // Create broadcast channel for frames (Arc<Bytes> so we cheaply clone for each client)
+        let (tx, rx) = broadcast::channel::<Arc<CameraFrame>>(broadcast_cap);
+
+        // Spawn tasks
+
+        let capture_handle = tokio::task::spawn({
+            let camera_definition = camera_definition.clone();
+            async move {
+                if let Err(e) = capture_loop(tx, camera_definition).await {
+                    error!("capture loop error: {e:?}");
+                }
+            }
+        });
+        let streamer_handle = tokio::task::spawn({
+            let camera_definition = camera_definition.clone();
+            let stack = stack.clone();
+            async move {
+                if let Err(e) = camera_streamer(stack, rx, camera_definition, CAMERA_CHUNK_SIZE).await {
+                    error!("capture loop error: {e:?}");
+                }
+            }
+        });
+
+
+        cameras.push(CameraHandle {
+            capture_handle,
+            streamer_handle,
+            camera_index
+        });
+    }
+
+    let app_state = Arc::new(Mutex::new(AppState {
+        cameras,
+    }));
+
+    // TODO give the app_state to these tasks
+    tokio::task::spawn(io_board_command_sender(stack.clone()));
     tokio::task::spawn(operator_listener(stack.clone()));
+
 
     loop {
         println!("Waiting for messages...");
         sleep(Duration::from_secs(1)).await;
     }
+}
+
+struct CameraHandle {
+    capture_handle: tokio::task::JoinHandle<()>,
+    streamer_handle: tokio::task::JoinHandle<()>,
+    camera_index: usize,
+}
+
+struct AppState {
+    cameras: Vec<CameraHandle>,
 }
 
 async fn basic_services(stack: RouterStack, port: u16) {
