@@ -22,8 +22,6 @@ use std::collections::HashMap;
 ///
 /// no other combinations tested.
 
-
-// server.rs
 use anyhow::Result;
 use opencv::{imgcodecs, prelude::*, videoio};
 use std::sync::Arc;
@@ -49,7 +47,7 @@ topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
 endpoint!(CameraStreamerCommandEndpoint, CameraStreamerCommandRequest, CameraStreamerCommandResponse, "topic/camera");
 
-// TODO have some system whereby the server broadcasts it's availability via UDP (udis, swarm-discovery, and the camera client finds it) instead of hardcoding the IP address.
+// TODO have some system whereby the server broadcasts it's availability via UDP (udis, swarm-discovery, etc) and the camera client finds it, instead of hardcoding the IP address.
 const REMOTE_ADDR: &str = "127.0.0.1:5001";
 const LOCAL_ADDR: &str = "0.0.0.0:5000";
 const WIDTH: u32 = 1920;
