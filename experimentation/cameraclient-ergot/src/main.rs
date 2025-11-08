@@ -13,7 +13,7 @@ use ergot::well_known::{NameRequirement, SocketQuery};
 use ergot::traits::Endpoint;
 use tokio::runtime::Runtime;
 use log::{debug, error, info, trace, warn};
-use tokio::{net::UdpSocket, select, time::sleep};
+use tokio::{net::UdpSocket, select, time, time::sleep};
 use tokio::sync::watch;
 use tokio::sync::watch::{Receiver, Sender};
 use tokio::time::Instant;
@@ -55,9 +55,11 @@ async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context) 
         .await
         .unwrap();
 
+    let period = Duration::from_secs(1);
+    let mut interval = time::interval(period);
+
     loop {
-        println!("Waiting for messages...");
-        sleep(Duration::from_secs(1)).await;
+        interval.tick().await;
     }
 }
 

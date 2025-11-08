@@ -29,7 +29,7 @@ use opencv::{imgcodecs, prelude::*, videoio};
 use std::sync::Arc;
 use tokio::{
     sync::broadcast::{self, Sender},
-    time::{self, Duration, sleep},
+    time::{self, Duration},
     net::UdpSocket, select
 };
 use log::{debug, error, info, trace, warn};
@@ -105,9 +105,12 @@ async fn main() -> Result<()> {
         .await
         .unwrap();
 
+
+    let period = Duration::from_secs(1);
+    let mut interval = time::interval(period);
+
     loop {
-        println!("Waiting for messages...");
-        sleep(Duration::from_secs(1)).await;
+        interval.tick().await;
     }
 }
 
