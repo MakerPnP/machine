@@ -4,17 +4,18 @@ use eframe::{egui, App, CreationContext, Frame};
 use image::ImageFormat;
 use std::thread;
 use std::pin::pin;
+use std::sync::Arc;
 use std::time::Duration;
 use eframe::epaint::textures::TextureOptions;
-use egui::{ColorImage, Context};
-use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface}, topic, well_known::DeviceInfo, Address, FrameKind};
+use egui::{ColorImage, Context, ViewportCommand};
+use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface}, topic, well_known::DeviceInfo, FrameKind};
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
 use ergot::well_known::{NameRequirement, SocketQuery};
 use ergot::traits::Endpoint;
 use tokio::runtime::Runtime;
 use log::{debug, error, info, trace, warn};
-use tokio::{net::UdpSocket, select, time, time::sleep};
-use tokio::sync::watch;
+use tokio::{net::UdpSocket, select};
+use tokio::sync::{broadcast, watch};
 use tokio::sync::watch::{Receiver, Sender};
 use tokio::time::Instant;
 use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind, CameraStreamerCommand, CameraStreamerCommandRequest, CameraStreamerCommandResponse};
@@ -28,19 +29,19 @@ const LOCAL_ADDR: &str = "0.0.0.0:5001";
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 endpoint!(CameraStreamerCommandEndpoint, CameraStreamerCommandRequest, CameraStreamerCommandResponse, "topic/camera");
 
-fn start_network_thread(tx_out: Sender<ColorImage>, context: Context) {
+fn start_network_thread(tx_out: Sender<ColorImage>, context: Context, app_event_tx: Arc<broadcast::Sender<AppEvent>>) {
     // run a tokio runtime in background thread
     thread::spawn(move || {
         let rt = Runtime::new().expect("create tokio runtime");
         rt.block_on(async move {
-            if let Err(e) = network_task(REMOTE_ADDR, tx_out, context).await {
+            if let Err(e) = network_task(REMOTE_ADDR, tx_out, context, app_event_tx).await {
                 error!("network task error: {:?}", e);
             }
         });
     });
 }
 
-async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context) -> anyhow::Result<()> {
+async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context, app_event_tx: Arc<broadcast::Sender<AppEvent>>) -> anyhow::Result<()> {
 
     let queue = new_std_queue(1024 * 1024);
     let stack: EdgeStack = new_target_stack(&queue, 1400);
@@ -49,21 +50,33 @@ async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context) 
     udp_socket.connect(REMOTE_ADDR).await?;
 
     tokio::task::spawn(basic_services(stack.clone(), 0));
-    tokio::task::spawn(camera_frame_listener(stack.clone(), 0, tx_out, context));
+    let camera_frame_listener_handle = tokio::task::spawn(camera_frame_listener(stack.clone(), 0, tx_out, context.clone(), app_event_tx.subscribe()));
+
+    let mut app_event_rx = app_event_tx.subscribe();
 
     register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Target)
         .await
         .unwrap();
 
-    let period = Duration::from_secs(1);
-    let mut interval = time::interval(period);
-
     loop {
-        interval.tick().await;
+        if let Ok(event) = app_event_rx.recv().await {
+            match event {
+                AppEvent::Shutdown => {
+                    context.request_repaint();
+                    break;
+                }
+            }
+        }
     }
+
+    info!("Waiting for camera frame listener to finish");
+    let _ = camera_frame_listener_handle.await;
+
+    info!("Network task shutdown");
+    Ok(())
 }
 
-async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorImage>, context: Context) -> Result<(), anyhow::Error> {
+async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorImage>, context: Context, mut app_event_rx: broadcast::Receiver<AppEvent>) -> Result<(), anyhow::Error> {
     let subber = stack.topics().bounded_receiver::<CameraFrameChunkTopic, 320>(None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe_unicast();
@@ -102,117 +115,135 @@ async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorIma
     let mut in_progress: HashMap<u64, InProgressFrame> = HashMap::new();
 
     loop {
-        let msg = hdl.recv().await;
 
-        let chunk = &msg.t;
-
-        let entry_and_image_chunk = match &chunk.kind {
-            CameraFrameChunkKind::Meta(frame_meta) => {
-                in_progress.insert(chunk.frame_number, InProgressFrame {
-                    total_chunks: frame_meta.total_chunks,
-                    chunks: vec![None; frame_meta.total_chunks as usize],
-                    received_count: 0,
-                    start_time: Instant::now(),
-                });
-                continue;
+        select! {
+            app_event = app_event_rx.recv() => {
+                match app_event {
+                    Ok(event) => match event {
+                        AppEvent::Shutdown => {
+                            break
+                        }
+                    }
+                    Err(_) => {
+                        break;
+                    }
+                }
             }
-            CameraFrameChunkKind::ImageChunk(image_chunk) => {
-                in_progress.get_mut(&chunk.frame_number).map(|entry|(entry, image_chunk))
-            }
-        };
+            msg = hdl.recv() => {
+                let chunk = &msg.t;
 
-        let Some((entry, image_chunk)) = entry_and_image_chunk else {
-            continue;
-        };
+                let entry_and_image_chunk = match &chunk.kind {
+                    CameraFrameChunkKind::Meta(frame_meta) => {
+                        in_progress.insert(chunk.frame_number, InProgressFrame {
+                            total_chunks: frame_meta.total_chunks,
+                            chunks: vec![None; frame_meta.total_chunks as usize],
+                            received_count: 0,
+                            start_time: Instant::now(),
+                        });
+                        continue;
+                    }
+                    CameraFrameChunkKind::ImageChunk(image_chunk) => {
+                        in_progress.get_mut(&chunk.frame_number).map(|entry|(entry, image_chunk))
+                    }
+                };
 
-        trace!(
-            "received frame chunk: frame={} chunk={}/{} size={}",
-            chunk.frame_number,
-            image_chunk.chunk_index + 1,
-            entry.total_chunks,
-            image_chunk.bytes.len()
-        );
+                let Some((entry, image_chunk)) = entry_and_image_chunk else {
+                    continue;
+                };
 
-        // Insert chunk if not already present
-        let idx = image_chunk.chunk_index as usize;
-        if idx >= entry.chunks.len() {
-            trace!("invalid chunk index {} for frame {}", idx, chunk.frame_number);
-            continue;
-        }
-        if entry.chunks[idx].is_none() {
-            entry.chunks[idx] = Some(image_chunk.bytes.clone());
-            entry.received_count += 1;
-        }
+                trace!(
+                    "received frame chunk: frame={} chunk={}/{} size={}",
+                    chunk.frame_number,
+                    image_chunk.chunk_index + 1,
+                    entry.total_chunks,
+                    image_chunk.bytes.len()
+                );
 
-        // Check if frame is complete
-        if entry.received_count == entry.total_chunks {
-            // Reassemble JPEG data in order
-            let mut jpeg_data = Vec::new();
-            for c in entry.chunks.iter() {
-                if let Some(bytes) = c {
-                    jpeg_data.extend_from_slice(bytes);
-                } else {
-                    // Missing chunk — shouldn’t happen
-                    trace!("missing chunk during reassembly for frame {}", chunk.frame_number);
+                // Insert chunk if not already present
+                let idx = image_chunk.chunk_index as usize;
+                if idx >= entry.chunks.len() {
+                    trace!("invalid chunk index {} for frame {}", idx, chunk.frame_number);
                     continue;
                 }
-            }
-
-            let before = std::time::Instant::now();
-            debug!("received camera frame from server, frame_number: {}, chunks: {}, timestamp: {:?}", chunk.frame_number, entry.total_chunks, before);
-
-            // Decode JPEG
-            let before = std::time::Instant::now();
-            match image::load_from_memory_with_format(&jpeg_data, ImageFormat::Jpeg) {
-                Ok(img) => {
-                    let point1 = std::time::Instant::now();
-                    let rgba = img.to_rgba8();
-                    let (w, h) = (rgba.width() as usize, rgba.height() as usize);
-                    let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
-
-                    let _ = tx_out.send(color_image);
-                    context.request_repaint();
-
-                    let after = std::time::Instant::now();
-                    trace!("sent frame to egui, frame_number: {}, size: {} bytes, timestamp: {:?}, decoding: {}us, imagegen+send: {}us, total-elapsed: {}us",
-                        chunk.frame_number,
-                        jpeg_data.len(),
-                        after,
-                        (point1 - before).as_micros(),
-                        (after - point1).as_micros(),
-                        (after - before).as_micros(),
-                    );
+                if entry.chunks[idx].is_none() {
+                    entry.chunks[idx] = Some(image_chunk.bytes.clone());
+                    entry.received_count += 1;
                 }
-                Err(e) => {
-                    error!("decode error frame {}: {:?}", chunk.frame_number, e);
+
+                // Check if frame is complete
+                if entry.received_count == entry.total_chunks {
+                    // Reassemble JPEG data in order
+                    let mut jpeg_data = Vec::new();
+                    for c in entry.chunks.iter() {
+                        if let Some(bytes) = c {
+                            jpeg_data.extend_from_slice(bytes);
+                        } else {
+                            // Missing chunk — shouldn’t happen
+                            trace!("missing chunk during reassembly for frame {}", chunk.frame_number);
+                            continue;
+                        }
+                    }
+
+                    let before = std::time::Instant::now();
+                    debug!("received camera frame from server, frame_number: {}, chunks: {}, timestamp: {:?}", chunk.frame_number, entry.total_chunks, before);
+
+                    // Decode JPEG
+                    let before = std::time::Instant::now();
+                    match image::load_from_memory_with_format(&jpeg_data, ImageFormat::Jpeg) {
+                        Ok(img) => {
+                            let point1 = std::time::Instant::now();
+                            let rgba = img.to_rgba8();
+                            let (w, h) = (rgba.width() as usize, rgba.height() as usize);
+                            let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
+
+                            let _ = tx_out.send(color_image);
+                            context.request_repaint();
+
+                            let after = std::time::Instant::now();
+                            trace!("sent frame to egui, frame_number: {}, size: {} bytes, timestamp: {:?}, decoding: {}us, imagegen+send: {}us, total-elapsed: {}us",
+                                chunk.frame_number,
+                                jpeg_data.len(),
+                                after,
+                                (point1 - before).as_micros(),
+                                (after - point1).as_micros(),
+                                (after - before).as_micros(),
+                            );
+                        }
+                        Err(e) => {
+                            error!("decode error frame {}: {:?}", chunk.frame_number, e);
+                        }
+                    }
+
+
+                    // Remove the completed frame from tracking
+                    in_progress.remove(&chunk.frame_number);
                 }
+                // drop old frames (stuck/incomplete)
+                let now = Instant::now();
+                in_progress.retain(|frame_num, f| {
+                    if now.duration_since(f.start_time) > Duration::from_secs(1) {
+                        warn!(
+                                "discarding incomplete frame {} (got {}/{})",
+                                frame_num,
+                                f.received_count,
+                                f.total_chunks
+                            );
+                        false
+                    } else {
+                        true
+                    }
+                });
+
             }
-
-
-            // Remove the completed frame from tracking
-            in_progress.remove(&chunk.frame_number);
         }
-        // drop old frames (stuck/incomplete)
-        let now = Instant::now();
-        in_progress.retain(|frame_num, f| {
-            if now.duration_since(f.start_time) > Duration::from_secs(1) {
-                warn!(
-                        "discarding incomplete frame {} (got {}/{})",
-                        frame_num,
-                        f.received_count,
-                        f.total_chunks
-                    );
-                false
-            } else {
-                true
-            }
-        });
     }
+
 
     let response = stack.endpoints().request::<CameraStreamerCommandEndpoint>(res[0].address, &CameraStreamerCommandRequest { command: CameraStreamerCommand::StopStreaming { port_id } }, None).await;
     if let Err(e) = response {
-        return Err(anyhow::anyhow!("Error sending start request: {:?}", e));
+        return Err(anyhow::anyhow!("Error sending stop request: {:?}", e));
     }
+    info!("camera frame listener stopped, port: {}", port_id);
     Ok(())
 }
 
@@ -243,17 +274,37 @@ struct CameraApp {
 
     gui_frame_number: u64,
     camera_frame_number: u64,
+
+    app_event_tx: Arc<broadcast::Sender<AppEvent>>,
+    app_event_rx: broadcast::Receiver<AppEvent>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum AppEvent {
+    Shutdown,
 }
 
 impl CameraApp {
     fn new(cc: &CreationContext) -> Self {
-        let (tx, rx) = watch::channel::<ColorImage>(ColorImage::default());
 
-        start_network_thread(tx, cc.egui_ctx.clone());
+        // Create shutdown channel
+        let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
+
+        ctrlc::set_handler({
+            let app_event_tx = app_event_tx.clone();
+            move || {
+                warn!("Ctrl+C received, shutting down.");
+                let _ = app_event_tx.send(AppEvent::Shutdown);
+            }
+        }).expect("Error setting Ctrl+C handler");
+
+        let (camera_image_tx, camera_image_rx) = watch::channel::<ColorImage>(ColorImage::default());
+
+        let app_event_tx = Arc::new(app_event_tx);
+        start_network_thread(camera_image_tx, cc.egui_ctx.clone(), app_event_tx.clone());
 
         Self {
-
-            rx,
+            rx: camera_image_rx,
             texture: None,
             gui_fps_stats: FpsStats::new(300),
             gui_fps_snapshot: None,
@@ -262,6 +313,9 @@ impl CameraApp {
 
             gui_frame_number: 0,
             camera_frame_number: 0,
+
+            app_event_tx,
+            app_event_rx,
         }
     }
 }
@@ -340,6 +394,20 @@ impl App for CameraApp {
                     });
                 });
             });
+
+        if let Ok(event) = self.app_event_rx.try_recv() {
+            match event {
+                AppEvent::Shutdown => {
+                    info!("GUI received shutdown event, shutting down");
+                    ctx.send_viewport_cmd(ViewportCommand::Close)
+                }
+            }
+        }
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        info!("GUI shutting down");
+        self.app_event_tx.send(AppEvent::Shutdown).unwrap();
     }
 }
 

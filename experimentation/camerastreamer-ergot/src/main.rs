@@ -28,6 +28,7 @@ use anyhow::Result;
 use opencv::{imgcodecs, prelude::*, videoio};
 use std::sync::Arc;
 use tokio::{
+    signal,
     sync::broadcast::{self, Sender},
     time::{self, Duration},
     net::UdpSocket, select
@@ -106,12 +107,11 @@ async fn main() -> Result<()> {
         .unwrap();
 
 
-    let period = Duration::from_secs(1);
-    let mut interval = time::interval(period);
+    // Wait for Ctrl+C
+    let _ = signal::ctrl_c().await;
 
-    loop {
-        interval.tick().await;
-    }
+    info!("Shut down requested, exiting");
+    Ok(())
 }
 
 struct CameraClient {
@@ -173,6 +173,8 @@ async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<u8,
                     };
                     clients.insert(port_id, camera_client);
 
+                    info!("streaming started");
+
                     CameraStreamerCommandResponse { result: CameraStreamerCommandResult::Ok }
                 }
                 CameraStreamerCommand::StopStreaming { port_id } => {
@@ -190,6 +192,8 @@ async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<u8,
                             },
                         };
                     }
+                    info!("streaming stopped");
+
                     CameraStreamerCommandResponse { result: CameraStreamerCommandResult::Ok }
                 },
 
