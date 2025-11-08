@@ -8,7 +8,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use eframe::epaint::textures::TextureOptions;
 use egui::{ColorImage, Context, ViewportCommand};
-use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface}, topic, well_known::DeviceInfo, FrameKind};
+use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface}, topic, well_known::DeviceInfo, Address, FrameKind};
+use ergot::interface_manager::profiles::direct_edge::EDGE_NODE_ID;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
 use ergot::well_known::{NameRequirement, SocketQuery};
 use ergot::traits::Endpoint;
@@ -41,16 +42,16 @@ fn start_network_thread(tx_out: Sender<ColorImage>, context: Context, app_event_
     });
 }
 
-async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context, app_event_tx: Arc<broadcast::Sender<AppEvent>>) -> anyhow::Result<()> {
+async fn network_task(remote_addr: &str, tx_out: Sender<ColorImage>, context: Context, app_event_tx: Arc<broadcast::Sender<AppEvent>>) -> anyhow::Result<()> {
 
     let queue = new_std_queue(1024 * 1024);
     let stack: EdgeStack = new_target_stack(&queue, 1400);
     let udp_socket = UdpSocket::bind(LOCAL_ADDR).await?;
 
-    udp_socket.connect(REMOTE_ADDR).await?;
+    udp_socket.connect(remote_addr).await?;
 
     tokio::task::spawn(basic_services(stack.clone(), 0));
-    let camera_frame_listener_handle = tokio::task::spawn(camera_frame_listener(stack.clone(), 0, tx_out, context.clone(), app_event_tx.subscribe()));
+    let camera_frame_listener_handle = tokio::task::spawn(camera_frame_listener(stack.clone(), tx_out, context.clone(), app_event_tx.subscribe()));
 
     let mut app_event_rx = app_event_tx.subscribe();
 
@@ -76,13 +77,18 @@ async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context, 
     Ok(())
 }
 
-async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorImage>, context: Context, mut app_event_rx: broadcast::Receiver<AppEvent>) -> Result<(), anyhow::Error> {
+async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<ColorImage>, context: Context, mut app_event_rx: broadcast::Receiver<AppEvent>) -> Result<(), anyhow::Error> {
     let subber = stack.topics().bounded_receiver::<CameraFrameChunkTopic, 320>(None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe_unicast();
-    let port_id = hdl.port();
 
-    info!("camera frame listener started, port: {}", port_id);
+    let address = Address {
+        network_id: 0,
+        node_id: EDGE_NODE_ID,
+        port_id: hdl.port(),
+    };
+
+    info!("camera frame listener started, port: {}", address.port_id);
 
     let query = SocketQuery {
         key: CameraStreamerCommandEndpoint::REQ_KEY.to_bytes(),
@@ -99,7 +105,7 @@ async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorIma
         return Err(anyhow::anyhow!("No discovery results"));
     }
 
-    let response = stack.endpoints().request::<CameraStreamerCommandEndpoint>(res[0].address, &CameraStreamerCommandRequest { command: CameraStreamerCommand::StartStreaming { port_id } }, None).await;
+    let response = stack.endpoints().request::<CameraStreamerCommandEndpoint>(res[0].address, &CameraStreamerCommandRequest { command: CameraStreamerCommand::StartStreaming { address } }, None).await;
     if let Err(e) = response {
         return Err(anyhow::anyhow!("Error sending start request: {:?}", e));
     }
@@ -239,11 +245,11 @@ async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorIma
     }
 
 
-    let response = stack.endpoints().request::<CameraStreamerCommandEndpoint>(res[0].address, &CameraStreamerCommandRequest { command: CameraStreamerCommand::StopStreaming { port_id } }, None).await;
+    let response = stack.endpoints().request::<CameraStreamerCommandEndpoint>(res[0].address, &CameraStreamerCommandRequest { command: CameraStreamerCommand::StopStreaming { address } }, None).await;
     if let Err(e) = response {
         return Err(anyhow::anyhow!("Error sending stop request: {:?}", e));
     }
-    info!("camera frame listener stopped, port: {}", port_id);
+    info!("camera frame listener stopped, address: {}", address);
     Ok(())
 }
 

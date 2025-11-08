@@ -1,4 +1,5 @@
 use std::ops::{Deref, DerefMut};
+use ergot::Address;
 use postcard_schema::Schema;
 use postcard_schema::schema::{DataModelType, NamedType};
 use serde::{Deserialize, Serialize};
@@ -15,8 +16,8 @@ pub struct CameraStreamerCommandResponse {
 
 #[derive(Debug, Serialize, Deserialize, Schema, Clone, PartialEq)]
 pub enum CameraStreamerCommand {
-    StartStreaming { port_id: u8 },
-    StopStreaming { port_id: u8 },
+    StartStreaming { address: Address },
+    StopStreaming { address: Address },
 }
 
 #[derive(Debug, Serialize, Deserialize, Schema, Clone)]

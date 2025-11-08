@@ -40,7 +40,6 @@ use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_contro
 use std::convert::TryInto;
 use std::pin::pin;
 use ergot::interface_manager::InterfaceSendError;
-use ergot::interface_manager::profiles::direct_edge::EDGE_NODE_ID;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::Mutex;
@@ -98,7 +97,7 @@ async fn main() -> Result<()> {
 
     tokio::task::spawn(basic_services(stack.clone(), 0));
 
-    let clients: Arc<Mutex<HashMap<u8, CameraClient>>> = Arc::new(Mutex::new(HashMap::new()));
+    let clients: Arc<Mutex<HashMap<Address, CameraClient>>> = Arc::new(Mutex::new(HashMap::new()));
 
     tokio::task::spawn(camera_command_handler(stack.clone(), clients.clone(), rx));
 
@@ -110,12 +109,13 @@ async fn main() -> Result<()> {
     // Wait for Ctrl+C
     let _ = signal::ctrl_c().await;
 
+    // TODO gracefully tell clients server is shutting down
+
     info!("Shut down requested, exiting");
     Ok(())
 }
 
 struct CameraClient {
-    pub address: Address,
     pub handle: tokio::task::JoinHandle<Result<Receiver<Arc<CameraFrame>>,Receiver<Arc<CameraFrame>>>>,
     pub shutdown_flag: Arc<Mutex<bool>>,
 }
@@ -137,21 +137,21 @@ async fn basic_services(stack: EdgeStack, port: u16) {
     }
 }
 
-async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<u8, CameraClient>>>, rx: Receiver<Arc<CameraFrame>>) {
+async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<Address, CameraClient>>>, rx: Receiver<Arc<CameraFrame>>) {
 
     let server_socket = stack.endpoints().single_server::<CameraStreamerCommandEndpoint>(None);
     let server_socket = pin!(server_socket);
     let mut hdl = server_socket.attach();
     let port = hdl.port();
 
-    info!("camera command server, port: {}", port);
+    info!("Camera command server, port: {}", port);
 
     let mut rx = Some(rx);
 
     loop {
         let _ = hdl.serve(async |request: &CameraStreamerCommandRequest| {
             match request.command {
-                CameraStreamerCommand::StartStreaming { port_id } => {
+                CameraStreamerCommand::StartStreaming { address } => {
 
                     let mut clients = clients.lock().await;
                     if rx.is_none() {
@@ -159,27 +159,21 @@ async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<u8,
                     }
                     let rx = rx.take().unwrap();
                     // TODO how do we know the network and node id is correct here?
-                    let address = Address {
-                        network_id: 0,
-                        node_id: EDGE_NODE_ID,
-                        port_id,
-                    };
                     let shutdown_flag = Arc::new(Mutex::new(false));
                     let handle = tokio::task::spawn(camera_streamer(stack.clone(), rx, address, shutdown_flag.clone()));
                     let camera_client = CameraClient {
-                        address,
                         handle,
                         shutdown_flag
                     };
-                    clients.insert(port_id, camera_client);
+                    clients.insert(address, camera_client);
 
-                    info!("streaming started");
+                    info!("Streaming started. address: {}", address);
 
                     CameraStreamerCommandResponse { result: CameraStreamerCommandResult::Ok }
                 }
-                CameraStreamerCommand::StopStreaming { port_id } => {
+                CameraStreamerCommand::StopStreaming { address } => {
                     let mut clients = clients.lock().await;
-                    if let Some(client) = clients.remove(&port_id) {
+                    if let Some(client) = clients.remove(&address) {
                         *client.shutdown_flag.lock().await = true;
                         match client.handle.await {
                             Ok(join_result) => {
@@ -187,12 +181,12 @@ async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<u8,
                                 rx.replace(returned_rx);
                             },
                             Err(join_error) => {
-                                error!("unable to stop streaming, join error: {}", join_error);
+                                error!("Unable to stop streaming, join error: {}", join_error);
                                 // rx is lost, cannot recover
                             },
                         };
                     }
-                    info!("streaming stopped");
+                    info!("Streaming stopped. address: {}", address);
 
                     CameraStreamerCommandResponse { result: CameraStreamerCommandResult::Ok }
                 },
