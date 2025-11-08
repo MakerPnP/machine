@@ -32,7 +32,7 @@ use tokio::{
     time::{self, Duration, sleep},
     net::UdpSocket, select
 };
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 
 use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_controller_stack, register_edge_interface}, topic, well_known::DeviceInfo, Address, NetStackSendError};
 
@@ -52,8 +52,11 @@ endpoint!(CameraStreamerCommandEndpoint, CameraStreamerCommandRequest, CameraStr
 // TODO have some system whereby the server broadcasts it's availability via UDP (udis, swarm-discovery, and the camera client finds it) instead of hardcoding the IP address.
 const REMOTE_ADDR: &str = "127.0.0.1:5001";
 const LOCAL_ADDR: &str = "0.0.0.0:5000";
-const WIDTH: i32 = 1280;
-const HEIGHT: i32 = 720;
+const WIDTH: u32 = 1920;
+// const WIDTH: i32 = 1280;
+const HEIGHT: u32 = 1080;
+// const HEIGHT: i32 = 720;
+const BPP: u32 = 24;
 const FPS: u32 = 25;
 
 // must be less than the MTU of the network interface + udp overhead + ergot overhead + chunking overhead
@@ -81,14 +84,18 @@ async fn main() -> Result<()> {
         }
     });
 
-    let port = 1;
-    let queue = new_std_queue(1024 * 10);
+    const JPEG_COMPRESSION_RATIO_GUESS: u32 = 5; // 5:1
+    const BITS_PER_BYTE: u32 = 8;
+    let queue_size = (WIDTH * HEIGHT * BPP) / BITS_PER_BYTE / JPEG_COMPRESSION_RATIO_GUESS;
+    println!("queue size: {}", queue_size);
+
+    let queue = new_std_queue(queue_size as usize);
     let stack: EdgeStack = new_controller_stack(&queue, 1400);
     let udp_socket = UdpSocket::bind(LOCAL_ADDR).await?;
 
     udp_socket.connect(REMOTE_ADDR).await?;
 
-    tokio::task::spawn(basic_services(stack.clone(), port));
+    tokio::task::spawn(basic_services(stack.clone(), 0));
 
     let clients: Arc<Mutex<HashMap<u8, CameraClient>>> = Arc::new(Mutex::new(HashMap::new()));
 
@@ -286,6 +293,7 @@ async fn camera_streamer(stack: EdgeStack, mut rx: Receiver<Arc<CameraFrame>>, d
                 }
 
                 let mut ok = true;
+                let mut total_retries = 0;
                 for (chunk_index, chunk) in jpeg_bytes.chunks(CHUNK_SIZE).enumerate() {
                     let frame_chunk = CameraFrameChunk {
                         frame_number: *frame_number,
@@ -304,11 +312,11 @@ async fn camera_streamer(stack: EdgeStack, mut rx: Receiver<Arc<CameraFrame>>, d
                     //            15fps =  66ms total frame time.
                     //            10fps = 100ms total frame time.
                     const INITIAL_BACKOFF: Duration = Duration::from_micros(100);
-                    let mut retries = 0;
+                    let mut chunk_retries = 0;
 
                     let result = loop {
                         match stack.topics().unicast_borrowed::<CameraFrameChunkTopic>(destination, &frame_chunk) {
-                            r @ Ok(_) => {
+                            r @ Ok(()) => {
                                 // reset
                                 break r
                             }
@@ -316,22 +324,24 @@ async fn camera_streamer(stack: EdgeStack, mut rx: Receiver<Arc<CameraFrame>>, d
                                 if chunk_start_at.elapsed() > Duration::from_millis(100) {
                                     break e1
                                 } else {
-                                    let backoff = INITIAL_BACKOFF * (1 << retries.min(4));
+                                    let backoff = INITIAL_BACKOFF * (1 << chunk_retries.min(4));
                                     time::sleep_until(chunk_start_at + backoff).await;
                                 }
                             }
                             e2@ Err(_) => {
+                                error!("error: {:?}", e2);
                                 break e2
                             }
                         }
 
-                        retries += 1;
+                        chunk_retries += 1;
+                        total_retries += 1;
                     };
 
                     match result {
                         Ok(_) => tokio::task::yield_now().await,
                         Err(e) => {
-                            error!("Aborting frame, error sending chunk. frame_number: {}, chunk: {}/{}, retries: {}, error: {:?}", frame_number, chunk_index + 1, total_chunks, retries, e);
+                            error!("Aborting frame, error sending chunk. frame_number: {}, chunk: {}/{}, retries: {}, error: {:?}", frame_number, chunk_index + 1, total_chunks, chunk_retries, e);
                             ok = false;
                             break
                         }
@@ -339,7 +349,11 @@ async fn camera_streamer(stack: EdgeStack, mut rx: Receiver<Arc<CameraFrame>>, d
                 }
 
                 if ok {
-                    trace!("Frame sent. frame_number: {}", frame_number);
+                    if total_retries > 0 {
+                        warn!("Frame sent with retries. frame_number: {}, total_retries: {}", frame_number, total_retries);
+                    }
+                } else {
+                    error!("Frame failed to send. frame_number: {}, total_retries: {}", frame_number, total_retries);
                 }
             }
         }
