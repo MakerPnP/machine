@@ -85,7 +85,7 @@ pub mod egui {
         ui.label("Frame durations (ms)");
 
 
-        Plot::new("Normal Distribution Demo")
+        Plot::new("fps_stats")
             .legend(Legend::default())
             .width(ui.available_width())
             .height(100.0)
