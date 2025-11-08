@@ -94,6 +94,7 @@ pub mod egui {
             .allow_zoom(false)
             .allow_scroll(false)
             .allow_double_click_reset(false)
+            .allow_axis_zoom_drag(false)
             .show(ui, |plot_ui| plot_ui.bar_chart(chart))
             .response
     }
