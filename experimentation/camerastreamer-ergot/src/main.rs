@@ -252,6 +252,8 @@ async fn camera_streamer(stack: EdgeStack, mut rx: Receiver<Arc<CameraFrame>>, d
         let do_rx = rx.recv();
         select! {
             flag = do_shutdown_flag => {
+                // FIXME this is a spin loop, since the lock will be ready most of the time
+
                 if *flag == true {
                     break
                 }

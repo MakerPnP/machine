@@ -293,7 +293,7 @@ enum AppEvent {
 impl CameraApp {
     fn new(cc: &CreationContext) -> Self {
 
-        // Create shutdown channel
+        // Create event channel
         let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
 
         ctrlc::set_handler({
