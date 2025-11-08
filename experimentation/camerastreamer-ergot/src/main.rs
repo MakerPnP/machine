@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 /// for windows/msys2/ucrt64 build (requires gnu toolchain):
 /// `cargo build --target x86_64-pc-windows-gnu`
 /// or:
@@ -31,18 +32,24 @@ use tokio::{
     time::{self, Duration, sleep},
     net::UdpSocket, select
 };
-use log::{debug, error, trace};
+use log::{debug, error, info, trace};
 
-use ergot::{toolkits::tokio_udp::{EdgeStack, new_std_queue, new_controller_stack, register_edge_interface}, topic, well_known::DeviceInfo, NetStackSendError};
+use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_controller_stack, register_edge_interface}, topic, well_known::DeviceInfo, Address, NetStackSendError};
 
 use std::convert::TryInto;
+use std::pin::pin;
 use ergot::interface_manager::InterfaceSendError;
+use ergot::interface_manager::profiles::direct_edge::EDGE_NODE_ID;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
-use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind, CameraFrameImageChunk, CameraFrameMeta, TimeStampUTC};
+use tokio::sync::broadcast::Receiver;
+use tokio::sync::Mutex;
+use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind, CameraFrameImageChunk, CameraFrameMeta, CameraStreamerCommand, CameraStreamerCommandError, CameraStreamerCommandRequest, CameraStreamerCommandResponse, CameraStreamerCommandResult};
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
+endpoint!(CameraStreamerCommandEndpoint, CameraStreamerCommandRequest, CameraStreamerCommandResponse, "topic/camera");
 
+// TODO have some system whereby the server broadcasts it's availability via UDP (udis, swarm-discovery, and the camera client finds it) instead of hardcoding the IP address.
 const REMOTE_ADDR: &str = "127.0.0.1:5001";
 const LOCAL_ADDR: &str = "0.0.0.0:5000";
 const WIDTH: i32 = 1280;
@@ -74,14 +81,18 @@ async fn main() -> Result<()> {
         }
     });
 
+    let port = 1;
     let queue = new_std_queue(1024 * 10);
     let stack: EdgeStack = new_controller_stack(&queue, 1400);
     let udp_socket = UdpSocket::bind(LOCAL_ADDR).await?;
 
     udp_socket.connect(REMOTE_ADDR).await?;
 
-    tokio::task::spawn(basic_services(stack.clone(), 0));
-    tokio::task::spawn(camera_streamer(stack.clone(), rx));
+    tokio::task::spawn(basic_services(stack.clone(), port));
+
+    let clients: Arc<Mutex<HashMap<u8, CameraClient>>> = Arc::new(Mutex::new(HashMap::new()));
+
+    tokio::task::spawn(camera_command_handler(stack.clone(), clients.clone(), rx));
 
     register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Controller)
         .await
@@ -93,6 +104,12 @@ async fn main() -> Result<()> {
     }
 }
 
+struct CameraClient {
+    pub address: Address,
+    pub handle: tokio::task::JoinHandle<Result<Receiver<Arc<CameraFrame>>,Receiver<Arc<CameraFrame>>>>,
+    pub shutdown_flag: Arc<Mutex<bool>>,
+}
+
 async fn basic_services(stack: EdgeStack, port: u16) {
     let info = DeviceInfo {
         name: Some("Ergot client".try_into().unwrap()),
@@ -101,10 +118,73 @@ async fn basic_services(stack: EdgeStack, port: u16) {
     };
     let do_pings = stack.services().ping_handler::<4>();
     let do_info = stack.services().device_info_handler::<4>(&info);
+    let do_socket_disco = stack.services().socket_query_handler::<4>();
 
     select! {
         _ = do_pings => {}
         _ = do_info => {}
+        _ = do_socket_disco => {},
+    }
+}
+
+async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<u8, CameraClient>>>, rx: Receiver<Arc<CameraFrame>>) {
+
+    let server_socket = stack.endpoints().single_server::<CameraStreamerCommandEndpoint>(None);
+    let server_socket = pin!(server_socket);
+    let mut hdl = server_socket.attach();
+    let port = hdl.port();
+
+    info!("camera command server, port: {}", port);
+
+    let mut rx = Some(rx);
+
+    loop {
+        let _ = hdl.serve(async |request: &CameraStreamerCommandRequest| {
+            match request.command {
+                CameraStreamerCommand::StartStreaming { port_id } => {
+
+                    let mut clients = clients.lock().await;
+                    if rx.is_none() {
+                        return CameraStreamerCommandResponse { result: CameraStreamerCommandResult::Error { code: CameraStreamerCommandError::Busy, args: vec![] } }
+                    }
+                    let rx = rx.take().unwrap();
+                    // TODO how do we know the network and node id is correct here?
+                    let address = Address {
+                        network_id: 0,
+                        node_id: EDGE_NODE_ID,
+                        port_id,
+                    };
+                    let shutdown_flag = Arc::new(Mutex::new(false));
+                    let handle = tokio::task::spawn(camera_streamer(stack.clone(), rx, address, shutdown_flag.clone()));
+                    let camera_client = CameraClient {
+                        address,
+                        handle,
+                        shutdown_flag
+                    };
+                    clients.insert(port_id, camera_client);
+
+                    CameraStreamerCommandResponse { result: CameraStreamerCommandResult::Ok }
+                }
+                CameraStreamerCommand::StopStreaming { port_id } => {
+                    let mut clients = clients.lock().await;
+                    if let Some(client) = clients.remove(&port_id) {
+                        *client.shutdown_flag.lock().await = true;
+                        match client.handle.await {
+                            Ok(join_result) => {
+                                let returned_rx = join_result.unwrap_or_else(|returned_rx| returned_rx);
+                                rx.replace(returned_rx);
+                            },
+                            Err(join_error) => {
+                                error!("unable to stop streaming, join error: {}", join_error);
+                                // rx is lost, cannot recover
+                            },
+                        };
+                    }
+                    CameraStreamerCommandResponse { result: CameraStreamerCommandResult::Ok }
+                },
+
+            }
+        }).await;
     }
 }
 
@@ -160,97 +240,111 @@ async fn capture_loop(tx: Sender<Arc<CameraFrame>>) -> Result<()> {
     }
 }
 
-async fn camera_streamer(stack: EdgeStack, mut rx: tokio::sync::broadcast::Receiver<Arc<CameraFrame>>) -> Result<()> {
+async fn camera_streamer(stack: EdgeStack, mut rx: Receiver<Arc<CameraFrame>>, destination: Address, shutdown_flag: Arc<Mutex<bool>>) -> Result<Receiver<Arc<CameraFrame>>, Receiver<Arc<CameraFrame>>> {
     loop {
-        // Receive latest frame (await)
-        let camera_frame = match rx.recv().await {
-            Ok(b) => b,
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped_frames)) => {
-                // If lagged, try to get the next available
-                debug!("lagged, trying to get next frame.  skipped: {}", skipped_frames);
-                continue;
-            }
-            Err(e) => return Err(anyhow::anyhow!(e)),
-        };
-
-        let CameraFrame { frame_number, jpeg_bytes, frame_timestamp } = &*camera_frame;
-
-        let total_bytes = jpeg_bytes.len() as u32;
-        let total_chunks = (total_bytes + (CHUNK_SIZE as u32) - 1) / CHUNK_SIZE as u32;
-
-        let now = time::Instant::now();
-
-        trace!("Sending frame, now: {:?}, frame_number: {}, total_chunks: {}, len: {}", now, camera_frame.frame_number, total_chunks, total_bytes);
-
-        let frame_chunk = CameraFrameChunk {
-            frame_number: *frame_number,
-            kind: CameraFrameChunkKind::Meta(CameraFrameMeta {
-                total_chunks,
-                total_bytes,
-                frame_timestamp: (*frame_timestamp).into(),
-            })
-        };
-        if stack.topics().broadcast::<CameraFrameChunkTopic>(&frame_chunk, None).is_err() {
-            trace!("Unable to send first frame chunk. frame_number: {}", frame_number);
-            // no point even trying to send the chunks if the first chunk failed, drop the frame
-            continue
-        }
-
-        let mut ok = true;
-        for (chunk_index, chunk) in jpeg_bytes.chunks(CHUNK_SIZE).enumerate() {
-            let frame_chunk = CameraFrameChunk {
-                frame_number: *frame_number,
-                kind: CameraFrameChunkKind::ImageChunk(CameraFrameImageChunk {
-                    chunk_index: chunk_index as u32,
-                    bytes: chunk.to_vec(),
-                })
-            };
-
-            let chunk_start_at = time::Instant::now();
-
-            // IMPORTANT: back-off delay needs to be as short as possible
-            //            60fps =  16ms total frame time.
-            //            30fps =  33ms total frame time.
-            //            25fps =  40ms total frame time.
-            //            15fps =  66ms total frame time.
-            //            10fps = 100ms total frame time.
-            const INITIAL_BACKOFF: Duration = Duration::from_micros(100);
-            let mut retries = 0;
-
-            let result = loop {
-                match stack.topics().broadcast::<CameraFrameChunkTopic>(&frame_chunk, None) {
-                    r @ Ok(_) => {
-                        // reset
-                        break r
-                    }
-                    e1 @ Err(NetStackSendError::InterfaceSend(InterfaceSendError::InterfaceFull)) => {
-                        if chunk_start_at.elapsed() > Duration::from_millis(100) {
-                            break e1
-                        } else {
-                            let backoff = INITIAL_BACKOFF * (1 << retries.min(4));
-                            time::sleep_until(chunk_start_at + backoff).await;
-                        }
-                    }
-                    e2@ Err(_) => {
-                        break e2
-                    }
-                }
-
-                retries += 1;
-            };
-
-            match result {
-                Ok(_) => tokio::task::yield_now().await,
-                Err(e) => {
-                    error!("Aborting frame, error sending chunk. frame_number: {}, chunk: {}/{}, retries: {}, error: {:?}", frame_number, chunk_index + 1, total_chunks, retries, e);
-                    ok = false;
+        let do_shutdown_flag = shutdown_flag.lock();
+        let do_rx = rx.recv();
+        select! {
+            flag = do_shutdown_flag => {
+                if *flag == true {
                     break
                 }
             }
+            r = do_rx => {
+                // Receive latest frame (await)
+                let camera_frame = match r {
+                    Ok(b) => b,
+                    Err(broadcast::error::RecvError::Lagged(skipped_frames)) => {
+                        // If lagged, try to get the next available
+                        debug!("lagged, trying to get next frame.  skipped: {}", skipped_frames);
+                        continue;
+                    }
+                    Err(_e) => return Err(rx),
+                };
+
+                let CameraFrame { frame_number, jpeg_bytes, frame_timestamp } = &*camera_frame;
+
+                let total_bytes = jpeg_bytes.len() as u32;
+                let total_chunks = (total_bytes + (CHUNK_SIZE as u32) - 1) / CHUNK_SIZE as u32;
+
+                let now = time::Instant::now();
+
+                trace!("Sending frame, now: {:?}, frame_number: {}, total_chunks: {}, len: {}", now, camera_frame.frame_number, total_chunks, total_bytes);
+
+                let frame_chunk = CameraFrameChunk {
+                    frame_number: *frame_number,
+                    kind: CameraFrameChunkKind::Meta(CameraFrameMeta {
+                        total_chunks,
+                        total_bytes,
+                        frame_timestamp: (*frame_timestamp).into(),
+                    })
+                };
+                if stack.topics().unicast_borrowed::<CameraFrameChunkTopic>(destination, &frame_chunk).is_err() {
+                    trace!("Unable to send first frame chunk. frame_number: {}", frame_number);
+                    // no point even trying to send the chunks if the first chunk failed, drop the frame
+                    continue
+                }
+
+                let mut ok = true;
+                for (chunk_index, chunk) in jpeg_bytes.chunks(CHUNK_SIZE).enumerate() {
+                    let frame_chunk = CameraFrameChunk {
+                        frame_number: *frame_number,
+                        kind: CameraFrameChunkKind::ImageChunk(CameraFrameImageChunk {
+                            chunk_index: chunk_index as u32,
+                            bytes: chunk.to_vec(),
+                        })
+                    };
+
+                    let chunk_start_at = time::Instant::now();
+
+                    // IMPORTANT: back-off delay needs to be as short as possible
+                    //            60fps =  16ms total frame time.
+                    //            30fps =  33ms total frame time.
+                    //            25fps =  40ms total frame time.
+                    //            15fps =  66ms total frame time.
+                    //            10fps = 100ms total frame time.
+                    const INITIAL_BACKOFF: Duration = Duration::from_micros(100);
+                    let mut retries = 0;
+
+                    let result = loop {
+                        match stack.topics().unicast_borrowed::<CameraFrameChunkTopic>(destination, &frame_chunk) {
+                            r @ Ok(_) => {
+                                // reset
+                                break r
+                            }
+                            e1 @ Err(NetStackSendError::InterfaceSend(InterfaceSendError::InterfaceFull)) => {
+                                if chunk_start_at.elapsed() > Duration::from_millis(100) {
+                                    break e1
+                                } else {
+                                    let backoff = INITIAL_BACKOFF * (1 << retries.min(4));
+                                    time::sleep_until(chunk_start_at + backoff).await;
+                                }
+                            }
+                            e2@ Err(_) => {
+                                break e2
+                            }
+                        }
+
+                        retries += 1;
+                    };
+
+                    match result {
+                        Ok(_) => tokio::task::yield_now().await,
+                        Err(e) => {
+                            error!("Aborting frame, error sending chunk. frame_number: {}, chunk: {}/{}, retries: {}, error: {:?}", frame_number, chunk_index + 1, total_chunks, retries, e);
+                            ok = false;
+                            break
+                        }
+                    }
+                }
+
+                if ok {
+                    trace!("Frame sent. frame_number: {}", frame_number);
+                }
+            }
         }
 
-        if ok {
-            trace!("Frame sent. frame_number: {}", frame_number);
-        }
     }
+
+    Ok(rx)
 }

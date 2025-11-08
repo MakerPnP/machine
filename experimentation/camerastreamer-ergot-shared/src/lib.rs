@@ -3,6 +3,34 @@ use postcard_schema::Schema;
 use postcard_schema::schema::{DataModelType, NamedType};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize, Deserialize, Schema, Clone)]
+pub struct CameraStreamerCommandRequest {
+    pub command: CameraStreamerCommand,
+}
+
+#[derive(Debug, Serialize, Deserialize, Schema, Clone)]
+pub struct CameraStreamerCommandResponse {
+    pub result: CameraStreamerCommandResult
+}
+
+#[derive(Debug, Serialize, Deserialize, Schema, Clone, PartialEq)]
+pub enum CameraStreamerCommand {
+    StartStreaming { port_id: u8 },
+    StopStreaming { port_id: u8 },
+}
+
+#[derive(Debug, Serialize, Deserialize, Schema, Clone)]
+pub enum CameraStreamerCommandResult {
+    Ok,
+    Error { code: CameraStreamerCommandError, args: Vec<String> },
+}
+
+#[derive(Debug, Serialize, Deserialize, Schema, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum CameraStreamerCommandError {
+    Busy = 0,
+}
+
 #[derive(Serialize, Deserialize, Schema, Clone, Debug)]
 pub struct CameraFrameChunk {
     pub frame_number: u64,

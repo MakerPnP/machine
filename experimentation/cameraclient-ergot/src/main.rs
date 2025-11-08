@@ -7,19 +7,17 @@ use std::pin::pin;
 use std::time::Duration;
 use eframe::epaint::textures::TextureOptions;
 use egui::{ColorImage, Context};
-use ergot::{
-    toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface},
-    topic,
-    well_known::DeviceInfo,
-};
+use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface}, topic, well_known::DeviceInfo, Address, FrameKind};
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
+use ergot::well_known::{NameRequirement, SocketQuery};
+use ergot::traits::Endpoint;
 use tokio::runtime::Runtime;
 use log::{debug, error, info, trace, warn};
 use tokio::{net::UdpSocket, select, time::sleep};
 use tokio::sync::watch;
 use tokio::sync::watch::{Receiver, Sender};
 use tokio::time::Instant;
-use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind};
+use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind, CameraStreamerCommand, CameraStreamerCommandRequest, CameraStreamerCommandResponse};
 use crate::fps_stats::egui::show_frame_durations;
 use crate::fps_stats::FpsStats;
 
@@ -28,6 +26,7 @@ const REMOTE_ADDR: &str = "127.0.0.1:5000";
 const LOCAL_ADDR: &str = "0.0.0.0:5001";
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
+endpoint!(CameraStreamerCommandEndpoint, CameraStreamerCommandRequest, CameraStreamerCommandResponse, "topic/camera");
 
 fn start_network_thread(tx_out: Sender<ColorImage>, context: Context) {
     // run a tokio runtime in background thread
@@ -52,7 +51,6 @@ async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context) 
     tokio::task::spawn(basic_services(stack.clone(), 0));
     tokio::task::spawn(camera_frame_listener(stack.clone(), 0, tx_out, context));
 
-
     register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Target)
         .await
         .unwrap();
@@ -66,7 +64,31 @@ async fn network_task(addr: &str, tx_out: Sender<ColorImage>, context: Context) 
 async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorImage>, context: Context) -> Result<(), anyhow::Error> {
     let subber = stack.topics().bounded_receiver::<CameraFrameChunkTopic, 320>(None);
     let subber = pin!(subber);
-    let mut hdl = subber.subscribe();
+    let mut hdl = subber.subscribe_unicast();
+    let port_id = hdl.port();
+
+    info!("camera frame listener started, port: {}", port_id);
+
+    let query = SocketQuery {
+        key: CameraStreamerCommandEndpoint::REQ_KEY.to_bytes(),
+        nash_req: NameRequirement::Any,
+        frame_kind: FrameKind::ENDPOINT_REQ,
+        broadcast: false,
+    };
+
+    let res = stack
+        .discovery()
+        .discover_sockets(4, Duration::from_secs(1), &query)
+        .await;
+    if res.is_empty() {
+        return Err(anyhow::anyhow!("No discovery results"));
+    }
+
+    let response = stack.endpoints().request::<CameraStreamerCommandEndpoint>(res[0].address, &CameraStreamerCommandRequest { command: CameraStreamerCommand::StartStreaming { port_id } }, None).await;
+    if let Err(e) = response {
+        return Err(anyhow::anyhow!("Error sending start request: {:?}", e));
+    }
+
 
     struct InProgressFrame {
         total_chunks: u32,
@@ -184,6 +206,12 @@ async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorIma
             }
         });
     }
+
+    let response = stack.endpoints().request::<CameraStreamerCommandEndpoint>(res[0].address, &CameraStreamerCommandRequest { command: CameraStreamerCommand::StopStreaming { port_id } }, None).await;
+    if let Err(e) = response {
+        return Err(anyhow::anyhow!("Error sending start request: {:?}", e));
+    }
+    Ok(())
 }
 
 async fn basic_services(stack: EdgeStack, port: u16) {
