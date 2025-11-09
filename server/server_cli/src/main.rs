@@ -1,22 +1,24 @@
 use std::collections::HashSet;
 use std::convert::TryInto;
-use std::{io, pin::pin, time::Duration};
 use std::sync::Arc;
+use std::{io, pin::pin, time::Duration};
+
+use ergot::wire_frames::MAX_HDR_ENCODED_SIZE;
 use ergot::{
     toolkits::tokio_udp::{RouterStack, register_router_interface},
     topic,
     well_known::DeviceInfo,
 };
-use ergot::wire_frames::MAX_HDR_ENCODED_SIZE;
 use ioboard_shared::commands::IoBoardCommand;
 use ioboard_shared::yeet::Yeet;
 use log::{debug, error, info, warn};
 use operator_shared::commands::OperatorCommand;
+use server_common::camera::{CameraDefinition, CameraSource, CameraStreamConfig, OpenCVCameraConfig};
+use server_vision::{CameraFrame, capture_loop};
+use tokio::sync::{Mutex, broadcast};
 use tokio::time::interval;
 use tokio::{net::UdpSocket, select, time, time::sleep};
-use tokio::sync::{broadcast, Mutex};
-use server_common::camera::{CameraDefinition, CameraSource, CameraStreamConfig, OpenCVCameraConfig};
-use server_vision::{capture_loop, CameraFrame};
+
 use crate::camera::camera_streamer;
 
 pub mod camera;
@@ -55,7 +57,6 @@ async fn main() -> io::Result<()> {
         fps: 25,
     }];
 
-
     let stack: RouterStack = RouterStack::new();
 
     let io_board_udp_socket = UdpSocket::bind("192.168.18.41:8000")
@@ -65,9 +66,14 @@ async fn main() -> io::Result<()> {
     io_board_udp_socket
         .connect(io_board_remote_addr)
         .await?;
-    register_router_interface(&stack, io_board_udp_socket, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX as _, IOBOARD_TX_BUFFER_SIZE)
-        .await
-        .unwrap();
+    register_router_interface(
+        &stack,
+        io_board_udp_socket,
+        UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX as _,
+        IOBOARD_TX_BUFFER_SIZE,
+    )
+    .await
+    .unwrap();
 
     let operator_udp_socket = UdpSocket::bind("192.168.18.41:8001")
         .await
@@ -76,9 +82,14 @@ async fn main() -> io::Result<()> {
     operator_udp_socket
         .connect(operator_remote_addr)
         .await?;
-    register_router_interface(&stack, operator_udp_socket, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX as _, OPERATOR_TX_BUFFER_SIZE)
-        .await
-        .unwrap();
+    register_router_interface(
+        &stack,
+        operator_udp_socket,
+        UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX as _,
+        OPERATOR_TX_BUFFER_SIZE,
+    )
+    .await
+    .unwrap();
 
     tokio::task::spawn(basic_services(stack.clone(), 0_u16));
     tokio::task::spawn(yeet_listener(stack.clone()));
@@ -87,7 +98,6 @@ async fn main() -> io::Result<()> {
 
     // TODO move this into a command handler so that cameras can be added/removed dynamically at runtime
     for (camera_index, camera_definition) in camera_definitions.iter().enumerate() {
-
         // TODO document the '* 2' magic number, try reducing it too.
         let broadcast_cap = (camera_definition.fps * 2) as usize;
 
@@ -114,11 +124,10 @@ async fn main() -> io::Result<()> {
             }
         });
 
-
         cameras.push(CameraHandle {
             capture_handle,
             streamer_handle,
-            camera_index
+            camera_index,
         });
     }
 
@@ -129,7 +138,6 @@ async fn main() -> io::Result<()> {
     // TODO give the app_state to these tasks
     tokio::task::spawn(io_board_command_sender(stack.clone()));
     tokio::task::spawn(operator_listener(stack.clone()));
-
 
     loop {
         println!("Waiting for messages...");

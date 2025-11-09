@@ -1,4 +1,3 @@
-
 #[derive(Clone)]
 pub struct CameraDefinition {
     pub name: String,
@@ -13,7 +12,6 @@ pub struct CameraDefinition {
 #[derive(Clone)]
 pub struct CameraStreamConfig {
     pub jpeg_quality: u32,
-
     // TODO maybe support resizing on the server before sending.
 }
 

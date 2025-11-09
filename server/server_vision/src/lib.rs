@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use log::trace;
 use opencv::{imgcodecs, prelude::*, videoio};
+use server_common::camera::CameraDefinition;
 use tokio::{
     sync::broadcast::Sender,
     time::{self, Duration},
 };
-use log::trace;
-use server_common::camera::CameraDefinition;
 
 pub struct CameraFrame {
     pub frame_number: u64,
@@ -61,7 +61,13 @@ pub async fn capture_loop(tx: Sender<Arc<CameraFrame>>, camera_definition: Camer
         let send_end = time::Instant::now();
         let send_duration = (send_end - send_start).as_micros() as u32;
 
-        trace!("now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us", time::Instant::now(), frame_number, encode_duration, send_duration);
+        trace!(
+            "now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us",
+            time::Instant::now(),
+            frame_number,
+            encode_duration,
+            send_duration
+        );
         frame_number += 1;
     }
 }
