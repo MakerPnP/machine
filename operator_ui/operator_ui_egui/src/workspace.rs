@@ -1,4 +1,5 @@
 use std::sync::mpsc::Sender;
+
 use eframe::emath::{NumExt, Pos2, Vec2};
 use eframe::epaint::ahash::HashMap;
 use eframe::epaint::{Color32, CornerRadius};
@@ -10,12 +11,12 @@ use egui_tiles::{ContainerKind, SimplificationOptions, Tabs, Tile, TileId, Tiles
 use tracing::{debug, trace};
 
 use crate::app::{MIN_TOUCH_SIZE, PaneKind, TOGGLE_DEFINITIONS, UiState};
+use crate::fps_stats::egui::show_frame_durations;
+use crate::fps_stats::{FpsSnapshot, FpsStats};
 use crate::ui_commands::{UiCommand, ViewportUiAction, ViewportUiCommand};
 use crate::ui_common::egui::bring_window_to_front;
 use crate::ui_common::egui_tree::{add_pane_to_root, dump_tiles};
 use crate::{LOGO, app, fps_stats};
-use crate::fps_stats::{FpsSnapshot, FpsStats};
-use crate::fps_stats::egui::show_frame_durations;
 
 #[derive(serde::Deserialize, serde::Serialize, Default, Clone)]
 #[serde(default)]
@@ -274,7 +275,6 @@ impl ViewportState {
     }
 
     pub fn ui(&mut self, ctx: &egui::Context) {
-
         let now = std::time::Instant::now();
 
         self.fps_snapshot = self.fps_stats.update(now);

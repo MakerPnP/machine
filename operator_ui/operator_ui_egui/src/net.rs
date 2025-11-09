@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 use std::{pin::pin, time::Duration};
+
 use eframe::epaint::ColorImage;
 use egui_mobius::Value;
 use ergot::{
@@ -8,19 +9,20 @@ use ergot::{
     topic,
     well_known::DeviceInfo,
 };
-use tracing::{debug, info};
 use tokio::runtime::Handle;
-use tokio::{net::UdpSocket, select, time, time::sleep};
 use tokio::sync::watch::Sender;
+use tokio::{net::UdpSocket, select, time, time::sleep};
+use tracing::{debug, info};
+
 use crate::app::AppState;
-use crate::{LOCAL_ADDR, REMOTE_ADDR};
 use crate::net::camera::camera_frame_listener;
 use crate::net::commands::command_sender;
 use crate::net::services::basic_services;
+use crate::{LOCAL_ADDR, REMOTE_ADDR};
 
 pub mod camera;
-pub mod services;
 pub mod commands;
+pub mod services;
 
 pub async fn ergot_task(_spawner: Handle, state: Value<AppState>, tx_out: Sender<ColorImage>) {
     let queue = new_std_queue(4096);
@@ -45,7 +47,6 @@ pub async fn ergot_task(_spawner: Handle, state: Value<AppState>, tx_out: Sender
         let context = state.lock().unwrap().context.clone();
         tokio::task::spawn(camera_frame_listener(stack.clone(), 0, tx_out, context));
     }
-
 
     register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Target)
         .await
