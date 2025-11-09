@@ -82,7 +82,7 @@ pub struct FpsSnapshot {
 
 pub mod egui {
     use egui::{Color32, Response, Ui};
-    use egui_plot::{Bar, BarChart, Legend, Plot};
+    use egui_plot::{Bar, BarChart, Plot};
 
     use crate::fps_stats::FpsStats;
 
