@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use eframe::epaint::ColorImage;
 use egui::Context;
-use ergot::interface_manager::profiles::direct_edge::EDGE_NODE_ID;
 use ergot::toolkits::tokio_udp::EdgeStack;
 use ergot::{Address, topic};
 use image::ImageFormat;
@@ -26,6 +25,7 @@ pub async fn camera_frame_listener(
     tx_out: Sender<ColorImage>,
     context: Context,
     remote_address: Address,
+    originator_address: Address,
     mut app_event_rx: broadcast::Receiver<AppEvent>,
 ) -> anyhow::Result<()> {
     let camera_identifier = CameraIdentifier::new(0);
@@ -40,10 +40,9 @@ pub async fn camera_frame_listener(
     let subber = pin!(subber);
     let mut hdl = subber.subscribe_unicast();
 
-    // TODO get the network and node id from the stack somehow?!  we don't know the network ID really!
     let local_address = Address {
-        network_id: 2,
-        node_id: EDGE_NODE_ID,
+        network_id: originator_address.network_id,
+        node_id: originator_address.node_id,
         port_id: hdl.port(),
     };
 

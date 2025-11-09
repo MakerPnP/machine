@@ -77,6 +77,7 @@ pub async fn ergot_task(
 
     // TODO just using the first one for now
     let command_endpoint_remote_address = discovery_results[0].address;
+    let originator_address = discovery_results[0].originator_address;
 
     let heartbeat_sender = tokio::task::spawn(heartbeat_sender(
         stack.clone(),
@@ -91,6 +92,7 @@ pub async fn ergot_task(
             tx_out,
             context,
             command_endpoint_remote_address,
+            originator_address,
             app_event_tx.subscribe(),
         ))
     };
