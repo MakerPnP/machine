@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
+
 use postcard_schema::Schema;
 use postcard_schema::schema::{DataModelType, NamedType};
 use serde::{Deserialize, Serialize};
@@ -33,7 +34,10 @@ pub struct CameraFrameImageChunk {
 pub struct TimeStampUTC(chrono::DateTime<chrono::Utc>);
 
 impl postcard_schema::Schema for TimeStampUTC {
-    const SCHEMA: &'static NamedType = &NamedType { name: "timestamp_utc", ty: &DataModelType::I64 };
+    const SCHEMA: &'static NamedType = &NamedType {
+        name: "timestamp_utc",
+        ty: &DataModelType::I64,
+    };
 }
 
 impl Deref for TimeStampUTC {
