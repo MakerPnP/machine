@@ -1,10 +1,11 @@
 use eframe::epaint::ColorImage;
 use eframe::epaint::textures::TextureOptions;
 use egui::Ui;
-use tracing::trace;
 use tokio::sync::watch::Receiver;
-use crate::fps_stats::{FpsSnapshot, FpsStats};
+use tracing::trace;
+
 use crate::fps_stats::egui::show_frame_durations;
+use crate::fps_stats::{FpsSnapshot, FpsStats};
 
 pub(crate) struct CameraUi {
     rx: Receiver<ColorImage>,
@@ -36,13 +37,19 @@ impl CameraUi {
             let color_image = self.rx.borrow_and_update().clone();
             self.camera_frame_number += 1;
             self.camera_fps_snapshot = self.camera_fps_stats.update(now);
-            trace!("received frame, now: {:?}, frame_number: {}, snapshot: {:?}", now, self.camera_frame_number, self.camera_fps_snapshot);
+            trace!(
+                "received frame, now: {:?}, frame_number: {}, snapshot: {:?}",
+                now, self.camera_frame_number, self.camera_fps_snapshot
+            );
 
             if let Some(tex) = &mut self.texture {
                 tex.set(color_image, TextureOptions::default());
             } else {
                 // create texture first time
-                self.texture = Some(ui.ctx().load_texture("camera", color_image, Default::default()));
+                self.texture = Some(
+                    ui.ctx()
+                        .load_texture("camera", color_image, Default::default()),
+                );
             }
         }
 
@@ -67,10 +74,7 @@ impl CameraUi {
                             if let Some(snapshot) = &self.camera_fps_snapshot {
                                 ui.label(format!(
                                     "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
-                                    snapshot.latest,
-                                    snapshot.min,
-                                    snapshot.max,
-                                    snapshot.avg
+                                    snapshot.latest, snapshot.min, snapshot.max, snapshot.avg
                                 ));
 
                                 show_frame_durations(ui, &self.camera_fps_stats);
@@ -78,6 +82,6 @@ impl CameraUi {
                         })
                     });
                 });
-        });
+            });
     }
 }

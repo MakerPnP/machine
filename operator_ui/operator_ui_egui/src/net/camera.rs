@@ -1,20 +1,23 @@
 use std::collections::HashMap;
 use std::pin::pin;
 use std::time::Duration;
+
 use eframe::epaint::ColorImage;
 use egui::Context;
 use ergot::toolkits::tokio_udp::EdgeStack;
 use ergot::topic;
 use image::ImageFormat;
-use tracing::{debug, error, trace, warn};
 use operator_shared::camera::{CameraFrameChunk, CameraFrameChunkKind};
 use tokio::sync::watch::Sender;
 use tokio::time::Instant;
+use tracing::{debug, error, trace, warn};
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
 pub async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<ColorImage>, context: Context) {
-    let subber = stack.topics().bounded_receiver::<CameraFrameChunkTopic, 320>(None);
+    let subber = stack
+        .topics()
+        .bounded_receiver::<CameraFrameChunkTopic, 320>(None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe();
 
@@ -42,9 +45,9 @@ pub async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<Colo
                 });
                 continue;
             }
-            CameraFrameChunkKind::ImageChunk(image_chunk) => {
-                in_progress.get_mut(&chunk.frame_number).map(|entry|(entry, image_chunk))
-            }
+            CameraFrameChunkKind::ImageChunk(image_chunk) => in_progress
+                .get_mut(&chunk.frame_number)
+                .map(|entry| (entry, image_chunk)),
         };
 
         let Some((entry, image_chunk)) = entry_and_image_chunk else {
@@ -85,7 +88,10 @@ pub async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<Colo
             }
 
             let before = std::time::Instant::now();
-            debug!("received camera frame from server, frame_number: {}, chunks: {}, timestamp: {:?}", chunk.frame_number, entry.total_chunks, before);
+            debug!(
+                "received camera frame from server, frame_number: {}, chunks: {}, timestamp: {:?}",
+                chunk.frame_number, entry.total_chunks, before
+            );
 
             // Decode JPEG
             let before = std::time::Instant::now();
@@ -100,7 +106,8 @@ pub async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<Colo
                     context.request_repaint();
 
                     let after = std::time::Instant::now();
-                    trace!("sent frame to egui, frame_number: {}, size: {} bytes, timestamp: {:?}, decoding: {}us, imagegen+send: {}us, total-elapsed: {}us",
+                    trace!(
+                        "sent frame to egui, frame_number: {}, size: {} bytes, timestamp: {:?}, decoding: {}us, imagegen+send: {}us, total-elapsed: {}us",
                         chunk.frame_number,
                         jpeg_data.len(),
                         after,
@@ -114,7 +121,6 @@ pub async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<Colo
                 }
             }
 
-
             // Remove the completed frame from tracking
             in_progress.remove(&chunk.frame_number);
         }
@@ -123,11 +129,9 @@ pub async fn camera_frame_listener(stack: EdgeStack, id: u8, tx_out: Sender<Colo
         in_progress.retain(|frame_num, f| {
             if now.duration_since(f.start_time) > Duration::from_secs(1) {
                 warn!(
-                        "discarding incomplete frame {} (got {}/{})",
-                        frame_num,
-                        f.received_count,
-                        f.total_chunks
-                    );
+                    "discarding incomplete frame {} (got {}/{})",
+                    frame_num, f.received_count, f.total_chunks
+                );
                 false
             } else {
                 true

@@ -1,9 +1,10 @@
 use std::time::Duration;
+
 use ergot::toolkits::tokio_udp::EdgeStack;
 use ergot::topic;
-use tracing::debug;
 use operator_shared::commands::OperatorCommand;
 use tokio::time;
+use tracing::debug;
 
 topic!(OperatorCommandTopic, OperatorCommand, "topic/operator/command");
 
@@ -17,7 +18,7 @@ pub async fn command_sender(stack: EdgeStack) {
         if stack
             .topics()
             .broadcast::<OperatorCommandTopic>(&OperatorCommand::Heartbeat(index), None)
-            .inspect_err(|e|{
+            .inspect_err(|e| {
                 debug!("error sending heartbeat. index: {}, error: {:?}", index, e);
             })
             .is_ok()
