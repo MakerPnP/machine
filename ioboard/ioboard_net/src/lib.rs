@@ -16,7 +16,9 @@ use embassy_time::{Duration, Ticker, Timer, WithTimeout};
 use embedded_io_async::Write;
 use embedded_nal_async::TcpConnect;
 use ergot::exports::bbq2::traits::coordination::cas::AtomicCoord;
-use ergot::interface_manager::profiles::direct_edge::embassy_net_udp_0_7::{RxTxWorker, UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX};
+use ergot::interface_manager::profiles::direct_edge::embassy_net_udp_0_7::{
+    RxTxWorker, UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX,
+};
 use ergot::logging::log_v0_4::LogSink;
 use ergot::toolkits::embassy_net_v0_7 as kit;
 use ergot::well_known::{DeviceInfo, ErgotPingEndpoint};
@@ -35,7 +37,8 @@ use static_cell::{ConstStaticCell, StaticCell};
 const OUT_QUEUE_SIZE: usize = 4096;
 
 /// Scratch buffer is used for UDP packet reception
-static SCRATCH_BUF: ConstStaticCell<[u8; UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX]> = ConstStaticCell::new([0u8; UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX]);
+static SCRATCH_BUF: ConstStaticCell<[u8; UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX]> =
+    ConstStaticCell::new([0u8; UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX]);
 
 type Stack = kit::EdgeStack<&'static Queue, CriticalSectionRawMutex>;
 type Queue = kit::Queue<OUT_QUEUE_SIZE, AtomicCoord>;
@@ -113,22 +116,14 @@ pub fn init<'d, D: Driver>(driver: D, random_seed: u64, spawner: Spawner) -> Run
     defmt::info!("Hardware address: {}", stack.hardware_address());
 
     spawner
-        .spawn(networking_task(
-            stack,
-            spawner.clone(),
-            SCRATCH_BUF.take(),
-        ))
+        .spawn(networking_task(stack, spawner.clone(), SCRATCH_BUF.take()))
         .unwrap();
 
     runner
 }
 
 #[embassy_executor::task]
-async fn networking_task(
-    stack: embassy_net::Stack<'static>,
-    spawner: Spawner,
-    scratch_buf: &'static mut [u8],
-) -> ! {
+async fn networking_task(stack: embassy_net::Stack<'static>, spawner: Spawner, scratch_buf: &'static mut [u8]) -> ! {
     defmt::info!("Network task initialized");
 
     // Ensure DHCP configuration is up before trying connect
@@ -221,11 +216,7 @@ async fn networking_task(
 }
 
 #[embassy_executor::task]
-async fn run_socket(
-    socket: UdpSocket<'static>,
-    scratch_buf: &'static mut [u8],
-    endpoint: IpEndpoint,
-) {
+async fn run_socket(socket: UdpSocket<'static>, scratch_buf: &'static mut [u8], endpoint: IpEndpoint) {
     let consumer = OUTQ.framed_consumer();
     let mut rxtx = RxTxWorker::new_target(&STACK, socket, (), consumer, endpoint);
 
