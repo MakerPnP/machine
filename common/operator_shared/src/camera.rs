@@ -1,9 +1,13 @@
 use alloc::vec::Vec;
-use core::ops::{Deref, DerefMut};
+use core::fmt::Display;
+use core::ops::Deref;
 
+use ergot::Address;
 use postcard_schema::Schema;
-use postcard_schema::schema::{DataModelType, NamedType};
 use serde::{Deserialize, Serialize};
+
+use crate::commands::CommandArg;
+use crate::common::TimeStampUTC;
 
 #[derive(Serialize, Deserialize, Schema, Clone, Debug)]
 pub struct CameraFrameChunk {
@@ -30,32 +34,59 @@ pub struct CameraFrameImageChunk {
     pub bytes: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TimeStampUTC(chrono::DateTime<chrono::Utc>);
-
-impl postcard_schema::Schema for TimeStampUTC {
-    const SCHEMA: &'static NamedType = &NamedType {
-        name: "timestamp_utc",
-        ty: &DataModelType::I64,
-    };
+#[derive(Debug, Serialize, Deserialize, Schema, Clone, PartialEq)]
+pub enum CameraCommand {
+    StartStreaming { address: Address },
+    StopStreaming { address: Address },
+    // TODO
+    // GetCameraProperties,
+    // SetCameraProperties { properties: CameraProperties },
 }
 
-impl Deref for TimeStampUTC {
-    type Target = chrono::DateTime<chrono::Utc>;
+#[derive(Debug, Serialize, Deserialize, Schema, Clone, Copy, PartialEq, Hash, Eq)]
+pub struct CameraIdentifier(u8);
+
+impl CameraIdentifier {
+    pub fn new(id: u8) -> Self {
+        Self(id)
+    }
+}
+
+impl Display for CameraIdentifier {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "C{:03}", self.0)
+    }
+}
+impl From<CameraIdentifier> for u8 {
+    fn from(value: CameraIdentifier) -> Self {
+        value.0
+    }
+}
+
+impl Deref for CameraIdentifier {
+    type Target = u8;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for TimeStampUTC {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
+#[derive(Debug, Serialize, Deserialize, Schema, Clone)]
+pub enum CameraStreamerCommandResult {
+    Acknowledged,
+    // TODO
+    // CameraProperties { properties: CameraProperties },
 }
 
-impl From<chrono::DateTime<chrono::Utc>> for TimeStampUTC {
-    fn from(dt: chrono::DateTime<chrono::Utc>) -> Self {
-        Self(dt)
-    }
+#[derive(Debug, Serialize, Deserialize, Schema, Clone)]
+pub struct CameraCommandError {
+    pub code: CameraCommandErrorCode,
+    pub args: Vec<CommandArg>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Schema, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum CameraCommandErrorCode {
+    InvalidIdentifier = 0,
+    Busy = 1,
 }

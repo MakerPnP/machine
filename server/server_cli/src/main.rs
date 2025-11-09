@@ -1,10 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::{io, pin::pin, time::Duration};
 
 use ergot::wire_frames::MAX_HDR_ENCODED_SIZE;
 use ergot::{
+    Address, endpoint,
     toolkits::tokio_udp::{RouterStack, register_router_interface},
     topic,
     well_known::DeviceInfo,
@@ -12,14 +13,17 @@ use ergot::{
 use ioboard_shared::commands::IoBoardCommand;
 use ioboard_shared::yeet::Yeet;
 use log::{debug, error, info, warn};
-use operator_shared::commands::OperatorCommand;
+use operator_shared::camera::{
+    CameraCommand, CameraCommandError, CameraCommandErrorCode, CameraIdentifier, CameraStreamerCommandResult,
+};
+use operator_shared::commands::{OperatorCommandRequest, OperatorCommandResponse};
 use server_common::camera::{CameraDefinition, CameraSource, CameraStreamConfig, OpenCVCameraConfig};
 use server_vision::{CameraFrame, capture_loop};
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::{Mutex, broadcast, watch};
 use tokio::time::interval;
-use tokio::{net::UdpSocket, select, time, time::sleep};
+use tokio::{net::UdpSocket, select, signal, time};
 
-use crate::camera::camera_streamer;
+use crate::camera::{camera_definition_for_identifier, camera_streamer};
 
 pub mod camera;
 
@@ -38,7 +42,12 @@ const CAMERA_CHUNK_SIZE: usize = 1024;
 
 topic!(YeetTopic, Yeet, "topic/yeet");
 topic!(IoBoardCommandTopic, IoBoardCommand, "topic/ioboard/command");
-topic!(OperatorCommandTopic, OperatorCommand, "topic/operator/command");
+endpoint!(
+    OperatorCommandEndpoint,
+    OperatorCommandRequest,
+    OperatorCommandResponse,
+    "topic/operator/command"
+);
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -52,10 +61,13 @@ async fn main() -> io::Result<()> {
         stream_config: CameraStreamConfig {
             jpeg_quality: 95,
         },
-        width: 1280,
-        height: 768,
+        width: 1920,
+        height: 1280,
         fps: 25,
     }];
+
+    // Create event channel
+    let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
 
     let stack: RouterStack = RouterStack::new();
 
@@ -82,6 +94,7 @@ async fn main() -> io::Result<()> {
     operator_udp_socket
         .connect(operator_remote_addr)
         .await?;
+
     register_router_interface(
         &stack,
         operator_udp_socket,
@@ -94,65 +107,39 @@ async fn main() -> io::Result<()> {
     tokio::task::spawn(basic_services(stack.clone(), 0_u16));
     tokio::task::spawn(yeet_listener(stack.clone()));
 
-    let mut cameras = Vec::new();
-
-    // TODO move this into a command handler so that cameras can be added/removed dynamically at runtime
-    for (camera_index, camera_definition) in camera_definitions.iter().enumerate() {
-        // TODO document the '* 2' magic number, try reducing it too.
-        let broadcast_cap = (camera_definition.fps * 2) as usize;
-
-        // Create broadcast channel for frames (Arc<Bytes> so we cheaply clone for each client)
-        let (tx, rx) = broadcast::channel::<Arc<CameraFrame>>(broadcast_cap);
-
-        // Spawn tasks
-
-        let capture_handle = tokio::task::spawn({
-            let camera_definition = camera_definition.clone();
-            async move {
-                if let Err(e) = capture_loop(tx, camera_definition).await {
-                    error!("capture loop error: {e:?}");
-                }
-            }
-        });
-        let streamer_handle = tokio::task::spawn({
-            let camera_definition = camera_definition.clone();
-            let stack = stack.clone();
-            async move {
-                if let Err(e) = camera_streamer(stack, rx, camera_definition, CAMERA_CHUNK_SIZE).await {
-                    error!("capture loop error: {e:?}");
-                }
-            }
-        });
-
-        cameras.push(CameraHandle {
-            capture_handle,
-            streamer_handle,
-            camera_index,
-        });
-    }
-
     let app_state = Arc::new(Mutex::new(AppState {
-        cameras,
+        camera_definitions,
+        event_tx: app_event_tx.clone(),
+        camera_clients: Arc::new(Mutex::new(HashMap::new())),
     }));
 
     // TODO give the app_state to these tasks
     tokio::task::spawn(io_board_command_sender(stack.clone()));
-    tokio::task::spawn(operator_listener(stack.clone()));
 
-    loop {
-        println!("Waiting for messages...");
-        sleep(Duration::from_secs(1)).await;
-    }
+    tokio::task::spawn(operator_listener(stack.clone(), app_state));
+
+    // Wait for Ctrl+C
+    let _ = signal::ctrl_c().await;
+
+    app_event_tx
+        .send(AppEvent::Shutdown)
+        .unwrap();
+
+    info!("Shut down requested, exiting");
+    Ok(())
 }
 
 struct CameraHandle {
     capture_handle: tokio::task::JoinHandle<()>,
     streamer_handle: tokio::task::JoinHandle<()>,
-    camera_index: usize,
+    address: Address,
+    shutdown_flag_tx: watch::Sender<bool>,
 }
 
 struct AppState {
-    cameras: Vec<CameraHandle>,
+    camera_definitions: Vec<CameraDefinition>,
+    event_tx: broadcast::Sender<AppEvent>,
+    camera_clients: Arc<Mutex<HashMap<CameraIdentifier, CameraHandle>>>,
 }
 
 async fn basic_services(stack: RouterStack, port: u16) {
@@ -162,26 +149,31 @@ async fn basic_services(stack: RouterStack, port: u16) {
         unique_id: port.into(),
     };
     // allow for discovery
-    let disco_answer = stack
+    let device_discovery_responder = stack
         .services()
         .device_info_handler::<4>(&info);
     // handle incoming ping requests
-    let ping_answer = stack.services().ping_handler::<4>();
-    // custom service for doing discovery regularly
-    let disco_req = tokio::spawn(do_discovery(stack.clone()));
+    let ping_responder = stack.services().ping_handler::<4>();
+    // custom service for doing device discovery regularly
+    let device_discovery = tokio::spawn(do_device_discovery(stack.clone()));
     // forward log messages to the log crate output
     let log_handler = stack.services().log_handler(16);
+    // handle socket discovery requests
+    let socket_discovery_responder = stack
+        .services()
+        .socket_query_handler::<4>();
 
     // These all run together, we run them in a single task
     select! {
-        _ = disco_answer => {},
-        _ = ping_answer => {},
-        _ = disco_req => {},
+        _ = ping_responder => {},
         _ = log_handler => {},
+        _ = device_discovery_responder => {},
+        _ = socket_discovery_responder => {},
+        _ = device_discovery => {},
     }
 }
 
-async fn do_discovery(stack: RouterStack) {
+async fn do_device_discovery(stack: RouterStack) {
     let mut max = 16;
     let mut seen = HashSet::new();
     let mut ticker = interval(Duration::from_secs(10));
@@ -260,12 +252,22 @@ async fn yeet_listener(stack: RouterStack) {
     }
 }
 
-async fn operator_listener(stack: RouterStack) {
-    let subber = stack
-        .topics()
-        .heap_bounded_receiver::<OperatorCommandTopic>(64, None);
-    let subber = pin!(subber);
-    let mut hdl = subber.subscribe();
+async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) {
+    let (mut app_event_rx, clients) = {
+        let app_state = app_state.lock().await;
+        let app_event_rx = app_state.event_tx.subscribe();
+        let clients: Arc<Mutex<HashMap<CameraIdentifier, CameraHandle>>> = app_state.camera_clients.clone();
+        (app_event_rx, clients)
+    };
+
+    let server_socket = stack
+        .endpoints()
+        .single_server::<OperatorCommandEndpoint>(None);
+    let server_socket = pin!(server_socket);
+    let mut hdl = server_socket.attach();
+    let port = hdl.port();
+
+    info!("Camera command server, port: {}", port);
 
     let timeout_duration = Duration::from_secs(10);
     loop {
@@ -274,14 +276,122 @@ async fn operator_listener(stack: RouterStack) {
             _ = timeout => {
                 warn!("operator timeout (no command received). duration: {}", timeout_duration.as_secs());
             }
-            msg = hdl.recv() => {
-                debug!("{}: got {:?}", msg.hdr, msg.t);
-                match msg.t {
-                    OperatorCommand::Heartbeat(value) => {
-                        info!("OperatorCommand::Heartbeat.  value: {}", value);
+            app_event = app_event_rx.recv() => {
+                match app_event {
+                    Ok(event) => match event {
+                        AppEvent::Shutdown => {
+
+                            // TODO tell client server is shutting down
+
+                            break
+                        }
+                    }
+                    Err(_) => {
+                        break;
                     }
                 }
             }
+            // msg = hdl.recv() => {
+            //     debug!("{}: got {:?}", msg.hdr, msg.t);
+            //     match msg.t {
+            //         OperatorCommandRequest::Heartbeat(value) => {
+            //             info!("OperatorCommand::Heartbeat.  value: {}", value);
+            //         }
+            //     }
+            // }
+
+            _ = hdl.serve(async |request: &OperatorCommandRequest| {
+                match request {
+                    OperatorCommandRequest::Heartbeat(value) => {
+                        // TODO ergot API currently doesn't give us the message header, so we can't track who the message was from.
+                        //debug!("heartbeat received from: {:?}, value: {}", hdr.address, value);
+                        debug!("heartbeat received. value: {}", value);
+                        OperatorCommandResponse::Acknowledged
+                    }
+                    OperatorCommandRequest::CameraCommand(identifier, camera_command) => {
+                        match camera_command {
+                            CameraCommand::StartStreaming { address } => {
+                                let app_state = app_state.lock().await;
+                                let mut clients = clients.lock().await;
+                                let Some(camera_definition) = camera_definition_for_identifier(&app_state.camera_definitions, identifier) else {
+                                    return OperatorCommandResponse::CameraCommandResult(
+                                        Err(CameraCommandError { code: CameraCommandErrorCode::InvalidIdentifier, args: Vec::new()})
+                                    )
+                                };
+
+                                if clients.contains_key(&identifier) {
+                                    return OperatorCommandResponse::CameraCommandResult(
+                                        Err(CameraCommandError { code: CameraCommandErrorCode::Busy, args: Vec::new()})
+                                    )
+                                }
+
+                                // TODO document the '* 2' magic number, try reducing it too.
+                                let broadcast_cap = (camera_definition.fps * 2) as usize;
+
+                                // Create broadcast channel for frames (Arc<Bytes> so we cheaply clone for each client)
+                                let (tx, rx) = broadcast::channel::<Arc<CameraFrame>>(broadcast_cap);
+
+                                let (shutdown_flag_tx, shutdown_flag_rx) = watch::channel(false);
+
+                                // Spawn tasks
+
+                                let capture_handle = tokio::task::spawn({
+                                    let camera_definition = camera_definition.clone();
+                                    let shutdown_flag_rx = shutdown_flag_tx.subscribe();
+                                    async move {
+                                        if let Err(e) = capture_loop(tx, camera_definition, shutdown_flag_rx).await {
+                                            error!("capture loop error: {e:?}");
+                                        }
+                                    }
+                                });
+                                let streamer_handle = tokio::task::spawn({
+                                    let camera_definition = camera_definition.clone();
+                                    let stack = stack.clone();
+                                    let address = address.clone();
+                                    async move {
+                                        if let Err(e) = camera_streamer(stack, rx, camera_definition, CAMERA_CHUNK_SIZE, address, shutdown_flag_rx).await {
+                                            error!("capture loop error: {e:?}");
+                                        }
+                                    }
+                                });
+
+                                clients.insert(identifier.clone(), CameraHandle {
+                                    capture_handle,
+                                    streamer_handle,
+                                    address: *address,
+                                    shutdown_flag_tx
+                                });
+
+                                info!("Streaming started. identifier: {}, address: {}", identifier, address);
+
+                                OperatorCommandResponse::CameraCommandResult(
+                                    Ok(CameraStreamerCommandResult::Acknowledged)
+                                )
+                            }
+                            CameraCommand::StopStreaming { address } => {
+                                let mut clients = clients.lock().await;
+                                if let Some(client) = clients.remove(&identifier) {
+                                    let _ =client.shutdown_flag_tx.send(true);
+
+                                    // wait for the capture first, then the streamer
+                                    let _ = client.capture_handle.await;
+                                    let _ = client.streamer_handle.await;
+                                }
+                                info!("Streaming stopped. address: {}", address);
+
+                                OperatorCommandResponse::CameraCommandResult(
+                                    Ok(CameraStreamerCommandResult::Acknowledged)
+                                )
+                            },
+                        }
+                    }
+                }
+            }) => {}
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum AppEvent {
+    Shutdown,
 }

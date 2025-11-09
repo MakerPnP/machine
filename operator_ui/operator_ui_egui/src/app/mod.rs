@@ -1,15 +1,15 @@
 use std::thread;
+use std::thread::JoinHandle;
 
 use async_std::prelude::StreamExt;
 use eframe::epaint::ColorImage;
-use egui::{Context, Pos2, Ui, Vec2, ViewportBuilder, ViewportClass, ViewportId};
+use egui::{Context, Ui, Vec2, ViewportBuilder, ViewportClass, ViewportCommand, ViewportId};
 use egui_extras::install_image_loaders;
 use egui_i18n::tr;
 use egui_mobius::types::{Enqueue, ValueGuard};
 use egui_mobius::{Slot, Value};
-use tokio::sync::watch;
-use tokio::sync::watch::Receiver;
-use tracing::{debug, trace};
+use tokio::sync::{broadcast, watch};
+use tracing::{info, trace, warn};
 use ui::camera::CameraUi;
 use ui::controls::ControlsUi;
 use ui::diagnostics::DiagnosticsUi;
@@ -18,6 +18,7 @@ use ui::settings::SettingsUi;
 use ui::status::StatusUi;
 
 use crate::config::Config;
+use crate::events::AppEvent;
 use crate::net::ergot_task;
 use crate::runtime::tokio_runtime::TokioRuntime;
 use crate::task;
@@ -71,7 +72,7 @@ pub struct UiState {
 }
 
 impl AppState {
-    pub fn init(sender: Enqueue<UiCommand>, context: Context, camera_rx: Receiver<ColorImage>) -> Self {
+    pub fn init(sender: Enqueue<UiCommand>, context: Context, camera_rx: watch::Receiver<ColorImage>) -> Self {
         let ui_state = UiState {
             camera_ui: CameraUi::new(camera_rx),
             controls_ui: ControlsUi::default(),
@@ -112,6 +113,11 @@ pub struct OperatorUiApp {
     // The command slot for handling UI commands
     #[serde(skip)]
     slot: Slot<UiCommand>,
+
+    #[serde(skip)]
+    app_event_broadcast: Option<(broadcast::Sender<AppEvent>, broadcast::Receiver<AppEvent>)>,
+    #[serde(skip)]
+    networking_handle: Option<JoinHandle<()>>,
 }
 
 impl Default for OperatorUiApp {
@@ -124,6 +130,8 @@ impl Default for OperatorUiApp {
             workspaces: Value::new(Workspaces::default()),
             viewports: Default::default(),
             slot,
+            app_event_broadcast: None,
+            networking_handle: None,
         }
     }
 }
@@ -144,6 +152,20 @@ impl OperatorUiApp {
         }
 
         install_image_loaders(&cc.egui_ctx);
+
+        // Create event channel
+        let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
+
+        ctrlc::set_handler({
+            let app_event_tx = app_event_tx.clone();
+            move || {
+                warn!("Ctrl+C received, shutting down.");
+                let _ = app_event_tx.send(AppEvent::Shutdown);
+            }
+        })
+        .expect("Error setting Ctrl+C handler");
+
+        instance.app_event_broadcast = Some((app_event_tx, app_event_rx));
 
         // Start camera instance
         let (camera_tx, camera_rx) = watch::channel::<ColorImage>(ColorImage::default());
@@ -226,12 +248,20 @@ impl OperatorUiApp {
         app_slot.start(handler);
 
         // Start networking
-        thread::spawn({
+        let networking_handle = thread::spawn({
             let state = instance.state.as_mut().unwrap().clone();
+            let app_event_tx = instance
+                .app_event_broadcast
+                .as_ref()
+                .unwrap()
+                .0
+                .clone();
             move || {
-                spawner.block_on(ergot_task(spawner.clone(), state, camera_tx));
+                let _ = spawner.block_on(ergot_task(spawner.clone(), state, camera_tx, app_event_tx));
+                info!("Network thread shutdown");
             }
         });
+        instance.networking_handle = Some(networking_handle);
 
         {
             instance
@@ -243,7 +273,6 @@ impl OperatorUiApp {
                     viewport.lock().unwrap().init();
                 });
         }
-
         instance
     }
 
@@ -317,6 +346,28 @@ impl eframe::App for OperatorUiApp {
                 });
             }
         }
+
+        if let Some((_, app_event_rx)) = self.app_event_broadcast.as_mut() {
+            if let Ok(event) = app_event_rx.try_recv() {
+                match event {
+                    AppEvent::Shutdown => {
+                        info!("GUI received shutdown event, shutting down");
+                        ctx.send_viewport_cmd(ViewportCommand::Close)
+                    }
+                }
+            }
+        }
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        info!("GUI shutting down");
+        let _ = self
+            .app_event_broadcast
+            .as_ref()
+            .unwrap()
+            .0
+            .send(AppEvent::Shutdown)
+            .unwrap();
     }
 }
 

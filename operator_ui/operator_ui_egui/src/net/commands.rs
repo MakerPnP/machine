@@ -1,31 +1,79 @@
 use std::time::Duration;
 
 use ergot::toolkits::tokio_udp::EdgeStack;
-use ergot::topic;
-use operator_shared::commands::OperatorCommand;
-use tokio::time;
-use tracing::debug;
+use ergot::{Address, endpoint};
+use operator_shared::commands::{OperatorCommandRequest, OperatorCommandResponse};
+use tokio::sync::broadcast::Receiver;
+use tokio::{select, time};
+use tracing::error;
 
-topic!(OperatorCommandTopic, OperatorCommand, "topic/operator/command");
+use crate::events::AppEvent;
 
-pub async fn command_sender(stack: EdgeStack) {
+endpoint!(
+    OperatorCommandEndpoint,
+    OperatorCommandRequest,
+    OperatorCommandResponse,
+    "topic/operator/command"
+);
+
+pub async fn heartbeat_sender(stack: EdgeStack, address: Address, mut receiver: Receiver<AppEvent>) {
+    let command_client = stack
+        .endpoints()
+        .client::<OperatorCommandEndpoint>(address, None);
+
     let mut index = 0;
     tokio::time::sleep(Duration::from_secs(1)).await;
     let heartbeat_timeout_duration = Duration::from_secs(10);
     let heartbeat_send_interval = heartbeat_timeout_duration / 2;
     let mut ticker = time::interval(heartbeat_send_interval);
-    loop {
-        if stack
-            .topics()
-            .broadcast::<OperatorCommandTopic>(&OperatorCommand::Heartbeat(index), None)
-            .inspect_err(|e| {
-                debug!("error sending heartbeat. index: {}, error: {:?}", index, e);
-            })
-            .is_ok()
-        {
-            index = index.wrapping_add(1);
-        };
 
-        ticker.tick().await;
+    loop {
+        // At either stage (waiting response or waiting for tick) we could receive a shutdown event
+        // TODO find a way to do this better (DRY)
+
+        let request = OperatorCommandRequest::Heartbeat(index);
+        select! {
+            response = command_client.request(&request) => {
+                match response {
+                    Ok(response) => {
+                        match response {
+                            OperatorCommandResponse::Acknowledged => {
+                                index = index.wrapping_add(1);
+                            }
+                            _ => {}
+                        }
+                    }
+                    Err(e) => {
+                        error!("error sending heartbeat. index: {}, error: {:?}", index, e);
+                    }
+                }
+            }
+            msg = receiver.recv() => {
+                let Ok(msg) = msg else {
+                    break
+                };
+                match msg {
+                    AppEvent::Shutdown => {
+                        break;
+                    }
+                }
+            }
+        }
+
+        select! {
+            _ = ticker.tick() => {
+                index = index.wrapping_add(1);
+            }
+            msg = receiver.recv() => {
+                let Ok(msg) = msg else {
+                    break
+                };
+                match msg {
+                    AppEvent::Shutdown => {
+                        break;
+                    }
+                }
+            }
+        }
     }
 }

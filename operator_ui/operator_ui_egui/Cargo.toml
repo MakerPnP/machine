@@ -65,6 +65,8 @@ ergot           = { workspace = true }
 
 # serialization
 serde = { version = "1.0.219", features = ["derive"] }
+anyhow = "1.0.100"
+ctrlc = "3.5.1"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

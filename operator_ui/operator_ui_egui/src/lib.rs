@@ -23,3 +23,5 @@ pub mod ui_common;
 pub mod fps_stats;
 
 pub const LOGO: &[u8] = include_bytes!("../../../assets/logos/makerpnp_icon_1_384x384.png");
+
+pub mod events;

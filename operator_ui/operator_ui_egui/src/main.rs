@@ -65,6 +65,8 @@ fn main() -> eframe::Result {
         }
     }
 
+    info!("Shutdown");
+
     Ok(())
 }
 
