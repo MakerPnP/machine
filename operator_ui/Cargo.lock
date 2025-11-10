@@ -1198,6 +1198,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui_tool_windows"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93aa462e8d128124564e0b1f239a98eb1e103a0523d63177597a6e522a1cb8bb"
+dependencies = [
+ "egui",
+ "log",
+ "serde",
+]
+
+[[package]]
+name = "egui_vertical_stack"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ec5b66d43e8f2812ac352e4791ebc3c3e172baeabf0c30d8720442a5915416b"
+dependencies = [
+ "egui",
+]
+
+[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2894,6 +2914,8 @@ dependencies = [
  "egui_mobius",
  "egui_plot",
  "egui_tiles",
+ "egui_tool_windows",
+ "egui_vertical_stack",
  "env_logger",
  "ergot",
  "futures",

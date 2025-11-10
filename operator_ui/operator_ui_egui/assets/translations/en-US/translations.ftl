@@ -41,3 +41,6 @@ jog-x-plus = X+
 jog-z-minus = Z{$index}-
 jog-z-plus = Z{$index}+
 jog-z-park = Z{$index} P
+
+camera-toolwindow-fps-stats-title = Stats
+camera-message-waiting = Waiting...
