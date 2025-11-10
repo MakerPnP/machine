@@ -52,6 +52,7 @@ endpoint!(
 #[tokio::main]
 async fn main() -> io::Result<()> {
     env_logger::init();
+    console_subscriber::init();
 
     let camera_definitions = vec![CameraDefinition {
         name: "Default camera".to_string(),
@@ -104,8 +105,8 @@ async fn main() -> io::Result<()> {
     .await
     .unwrap();
 
-    tokio::task::spawn(basic_services(stack.clone(), 0_u16));
-    tokio::task::spawn(yeet_listener(stack.clone()));
+    tokio::task::Builder::new().name("ergot/basic-services").spawn(basic_services(stack.clone(), 0_u16)).unwrap();
+    tokio::task::Builder::new().name("ergot/yeet-listener").spawn(yeet_listener(stack.clone())).unwrap();
 
     let app_state = Arc::new(Mutex::new(AppState {
         camera_definitions,
@@ -114,9 +115,9 @@ async fn main() -> io::Result<()> {
     }));
 
     // TODO give the app_state to these tasks
-    tokio::task::spawn(io_board_command_sender(stack.clone()));
+    tokio::task::Builder::new().name("io-board/command-sender").spawn(io_board_command_sender(stack.clone())).unwrap();
 
-    tokio::task::spawn(operator_listener(stack.clone(), app_state));
+    tokio::task::Builder::new().name("operator/command-listener").spawn(operator_listener(stack.clone(), app_state)).unwrap();
 
     // Wait for Ctrl+C
     let _ = signal::ctrl_c().await;
@@ -155,7 +156,7 @@ async fn basic_services(stack: RouterStack, port: u16) {
     // handle incoming ping requests
     let ping_responder = stack.services().ping_handler::<4>();
     // custom service for doing device discovery regularly
-    let device_discovery = tokio::spawn(do_device_discovery(stack.clone()));
+    let device_discovery = tokio::task::Builder::new().name("ergot/device-discovery").spawn(do_device_discovery(stack.clone())).unwrap();
     // forward log messages to the log crate output
     let log_handler = stack.services().log_handler(16);
     // handle socket discovery requests
@@ -326,7 +327,7 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
 
                                 // Spawn tasks
 
-                                let capture_handle = tokio::task::spawn({
+                                let capture_handle = tokio::task::Builder::new().name(&format!("camera-{}/capture", identifier)).spawn({
                                     let camera_definition = camera_definition.clone();
                                     let shutdown_flag_rx = shutdown_flag_tx.subscribe();
                                     async move {
@@ -334,8 +335,8 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                                             error!("capture loop error: {e:?}");
                                         }
                                     }
-                                });
-                                let streamer_handle = tokio::task::spawn({
+                                }).unwrap();
+                                let streamer_handle = tokio::task::Builder::new().name(&format!("camera-{}/streamer", identifier)).spawn({
                                     let camera_definition = camera_definition.clone();
                                     let stack = stack.clone();
                                     let address = address.clone();
@@ -344,7 +345,7 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                                             error!("capture loop error: {e:?}");
                                         }
                                     }
-                                });
+                                }).unwrap();
 
                                 clients.insert(identifier.clone(), CameraHandle {
                                     capture_handle,
