@@ -1,6 +1,6 @@
 use eframe::epaint::ColorImage;
 use eframe::epaint::textures::TextureOptions;
-use egui::{Frame, Image, Ui, Widget};
+use egui::{Frame, Ui, Widget};
 use egui_i18n::tr;
 use egui_mobius::Value;
 use egui_tool_windows::ToolWindows;
