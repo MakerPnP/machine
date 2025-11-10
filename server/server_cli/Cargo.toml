@@ -23,6 +23,7 @@ cordyceps          = { workspace = true }
 # tasks
 mutex              = { workspace = true }
 tokio              = { workspace = true }
+console-subscriber = { workspace = true }
 
 # time
 chrono             = { workspace = true, features = ["serde"]}
