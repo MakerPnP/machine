@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 use core::fmt::Display;
 use core::ops::Deref;
 
-use ergot::Address;
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 
@@ -36,8 +35,8 @@ pub struct CameraFrameImageChunk {
 
 #[derive(Debug, Serialize, Deserialize, Schema, Clone, PartialEq)]
 pub enum CameraCommand {
-    StartStreaming { address: Address },
-    StopStreaming { address: Address },
+    StartStreaming { port_id: u8 },
+    StopStreaming { port_id: u8 },
     // TODO
     // GetCameraProperties,
     // SetCameraProperties { properties: CameraProperties },
