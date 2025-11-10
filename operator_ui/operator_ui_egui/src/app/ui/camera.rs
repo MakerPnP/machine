@@ -1,6 +1,6 @@
 use eframe::epaint::ColorImage;
 use eframe::epaint::textures::TextureOptions;
-use egui::Ui;
+use egui::{Image, Ui, Widget};
 use tokio::sync::watch::Receiver;
 use tracing::trace;
 
@@ -53,11 +53,16 @@ impl CameraUi {
             }
         }
 
-        if let Some(tex) = &self.texture {
-            ui.image(tex);
-        } else {
-            ui.label("Waiting for first frame...");
-        }
+        egui::ScrollArea::both().show(ui, |ui| {
+            if let Some(tex) = &self.texture {
+                egui::Image::new(tex)
+                    .max_size(ui.available_size())
+                    .maintain_aspect_ratio(true)
+                    .ui(ui);
+            } else {
+                ui.label("Waiting for first frame...");
+            }
+        });
 
         // TODO use a tool window here, constrained to the camera tile/window.
 
