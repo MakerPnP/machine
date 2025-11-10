@@ -18,6 +18,11 @@ use crate::ui_common::egui::bring_window_to_front;
 use crate::ui_common::egui_tree::{add_pane_to_root, dump_tiles};
 use crate::{LOGO, app};
 
+// TODO there's currently no way to re-center off-screen windows, which is needed if they end up off screen
+//      perhaps add a menu items to re-center all windows?
+// TODO move this to some 'settings' structure instead of it being `const`.
+const ALLOW_OFFSCREEN_WINDOWS: bool = true;
+
 #[derive(serde::Deserialize, serde::Serialize, Default, Clone)]
 #[serde(default)]
 pub struct ViewportConfig {
@@ -437,7 +442,7 @@ impl ViewportState {
 
         let mut request_make_visible: Option<ToggleState> = None;
 
-        egui::SidePanel::left(ui_id.with("left_panel"))
+        let _side_panel_response = egui::SidePanel::left(ui_id.with("left_panel"))
             .min_width(MIN_TOUCH_SIZE.x * 2.0)
             .max_width(200.0)
             .resizable(true)
@@ -586,9 +591,10 @@ impl ViewportState {
                             })
                         });
                 });
+                ui.response()
             });
 
-        egui::CentralPanel::default()
+        let central_panel_response = egui::CentralPanel::default()
             .frame(Frame::NONE.fill(panel_fill_color))
             .show(ctx, |ui| {
                 //
@@ -609,11 +615,19 @@ impl ViewportState {
                 workspace_viewport_config
                     .tree
                     .ui(&mut self.tree_behavior, ui);
+
+                ui.response()
             });
 
         //
         // Windows
         //
+
+        let window_constrain_rect = if ALLOW_OFFSCREEN_WINDOWS {
+            Rect::from_min_size(central_panel_response.response.rect.min, Vec2::INFINITY)
+        } else {
+            central_panel_response.response.rect
+        };
 
         let windows = {
             let mut workspaces = self.workspaces.lock().unwrap();
@@ -682,6 +696,7 @@ impl ViewportState {
 
             let mut window = egui::Window::new(&title)
                 .id(window_id)
+                .constrain_to(window_constrain_rect)
                 // .frame(Frame::NONE)
                 .frame(
                     Frame::new()
