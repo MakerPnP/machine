@@ -105,8 +105,14 @@ async fn main() -> io::Result<()> {
     .await
     .unwrap();
 
-    tokio::task::Builder::new().name("ergot/basic-services").spawn(basic_services(stack.clone(), 0_u16)).unwrap();
-    tokio::task::Builder::new().name("ergot/yeet-listener").spawn(yeet_listener(stack.clone())).unwrap();
+    tokio::task::Builder::new()
+        .name("ergot/basic-services")
+        .spawn(basic_services(stack.clone(), 0_u16))
+        .unwrap();
+    tokio::task::Builder::new()
+        .name("ergot/yeet-listener")
+        .spawn(yeet_listener(stack.clone()))
+        .unwrap();
 
     let app_state = Arc::new(Mutex::new(AppState {
         camera_definitions,
@@ -115,9 +121,15 @@ async fn main() -> io::Result<()> {
     }));
 
     // TODO give the app_state to these tasks
-    tokio::task::Builder::new().name("io-board/command-sender").spawn(io_board_command_sender(stack.clone())).unwrap();
+    tokio::task::Builder::new()
+        .name("io-board/command-sender")
+        .spawn(io_board_command_sender(stack.clone()))
+        .unwrap();
 
-    tokio::task::Builder::new().name("operator/command-listener").spawn(operator_listener(stack.clone(), app_state)).unwrap();
+    tokio::task::Builder::new()
+        .name("operator/command-listener")
+        .spawn(operator_listener(stack.clone(), app_state))
+        .unwrap();
 
     // Wait for Ctrl+C
     let _ = signal::ctrl_c().await;
@@ -156,7 +168,10 @@ async fn basic_services(stack: RouterStack, port: u16) {
     // handle incoming ping requests
     let ping_responder = stack.services().ping_handler::<4>();
     // custom service for doing device discovery regularly
-    let device_discovery = tokio::task::Builder::new().name("ergot/device-discovery").spawn(do_device_discovery(stack.clone())).unwrap();
+    let device_discovery = tokio::task::Builder::new()
+        .name("ergot/device-discovery")
+        .spawn(do_device_discovery(stack.clone()))
+        .unwrap();
     // forward log messages to the log crate output
     let log_handler = stack.services().log_handler(16);
     // handle socket discovery requests
@@ -266,9 +281,9 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
         .single_server::<OperatorCommandEndpoint>(None);
     let server_socket = pin!(server_socket);
     let mut hdl = server_socket.attach();
-    let port = hdl.port();
+    let command_server_port_id = hdl.port();
 
-    info!("Camera command server, port: {}", port);
+    info!("Camera command server, port_id: {}", command_server_port_id);
 
     let timeout_duration = Duration::from_secs(10);
     loop {
@@ -292,7 +307,9 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                     }
                 }
             }
-            _ = hdl.serve(async |request: &OperatorCommandRequest| {
+            _ = hdl.serve_full(async |msg| {
+                let request = &msg.t;
+                let source = &msg.hdr.src;
                 match request {
                     OperatorCommandRequest::Heartbeat(value) => {
                         // TODO ergot API currently doesn't give us the message header, so we can't track who the message was from.
@@ -302,7 +319,12 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                     }
                     OperatorCommandRequest::CameraCommand(identifier, camera_command) => {
                         match camera_command {
-                            CameraCommand::StartStreaming { address } => {
+                            CameraCommand::StartStreaming { port_id } => {
+                                let address = Address {
+                                    network_id: source.network_id,
+                                    node_id: source.node_id,
+                                    port_id: *port_id
+                                };
                                 let app_state = app_state.lock().await;
                                 let mut clients = clients.lock().await;
                                 let Some(camera_definition) = camera_definition_for_identifier(&app_state.camera_definitions, identifier) else {
@@ -339,7 +361,6 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                                 let streamer_handle = tokio::task::Builder::new().name(&format!("camera-{}/streamer", identifier)).spawn({
                                     let camera_definition = camera_definition.clone();
                                     let stack = stack.clone();
-                                    let address = address.clone();
                                     async move {
                                         if let Err(e) = camera_streamer(stack, rx, camera_definition, CAMERA_CHUNK_SIZE, address, shutdown_flag_rx).await {
                                             error!("capture loop error: {e:?}");
@@ -350,17 +371,17 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                                 clients.insert(identifier.clone(), CameraHandle {
                                     capture_handle,
                                     streamer_handle,
-                                    address: *address,
+                                    address,
                                     shutdown_flag_tx
                                 });
 
-                                info!("Streaming started. identifier: {}, address: {}", identifier, address);
+                                info!("Streaming started. identifier: {}, port_id: {}", identifier, port_id);
 
                                 OperatorCommandResponse::CameraCommandResult(
                                     Ok(CameraStreamerCommandResult::Acknowledged)
                                 )
                             }
-                            CameraCommand::StopStreaming { address } => {
+                            CameraCommand::StopStreaming { port_id } => {
                                 let mut clients = clients.lock().await;
                                 if let Some(client) = clients.remove(&identifier) {
                                     let _ =client.shutdown_flag_tx.send(true);
@@ -369,7 +390,7 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                                     let _ = client.capture_handle.await;
                                     let _ = client.streamer_handle.await;
                                 }
-                                info!("Streaming stopped. address: {}", address);
+                                info!("Streaming stopped. port_id: {}", port_id);
 
                                 OperatorCommandResponse::CameraCommandResult(
                                     Ok(CameraStreamerCommandResult::Acknowledged)

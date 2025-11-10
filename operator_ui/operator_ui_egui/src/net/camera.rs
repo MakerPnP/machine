@@ -25,7 +25,6 @@ pub async fn camera_frame_listener(
     tx_out: Sender<ColorImage>,
     context: Context,
     remote_address: Address,
-    originator_address: Address,
     mut app_event_rx: broadcast::Receiver<AppEvent>,
 ) -> anyhow::Result<()> {
     let camera_identifier = CameraIdentifier::new(0);
@@ -39,18 +38,13 @@ pub async fn camera_frame_listener(
         .bounded_receiver::<CameraFrameChunkTopic, 320>(None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe_unicast();
-
-    let local_address = Address {
-        network_id: originator_address.network_id,
-        node_id: originator_address.node_id,
-        port_id: hdl.port(),
-    };
+    let port_id = hdl.port();
 
     let result = command_client
         .request(&OperatorCommandRequest::CameraCommand(
             camera_identifier,
             CameraCommand::StartStreaming {
-                address: local_address,
+                port_id,
             },
         ))
         .await;
@@ -193,7 +187,7 @@ pub async fn camera_frame_listener(
         .request(&OperatorCommandRequest::CameraCommand(
             camera_identifier,
             CameraCommand::StopStreaming {
-                address: local_address,
+                port_id,
             },
         ))
         .await;
