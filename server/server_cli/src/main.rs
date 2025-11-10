@@ -291,15 +291,6 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                     }
                 }
             }
-            // msg = hdl.recv() => {
-            //     debug!("{}: got {:?}", msg.hdr, msg.t);
-            //     match msg.t {
-            //         OperatorCommandRequest::Heartbeat(value) => {
-            //             info!("OperatorCommand::Heartbeat.  value: {}", value);
-            //         }
-            //     }
-            // }
-
             _ = hdl.serve(async |request: &OperatorCommandRequest| {
                 match request {
                     OperatorCommandRequest::Heartbeat(value) => {
