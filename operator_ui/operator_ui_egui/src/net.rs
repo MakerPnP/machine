@@ -72,8 +72,9 @@ pub async fn ergot_task(
             break res;
         }
 
-        time::sleep(Duration::from_secs(1)).await;
+        time::sleep(Duration::from_millis(250)).await;
     };
+    info!("Found {} command endpoints", discovery_results.len());
 
     // TODO just using the first one for now
     let command_endpoint_remote_address = discovery_results[0].address;
