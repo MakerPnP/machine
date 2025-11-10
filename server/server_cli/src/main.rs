@@ -33,8 +33,10 @@ pub const UDP_OVERHEAD_SIZE: usize = 8;
 pub const UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX: usize = UDP_OVER_ETH_MTU - IP_OVERHEAD_SIZE - UDP_OVERHEAD_SIZE;
 pub const UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX: usize = UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX - MAX_HDR_ENCODED_SIZE;
 
-// TODO configure these more appropriately
-const OPERATOR_TX_BUFFER_SIZE: usize = 1024 * 10;
+// TODO configure these more appropriately.
+//      for the operator TX we need to send camera streams and the broadcast packets from the IO boards,
+//      so the buffer needs to be fairly large to prevent `InterfaceFull` errors.
+const OPERATOR_TX_BUFFER_SIZE: usize = 1024 * 1024;
 const IOBOARD_TX_BUFFER_SIZE: usize = 4096;
 
 // must be less than the MTU of the network interface + ip + udp + ergot + chunking overhead
