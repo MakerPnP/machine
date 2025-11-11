@@ -57,8 +57,8 @@ pub struct CameraFrameImageChunk {
     pub bytes: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TimeStampUTC(chrono::DateTime<chrono::Utc>);
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+pub struct TimeStampUTC(pub chrono::DateTime<chrono::Utc>);
 
 impl postcard_schema::Schema for TimeStampUTC {
     const SCHEMA: &'static NamedType = &NamedType { name: "timestamp_utc", ty: &DataModelType::I64 };

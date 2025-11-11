@@ -19,18 +19,21 @@ use tokio::{net::UdpSocket, select};
 use tokio::sync::{broadcast, watch};
 use tokio::sync::watch::{Receiver, Sender};
 use tokio::time::Instant;
-use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind, CameraStreamerCommand, CameraStreamerCommandRequest, CameraStreamerCommandResponse};
+use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind, CameraStreamerCommand, CameraStreamerCommandRequest, CameraStreamerCommandResponse, TimeStampUTC};
 use crate::fps_stats::egui::show_frame_durations;
 use crate::fps_stats::FpsStats;
 
 mod fps_stats;
 const REMOTE_ADDR: &str = "127.0.0.1:5000";
 const LOCAL_ADDR: &str = "0.0.0.0:5001";
+const TARGET_FPS: u8 = 30;
+const SCHEDULED_FPS_MIN: u8 = 5;
+const SCHEDULED_FPS_MAX: u8 = 60;
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 endpoint!(CameraStreamerCommandEndpoint, CameraStreamerCommandRequest, CameraStreamerCommandResponse, "topic/camera");
 
-fn start_network_thread(tx_out: Sender<ColorImage>, context: Context, app_event_tx: Arc<broadcast::Sender<AppEvent>>) {
+fn start_network_thread(tx_out: Sender<CameraFrame>, context: Context, app_event_tx: Arc<broadcast::Sender<AppEvent>>) {
     // run a tokio runtime in background thread
     thread::spawn(move || {
         let rt = Runtime::new().expect("create tokio runtime");
@@ -42,7 +45,7 @@ fn start_network_thread(tx_out: Sender<ColorImage>, context: Context, app_event_
     });
 }
 
-async fn network_task(remote_addr: &str, tx_out: Sender<ColorImage>, context: Context, app_event_tx: Arc<broadcast::Sender<AppEvent>>) -> anyhow::Result<()> {
+async fn network_task(remote_addr: &str, tx_out: Sender<CameraFrame>, context: Context, app_event_tx: Arc<broadcast::Sender<AppEvent>>) -> anyhow::Result<()> {
 
     let queue = new_std_queue(1024 * 1024);
     let stack: EdgeStack = new_target_stack(&queue, 1400);
@@ -77,7 +80,7 @@ async fn network_task(remote_addr: &str, tx_out: Sender<ColorImage>, context: Co
     Ok(())
 }
 
-async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<ColorImage>, context: Context, mut app_event_rx: broadcast::Receiver<AppEvent>) -> Result<(), anyhow::Error> {
+async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<CameraFrame>, context: Context, mut app_event_rx: broadcast::Receiver<AppEvent>) -> Result<(), anyhow::Error> {
     let subber = stack.topics().bounded_receiver::<CameraFrameChunkTopic, 320>(None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe_unicast();
@@ -110,15 +113,20 @@ async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<ColorImage>, con
         return Err(anyhow::anyhow!("Error sending start request: {:?}", e));
     }
 
-
     struct InProgressFrame {
         total_chunks: u32,
         chunks: Vec<Option<Vec<u8>>>,
         received_count: u32,
         start_time: Instant,
+        frame_timestamp: TimeStampUTC,
+        frame_number: u64,
+        frame_interval: Duration,
     }
 
     let mut in_progress: HashMap<u64, InProgressFrame> = HashMap::new();
+
+    let mut target_fps = TARGET_FPS as f32;
+    let mut frame_timestamps = std::collections::VecDeque::with_capacity(60);
 
     loop {
 
@@ -140,11 +148,52 @@ async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<ColorImage>, con
 
                 let entry_and_image_chunk = match &chunk.kind {
                     CameraFrameChunkKind::Meta(frame_meta) => {
+
+                        // Update timestamps for FPS estimation
+                        frame_timestamps.push_back(frame_meta.frame_timestamp);
+                        if frame_timestamps.len() > (TARGET_FPS * 2) as usize {
+                            frame_timestamps.pop_front();
+                        }
+
+                        // Recompute effective FPS
+                        if frame_timestamps.len() >= 2 {
+                            let mut iter = frame_timestamps.iter();
+                            let newest = iter.next_back().unwrap().0;
+                            let previous: chrono::DateTime<chrono::Utc> = iter.next_back().unwrap().0;
+                            let oldest = frame_timestamps.front().unwrap().0;
+
+                            let newest_previous_span = newest - previous;
+                            let total_span = newest - oldest;
+
+                            let frame_count = frame_timestamps.len() - 1;
+                            let measured_fps = frame_count as f64 / total_span.as_seconds_f64();
+
+
+                            // Smooth update using exponential moving average
+                            let alpha = 0.1;
+                            target_fps = (1.0 - alpha) * target_fps + alpha * (measured_fps as f32);
+
+                            debug!("estimated FPS: {:.1}, target FPS: {:.1}, total_span: {}ms, span: {}ms",
+                                measured_fps,
+                                target_fps,
+                                total_span.num_milliseconds(),
+                                newest_previous_span.num_milliseconds(),
+                            );
+                        }
+
+                        // schedule next render
+                        let clamped_fps = target_fps.clamp(SCHEDULED_FPS_MIN.into(), SCHEDULED_FPS_MAX.into());
+
+                        let frame_interval = Duration::from_secs_f64(1.0 / clamped_fps as f64);
+
                         in_progress.insert(chunk.frame_number, InProgressFrame {
                             total_chunks: frame_meta.total_chunks,
                             chunks: vec![None; frame_meta.total_chunks as usize],
                             received_count: 0,
                             start_time: Instant::now(),
+                            frame_timestamp: frame_meta.frame_timestamp.clone(),
+                            frame_number: chunk.frame_number,
+                            frame_interval,
                         });
                         continue;
                     }
@@ -177,7 +226,12 @@ async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<ColorImage>, con
                 }
 
                 // Check if frame is complete
-                if entry.received_count == entry.total_chunks {
+                let frame_complete = entry.received_count == entry.total_chunks;
+
+                if frame_complete {
+                    // Remove the completed frame from tracking, also avoids borrowing the entry
+                    let entry = in_progress.remove(&chunk.frame_number).unwrap();
+
                     // Reassemble JPEG data in order
                     let mut jpeg_data = Vec::new();
                     for c in entry.chunks.iter() {
@@ -190,39 +244,41 @@ async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<ColorImage>, con
                         }
                     }
 
-                    let before = std::time::Instant::now();
-                    debug!("received camera frame from server, frame_number: {}, chunks: {}, timestamp: {:?}", chunk.frame_number, entry.total_chunks, before);
+                    debug!("received camera frame from server, frame_number: {}, chunks: {}, frame_timestamp: {:?}, frame_interval: {}ms", chunk.frame_number, entry.total_chunks, entry.frame_timestamp, entry.frame_interval.as_millis());
 
                     // Decode JPEG
-                    let before = std::time::Instant::now();
+                    let decode_before = Instant::now();
                     match image::load_from_memory_with_format(&jpeg_data, ImageFormat::Jpeg) {
                         Ok(img) => {
-                            let point1 = std::time::Instant::now();
+                            let point1 = Instant::now();
                             let rgba = img.to_rgba8();
                             let (w, h) = (rgba.width() as usize, rgba.height() as usize);
                             let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
 
-                            let _ = tx_out.send(color_image);
-                            context.request_repaint();
+                            let camera_frame = CameraFrame {
+                                image: color_image,
+                                timestamp: entry.frame_timestamp,
+                                frame_number: entry.frame_number,
+                                frame_interval: entry.frame_interval,
+                            };
 
-                            let after = std::time::Instant::now();
+                            context.request_repaint();
+                            let _ = tx_out.send(camera_frame);
+
+                            let after = Instant::now();
                             trace!("sent frame to egui, frame_number: {}, size: {} bytes, timestamp: {:?}, decoding: {}us, imagegen+send: {}us, total-elapsed: {}us",
                                 chunk.frame_number,
                                 jpeg_data.len(),
                                 after,
-                                (point1 - before).as_micros(),
+                                (point1 - decode_before).as_micros(),
                                 (after - point1).as_micros(),
-                                (after - before).as_micros(),
+                                (after - decode_before).as_micros(),
                             );
                         }
                         Err(e) => {
                             error!("decode error frame {}: {:?}", chunk.frame_number, e);
                         }
                     }
-
-
-                    // Remove the completed frame from tracking
-                    in_progress.remove(&chunk.frame_number);
                 }
                 // drop old frames (stuck/incomplete)
                 let now = Instant::now();
@@ -269,8 +325,9 @@ async fn basic_services(stack: EdgeStack, port: u16) {
 }
 
 struct CameraApp {
-    rx: Receiver<ColorImage>,
+    rx: Receiver<CameraFrame>,
     texture: Option<egui::TextureHandle>,
+    render_after: std::time::Instant,
 
     gui_fps_stats: FpsStats,
     gui_fps_snapshot: Option<fps_stats::FpsSnapshot>,
@@ -304,7 +361,7 @@ impl CameraApp {
             }
         }).expect("Error setting Ctrl+C handler");
 
-        let (camera_image_tx, camera_image_rx) = watch::channel::<ColorImage>(ColorImage::default());
+        let (camera_image_tx, camera_image_rx) = watch::channel::<CameraFrame>(CameraFrame::default());
 
         let app_event_tx = Arc::new(app_event_tx);
         start_network_thread(camera_image_tx, cc.egui_ctx.clone(), app_event_tx.clone());
@@ -312,6 +369,9 @@ impl CameraApp {
         Self {
             rx: camera_image_rx,
             texture: None,
+
+            render_after: std::time::Instant::now(),
+
             gui_fps_stats: FpsStats::new(300),
             gui_fps_snapshot: None,
             camera_fps_stats: FpsStats::new(300),
@@ -338,18 +398,50 @@ impl App for CameraApp {
         }
 
         if let Ok(true) = self.rx.has_changed() {
-            let color_image = self.rx.borrow_and_update().clone();
-            self.camera_frame_number += 1;
-            self.camera_fps_snapshot = self.camera_fps_stats.update(now);
-            trace!("received frame, now: {:?}, frame_number: {}, snapshot: {:?}", now, self.camera_frame_number, self.camera_fps_snapshot);
 
-            if let Some(tex) = &mut self.texture {
-                tex.set(color_image, TextureOptions::default());
-            } else {
-                // create texture first time
-                self.texture = Some(ctx.load_texture("camera", color_image, Default::default()));
+            let take = {
+                // peek at next frame to see if it's ready to be rendered
+                let camera_frame = self.rx.borrow();
+
+                now > self.render_after
+            };
+
+            if !take {
+                info!("waiting for next frame to be ready");
+            }
+
+            if take {
+
+                let camera_frame = self.rx.borrow_and_update().clone();
+
+                self.render_after += camera_frame.frame_interval;
+                if now > self.render_after {
+                    // catch up if we fall behind
+                    self.render_after = now + camera_frame.frame_interval;
+                    error!("lagged");
+                }
+
+                self.camera_frame_number += 1;
+                self.camera_fps_snapshot = self.camera_fps_stats.update(now);
+
+                debug!("received frame, now: {:?}, frame_number: {}, snapshot: {:?}",
+                    now,
+                    self.camera_frame_number,
+                    self.camera_fps_snapshot
+                );
+
+                if let Some(tex) = &mut self.texture {
+                    tex.set(camera_frame.image, TextureOptions::default());
+                } else {
+                    // create texture first time
+                    self.texture = Some(ctx.load_texture("camera", camera_frame.image, Default::default()));
+                }
             }
         }
+
+        // Schedule next repaint at render_after or sooner
+        let repaint_delay = self.render_after.saturating_duration_since(now.into());
+        ctx.request_repaint_after(repaint_delay);
 
         egui::Window::new("Camera").show(ctx, |ui| {
             if let Some(tex) = &self.texture {
@@ -428,3 +520,20 @@ fn main() -> eframe::Result {
     )
 }
 
+impl Default for CameraFrame {
+    fn default() -> Self {
+        Self {
+            image: Default::default(),
+            timestamp: chrono::Utc::now().into(),
+            frame_number: 0,
+            frame_interval: Duration::from_secs(0),
+        }
+    }
+}
+#[derive(Clone, Debug)]
+struct CameraFrame {
+    image: ColorImage,
+    timestamp: TimeStampUTC,
+    frame_number: u64,
+    frame_interval: Duration,
+}

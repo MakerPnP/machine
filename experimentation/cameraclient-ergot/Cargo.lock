@@ -694,6 +694,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "camerastreamer-ergot-shared",
+ "chrono",
  "cordyceps",
  "ctrlc",
  "eframe",
