@@ -23,6 +23,7 @@ cordyceps          = { workspace = true }
 # tasks
 mutex              = { workspace = true }
 tokio              = { workspace = true }
+tokio-util         = { workspace = true }
 console-subscriber = { workspace = true }
 
 # time
