@@ -19,11 +19,12 @@ use operator_shared::camera::{
 use operator_shared::commands::{OperatorCommandRequest, OperatorCommandResponse};
 use server_common::camera::{CameraDefinition, CameraSource, CameraStreamConfig, OpenCVCameraConfig};
 use server_vision::{CameraFrame, capture_loop};
+use tokio::sync::broadcast::Receiver;
 use tokio::sync::{Mutex, broadcast};
 use tokio::time::interval;
 use tokio::{net::UdpSocket, select, signal, time};
-use tokio::sync::broadcast::Receiver;
 use tokio_util::sync::CancellationToken;
+
 use crate::camera::{camera_definition_for_identifier, camera_streamer};
 
 pub mod camera;
@@ -76,8 +77,7 @@ async fn main() -> io::Result<()> {
 
     let stack: RouterStack = RouterStack::new();
 
-    let io_board_udp_socket = UdpSocket::bind("192.168.18.41:8000")
-        .await?;
+    let io_board_udp_socket = UdpSocket::bind("192.168.18.41:8000").await?;
     let io_board_remote_addr = "192.168.18.64:8000";
     io_board_udp_socket
         .connect(io_board_remote_addr)
@@ -91,8 +91,7 @@ async fn main() -> io::Result<()> {
     .await
     .unwrap();
 
-    let operator_udp_socket = UdpSocket::bind("192.168.18.41:8001")
-        .await?;
+    let operator_udp_socket = UdpSocket::bind("192.168.18.41:8001").await?;
     let operator_remote_addr = "192.168.18.41:8002";
     operator_udp_socket
         .connect(operator_remote_addr)
@@ -109,17 +108,10 @@ async fn main() -> io::Result<()> {
 
     let basic_services_handle = tokio::task::Builder::new()
         .name("ergot/basic-services")
-        .spawn(basic_services(
-            stack.clone(),
-            0_u16,
-            app_event_tx.subscribe(),
-        ))?;
+        .spawn(basic_services(stack.clone(), 0_u16, app_event_tx.subscribe()))?;
     let yeet_listener_handle = tokio::task::Builder::new()
         .name("ergot/yeet-listener")
-        .spawn(yeet_listener(
-            stack.clone(),
-            app_event_tx.subscribe(),
-        ))?;
+        .spawn(yeet_listener(stack.clone(), app_event_tx.subscribe()))?;
 
     let app_state = Arc::new(Mutex::new(AppState {
         camera_definitions,
@@ -211,13 +203,9 @@ async fn app_shutdown_handler(mut receiver: Receiver<AppEvent>) {
         let app_event = receiver.recv().await;
         match app_event {
             Ok(event) => match event {
-                AppEvent::Shutdown => {
-                    break
-                }
-            }
-            Err(_) => {
-                break
-            }
+                AppEvent::Shutdown => break,
+            },
+            Err(_) => break,
         }
     }
 }
@@ -253,7 +241,6 @@ async fn do_device_discovery(stack: RouterStack) {
 }
 
 async fn io_board_command_sender(stack: RouterStack, app_event_rx: Receiver<AppEvent>) {
-
     let mut app_shutdown_handler = Box::pin(crate::app_shutdown_handler(app_event_rx));
 
     enum Phase {
@@ -472,8 +459,14 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
     let mut clients = clients.lock().await;
     let clients_to_cancel = clients.drain().collect::<Vec<_>>();
 
-    for (index, (identifier, client)) in clients_to_cancel.into_iter().enumerate() {
-        info!("Stopping streaming client {}. identifier: {}, address: {}", index, identifier, client.address);
+    for (index, (identifier, client)) in clients_to_cancel
+        .into_iter()
+        .enumerate()
+    {
+        info!(
+            "Stopping streaming client {}. identifier: {}, address: {}",
+            index, identifier, client.address
+        );
 
         // TODO notify client that streaming is stopped
 

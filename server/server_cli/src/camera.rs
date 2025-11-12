@@ -1,4 +1,3 @@
-use tokio_util::sync::CancellationToken;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,6 +16,7 @@ use server_common::camera::CameraDefinition;
 use server_vision::CameraFrame;
 use tokio::sync::broadcast;
 use tokio::{select, time};
+use tokio_util::sync::CancellationToken;
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
@@ -31,7 +31,7 @@ pub async fn camera_streamer(
     info!("camera streamer started. destination: {}", address);
 
     let mut interval = time::interval(Duration::from_secs(1));
-    
+
     loop {
         select! {
             _ = interval.tick() => {
