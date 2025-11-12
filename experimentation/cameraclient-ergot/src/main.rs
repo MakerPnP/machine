@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 // client.rs
-use eframe::{egui, App, CreationContext, Frame};
+use eframe::{egui, App, CreationContext, Frame, NativeOptions};
 use image::ImageFormat;
 use std::thread;
 use std::pin::pin;
 use std::sync::Arc;
 use std::time::Duration;
 use eframe::epaint::textures::TextureOptions;
-use egui::{ColorImage, Context, ViewportCommand};
+use egui::{Color32, ColorImage, Context, Rect, RichText, UiBuilder, Vec2, ViewportBuilder, ViewportCommand};
 use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface}, topic, well_known::DeviceInfo, Address, FrameKind};
 use ergot::interface_manager::profiles::direct_edge::EDGE_NODE_ID;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
@@ -340,6 +340,7 @@ struct CameraApp {
 
     app_event_tx: Arc<broadcast::Sender<AppEvent>>,
     app_event_rx: broadcast::Receiver<AppEvent>,
+    timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -371,6 +372,7 @@ impl CameraApp {
             texture: None,
 
             render_after: std::time::Instant::now(),
+            timestamp: chrono::Utc::now(),
 
             gui_fps_stats: FpsStats::new(300),
             gui_fps_snapshot: None,
@@ -399,19 +401,7 @@ impl App for CameraApp {
 
         if let Ok(true) = self.rx.has_changed() {
 
-            let take = {
-                // peek at next frame to see if it's ready to be rendered
-                let camera_frame = self.rx.borrow();
-
-                now > self.render_after
-            };
-
-            if !take {
-                info!("waiting for next frame to be ready");
-            }
-
-            if take {
-
+            if now > self.render_after {
                 let camera_frame = self.rx.borrow_and_update().clone();
 
                 self.render_after += camera_frame.frame_interval;
@@ -424,11 +414,12 @@ impl App for CameraApp {
                 self.camera_frame_number += 1;
                 self.camera_fps_snapshot = self.camera_fps_stats.update(now);
 
-                debug!("received frame, now: {:?}, frame_number: {}, snapshot: {:?}",
-                    now,
+                debug!("received frame, frame_number: {}, snapshot: {:?}",
                     self.camera_frame_number,
                     self.camera_fps_snapshot
                 );
+
+                self.timestamp = (*camera_frame.timestamp).into();
 
                 if let Some(tex) = &mut self.texture {
                     tex.set(camera_frame.image, TextureOptions::default());
@@ -436,6 +427,8 @@ impl App for CameraApp {
                     // create texture first time
                     self.texture = Some(ctx.load_texture("camera", camera_frame.image, Default::default()));
                 }
+            } else {
+                trace!("waiting for next frame to be ready");
             }
         }
 
@@ -443,15 +436,30 @@ impl App for CameraApp {
         let repaint_delay = self.render_after.saturating_duration_since(now.into());
         ctx.request_repaint_after(repaint_delay);
 
-        egui::Window::new("Camera").show(ctx, |ui| {
-            if let Some(tex) = &self.texture {
-                ui.image(tex);
-            } else {
-                ui.label("Waiting for first frame...");
-            }
+        egui::Window::new("Camera")
+            .default_pos([10.0, 10.0])
+            .default_size([1280.0, 720.0])
+            .scroll(true)
+            .resizable(true)
+            .constrain(false)
+            .show(ctx, |ui| {
+                if let Some(tex) = &self.texture {
+                    ui.add(egui::Image::new(tex).maintain_aspect_ratio(true).max_size(ui.max_rect().size()));
+                    let overlay_clip_rect = ui.clip_rect();
+
+                    let mut overlay_ui = ui.new_child(UiBuilder::new()
+                        .max_rect(ui.clip_rect())
+                    );
+                    overlay_ui.set_clip_rect(overlay_clip_rect);
+                    overlay_ui.add(egui::Label::new(RichText::new(format!("{}", self.timestamp)).color(Color32::GREEN)).selectable(false));
+                } else {
+                    ui.label("Waiting for first frame...");
+                }
         });
 
         egui::Window::new("Stats")
+            .default_pos([1320.0, 10.0])
+            .constrain(false)
             .scroll(true)
             .show(ctx, |ui| {
                 ui.push_id("gui", |ui| {
@@ -512,7 +520,11 @@ impl App for CameraApp {
 fn main() -> eframe::Result {
     env_logger::init();
 
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        viewport: ViewportBuilder::default()
+            .with_inner_size([1700.0, 830.0]),
+        ..NativeOptions::default()
+    };
     eframe::run_native(
         "Camera Client",
         options,
