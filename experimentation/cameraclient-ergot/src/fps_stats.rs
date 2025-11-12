@@ -26,24 +26,28 @@ impl FpsStats {
             return None; // first frame, can't compute FPS yet
         };
 
+        let interval_ms = now.duration_since(self.last_update.unwrap()).as_millis() as u32;
+
         // store in history
         if self.history.len() >= self.max_len {
             self.history.remove(0);
         }
         self.history.push(latest_fps);
 
-        self.last_update = Some(now);
 
         // compute snapshot
         let min = self.history.iter().copied().fold(f32::INFINITY, f32::min);
         let max = self.history.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         let avg = self.history.iter().copied().sum::<f32>() / self.history.len() as f32;
 
+        self.last_update = Some(now);
+
         Some(FpsSnapshot {
             latest: latest_fps,
             min,
             max,
             avg,
+            interval_ms,
         })
     }
 
@@ -61,6 +65,7 @@ pub struct FpsSnapshot {
     pub(crate) min: f32,
     pub(crate) max: f32,
     pub(crate) avg: f32,
+    pub(crate) interval_ms: u32,
 }
 
 pub mod egui {
