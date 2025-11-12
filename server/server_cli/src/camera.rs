@@ -1,3 +1,4 @@
+use tokio_util::sync::CancellationToken;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,14 +8,14 @@ use ergot::interface_manager::interface_impls::tokio_udp::TokioUdpInterface;
 use ergot::interface_manager::profiles::direct_router::DirectRouter;
 use ergot::net_stack::ArcNetStack;
 use ergot::{Address, NetStackSendError, topic};
-use log::{debug, error, trace};
+use log::{debug, error, info, trace};
 use mutex::raw_impls::cs::CriticalSectionRawMutex;
 use operator_shared::camera::{
     CameraFrameChunk, CameraFrameChunkKind, CameraFrameImageChunk, CameraFrameMeta, CameraIdentifier,
 };
 use server_common::camera::CameraDefinition;
 use server_vision::CameraFrame;
-use tokio::sync::{broadcast, watch};
+use tokio::sync::broadcast;
 use tokio::{select, time};
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
@@ -25,15 +26,18 @@ pub async fn camera_streamer(
     definition: CameraDefinition,
     chunk_size: usize,
     address: Address,
-    mut shutdown_flag: watch::Receiver<bool>,
+    shutdown_flag: CancellationToken,
 ) -> Result<()> {
+    info!("camera streamer started. destination: {}", address);
+
+    let mut interval = time::interval(Duration::from_secs(1));
+    
     loop {
         select! {
-            changed = shutdown_flag.changed() => {
-                if changed.is_ok() {
-                    if *shutdown_flag.borrow_and_update() {
-                        break
-                    }
+            _ = interval.tick() => {
+                if shutdown_flag.is_cancelled() {
+                    info!("Shutting down camera streamer");
+                    break
                 }
             }
             frame = rx.recv() => {

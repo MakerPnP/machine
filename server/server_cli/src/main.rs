@@ -19,10 +19,11 @@ use operator_shared::camera::{
 use operator_shared::commands::{OperatorCommandRequest, OperatorCommandResponse};
 use server_common::camera::{CameraDefinition, CameraSource, CameraStreamConfig, OpenCVCameraConfig};
 use server_vision::{CameraFrame, capture_loop};
-use tokio::sync::{Mutex, broadcast, watch};
+use tokio::sync::{Mutex, broadcast};
 use tokio::time::interval;
 use tokio::{net::UdpSocket, select, signal, time};
-
+use tokio::sync::broadcast::Receiver;
+use tokio_util::sync::CancellationToken;
 use crate::camera::{camera_definition_for_identifier, camera_streamer};
 
 pub mod camera;
@@ -66,17 +67,17 @@ async fn main() -> io::Result<()> {
         },
         width: 1920,
         height: 1280,
-        fps: 25,
+        fps: 30,
     }];
 
     // Create event channel
     let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
+    drop(app_event_rx);
 
     let stack: RouterStack = RouterStack::new();
 
     let io_board_udp_socket = UdpSocket::bind("192.168.18.41:8000")
-        .await
-        .unwrap();
+        .await?;
     let io_board_remote_addr = "192.168.18.64:8000";
     io_board_udp_socket
         .connect(io_board_remote_addr)
@@ -91,8 +92,7 @@ async fn main() -> io::Result<()> {
     .unwrap();
 
     let operator_udp_socket = UdpSocket::bind("192.168.18.41:8001")
-        .await
-        .unwrap();
+        .await?;
     let operator_remote_addr = "192.168.18.41:8002";
     operator_udp_socket
         .connect(operator_remote_addr)
@@ -107,14 +107,19 @@ async fn main() -> io::Result<()> {
     .await
     .unwrap();
 
-    tokio::task::Builder::new()
+    let basic_services_handle = tokio::task::Builder::new()
         .name("ergot/basic-services")
-        .spawn(basic_services(stack.clone(), 0_u16))
-        .unwrap();
-    tokio::task::Builder::new()
+        .spawn(basic_services(
+            stack.clone(),
+            0_u16,
+            app_event_tx.subscribe(),
+        ))?;
+    let yeet_listener_handle = tokio::task::Builder::new()
         .name("ergot/yeet-listener")
-        .spawn(yeet_listener(stack.clone()))
-        .unwrap();
+        .spawn(yeet_listener(
+            stack.clone(),
+            app_event_tx.subscribe(),
+        ))?;
 
     let app_state = Arc::new(Mutex::new(AppState {
         camera_definitions,
@@ -123,15 +128,13 @@ async fn main() -> io::Result<()> {
     }));
 
     // TODO give the app_state to these tasks
-    tokio::task::Builder::new()
+    let ioboard_command_sender_handle = tokio::task::Builder::new()
         .name("io-board/command-sender")
-        .spawn(io_board_command_sender(stack.clone()))
-        .unwrap();
+        .spawn(io_board_command_sender(stack.clone(), app_event_tx.subscribe()))?;
 
-    tokio::task::Builder::new()
+    let operator_listener_handle = tokio::task::Builder::new()
         .name("operator/command-listener")
-        .spawn(operator_listener(stack.clone(), app_state))
-        .unwrap();
+        .spawn(operator_listener(stack.clone(), app_state))?;
 
     // Wait for Ctrl+C
     let _ = signal::ctrl_c().await;
@@ -141,6 +144,13 @@ async fn main() -> io::Result<()> {
         .unwrap();
 
     info!("Shut down requested, exiting");
+
+    let _ = ioboard_command_sender_handle.await;
+    let _ = operator_listener_handle.await;
+    let _ = basic_services_handle.await;
+    let _ = yeet_listener_handle.await;
+
+    info!("Shutdown complete");
     Ok(())
 }
 
@@ -148,7 +158,7 @@ struct CameraHandle {
     capture_handle: tokio::task::JoinHandle<()>,
     streamer_handle: tokio::task::JoinHandle<()>,
     address: Address,
-    shutdown_flag_tx: watch::Sender<bool>,
+    shutdown_flag: CancellationToken,
 }
 
 struct AppState {
@@ -157,7 +167,7 @@ struct AppState {
     camera_clients: Arc<Mutex<HashMap<CameraIdentifier, CameraHandle>>>,
 }
 
-async fn basic_services(stack: RouterStack, port: u16) {
+async fn basic_services(stack: RouterStack, port: u16, app_event_rx: Receiver<AppEvent>) {
     let info = DeviceInfo {
         name: Some("Ergot router".try_into().unwrap()),
         description: Some("A central router".try_into().unwrap()),
@@ -181,6 +191,8 @@ async fn basic_services(stack: RouterStack, port: u16) {
         .services()
         .socket_query_handler::<4>();
 
+    let app_shutdown_handler = app_shutdown_handler(app_event_rx);
+
     // These all run together, we run them in a single task
     select! {
         _ = ping_responder => {},
@@ -188,6 +200,25 @@ async fn basic_services(stack: RouterStack, port: u16) {
         _ = device_discovery_responder => {},
         _ = socket_discovery_responder => {},
         _ = device_discovery => {},
+        _ = app_shutdown_handler => {
+            info!("basic services shutdown requested, stopping");
+        },
+    }
+}
+
+async fn app_shutdown_handler(mut receiver: Receiver<AppEvent>) {
+    loop {
+        let app_event = receiver.recv().await;
+        match app_event {
+            Ok(event) => match event {
+                AppEvent::Shutdown => {
+                    break
+                }
+            }
+            Err(_) => {
+                break
+            }
+        }
     }
 }
 
@@ -221,32 +252,69 @@ async fn do_device_discovery(stack: RouterStack) {
     }
 }
 
-async fn io_board_command_sender(stack: RouterStack) {
-    let mut ctr = 0;
-    loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        let command = IoBoardCommand::Test(ctr);
-        stack
-            .topics()
-            .broadcast::<IoBoardCommandTopic>(&command, None)
-            .unwrap();
-        ctr += 1;
+async fn io_board_command_sender(stack: RouterStack, app_event_rx: Receiver<AppEvent>) {
 
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        stack
-            .topics()
-            .broadcast::<IoBoardCommandTopic>(&IoBoardCommand::BeginYeetTest, None)
-            .unwrap();
+    let mut app_shutdown_handler = Box::pin(crate::app_shutdown_handler(app_event_rx));
 
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        stack
-            .topics()
-            .broadcast::<IoBoardCommandTopic>(&IoBoardCommand::EndYeetTest, None)
-            .unwrap();
+    enum Phase {
+        One,
+        Two,
+        Three,
     }
+    let mut ctr = 0;
+    let mut phase = Phase::One;
+    loop {
+        match phase {
+            Phase::One => {
+                select! {
+                    _ = &mut app_shutdown_handler => {
+                        break
+                    }
+                    _ = tokio::time::sleep(Duration::from_secs(1)) => {},
+                }
+                let command = IoBoardCommand::Test(ctr);
+                stack
+                    .topics()
+                    .broadcast::<IoBoardCommandTopic>(&command, None)
+                    .unwrap();
+                ctr += 1;
+                phase = Phase::Two
+            }
+            Phase::Two => {
+                select! {
+                    _ = &mut app_shutdown_handler => {
+                        break
+                    }
+                    _ = tokio::time::sleep(Duration::from_secs(5)) => {},
+                }
+                stack
+                    .topics()
+                    .broadcast::<IoBoardCommandTopic>(&IoBoardCommand::BeginYeetTest, None)
+                    .unwrap();
+                phase = Phase::Three
+            }
+            Phase::Three => {
+                select! {
+                    _ = &mut app_shutdown_handler => {
+                        break
+                    }
+                    _ = tokio::time::sleep(Duration::from_secs(5)) => {},
+                }
+                stack
+                    .topics()
+                    .broadcast::<IoBoardCommandTopic>(&IoBoardCommand::EndYeetTest, None)
+                    .unwrap();
+
+                phase = Phase::One
+            }
+        }
+    }
+    info!("io board command sender shutdown");
 }
 
-async fn yeet_listener(stack: RouterStack) {
+async fn yeet_listener(stack: RouterStack, app_event_rx: Receiver<AppEvent>) {
+    let mut app_shutdown_handler = Box::pin(crate::app_shutdown_handler(app_event_rx));
+
     let subber = stack
         .topics()
         .heap_bounded_receiver::<YeetTopic>(64, None);
@@ -266,17 +334,23 @@ async fn yeet_listener(stack: RouterStack) {
                 packets_this_interval += 1;
                 debug!("{}: got {}", msg.hdr, msg.t);
             }
+            _ = &mut app_shutdown_handler => {
+                info!("yeet listener shutdown requested, stopping");
+                break
+            }
         }
     }
 }
 
 async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) {
-    let (mut app_event_rx, clients) = {
+    let (app_event_rx, clients) = {
         let app_state = app_state.lock().await;
         let app_event_rx = app_state.event_tx.subscribe();
         let clients: Arc<Mutex<HashMap<CameraIdentifier, CameraHandle>>> = app_state.camera_clients.clone();
         (app_event_rx, clients)
     };
+
+    let mut app_shutdown_handler = Box::pin(crate::app_shutdown_handler(app_event_rx));
 
     let server_socket = stack
         .endpoints()
@@ -294,20 +368,9 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
             _ = timeout => {
                 warn!("operator timeout (no command received). duration: {}", timeout_duration.as_secs());
             }
-            app_event = app_event_rx.recv() => {
-                match app_event {
-                    Ok(event) => match event {
-                        AppEvent::Shutdown => {
-
-                            // TODO tell client server is shutting down
-
-                            break
-                        }
-                    }
-                    Err(_) => {
-                        break;
-                    }
-                }
+            _ = &mut app_shutdown_handler => {
+                info!("operator shutdown requested, stopping camera command handler");
+                break
             }
             _ = hdl.serve_full(async |msg| {
                 let request = &msg.t;
@@ -347,15 +410,15 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                                 // Create broadcast channel for frames (Arc<Bytes> so we cheaply clone for each client)
                                 let (tx, rx) = broadcast::channel::<Arc<CameraFrame>>(broadcast_cap);
 
-                                let (shutdown_flag_tx, shutdown_flag_rx) = watch::channel(false);
+                                let client_shutdown_flag = CancellationToken::new();
 
                                 // Spawn tasks
 
                                 let capture_handle = tokio::task::Builder::new().name(&format!("camera-{}/capture", identifier)).spawn({
                                     let camera_definition = camera_definition.clone();
-                                    let shutdown_flag_rx = shutdown_flag_tx.subscribe();
+                                    let client_shutdown_flag = client_shutdown_flag.clone();
                                     async move {
-                                        if let Err(e) = capture_loop(tx, camera_definition, shutdown_flag_rx).await {
+                                        if let Err(e) = capture_loop(tx, camera_definition, client_shutdown_flag).await {
                                             error!("capture loop error: {e:?}");
                                         }
                                     }
@@ -363,9 +426,10 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                                 let streamer_handle = tokio::task::Builder::new().name(&format!("camera-{}/streamer", identifier)).spawn({
                                     let camera_definition = camera_definition.clone();
                                     let stack = stack.clone();
+                                    let client_shutdown_flag = client_shutdown_flag.clone();
                                     async move {
-                                        if let Err(e) = camera_streamer(stack, rx, camera_definition, CAMERA_CHUNK_SIZE, address, shutdown_flag_rx).await {
-                                            error!("capture loop error: {e:?}");
+                                        if let Err(e) = camera_streamer(stack, rx, camera_definition, CAMERA_CHUNK_SIZE, address, client_shutdown_flag).await {
+                                            error!("streamer loop error: {e:?}");
                                         }
                                     }
                                 }).unwrap();
@@ -374,7 +438,7 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                                     capture_handle,
                                     streamer_handle,
                                     address,
-                                    shutdown_flag_tx
+                                    shutdown_flag: client_shutdown_flag
                                 });
 
                                 info!("Streaming started. identifier: {}, port_id: {}", identifier, port_id);
@@ -386,7 +450,7 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                             CameraCommand::StopStreaming { port_id } => {
                                 let mut clients = clients.lock().await;
                                 if let Some(client) = clients.remove(&identifier) {
-                                    let _ =client.shutdown_flag_tx.send(true);
+                                    client.shutdown_flag.cancel();
 
                                     // wait for the capture first, then the streamer
                                     let _ = client.capture_handle.await;
@@ -404,6 +468,21 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
             }) => {}
         }
     }
+
+    let mut clients = clients.lock().await;
+    let clients_to_cancel = clients.drain().collect::<Vec<_>>();
+
+    for (index, (identifier, client)) in clients_to_cancel.into_iter().enumerate() {
+        info!("Stopping streaming client {}. identifier: {}, address: {}", index, identifier, client.address);
+
+        // TODO notify client that streaming is stopped
+
+        client.shutdown_flag.cancel();
+
+        let _ = client.capture_handle.await;
+        let _ = client.streamer_handle.await;
+    }
+    info!("Camera command handler stopped");
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -20,3 +20,4 @@ opencv             = { workspace = true, features = ["videoio", "imgcodecs"] }
 
 # tasks
 tokio              = { workspace = true }
+tokio-util         = { workspace = true }
