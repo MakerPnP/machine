@@ -4,9 +4,7 @@ use log::{info, trace};
 use opencv::{imgcodecs, prelude::*, videoio};
 use server_common::camera::CameraDefinition;
 use tokio::sync::broadcast;
-use tokio::{
-    time::{self, Duration},
-};
+use tokio::time::{self, Duration};
 use tokio_util::sync::CancellationToken;
 
 pub struct CameraFrame {
@@ -43,7 +41,6 @@ pub async fn capture_loop(
         interval.tick().await;
 
         if tx.receiver_count() > 0 {
-
             let frame_timestamp = chrono::Utc::now();
             let frame_instant = time::Instant::now();
 
@@ -81,13 +78,16 @@ pub async fn capture_loop(
             let send_end = time::Instant::now();
             let send_duration = (send_end - send_start).as_micros() as u32;
 
-            trace!("frame_timestamp: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us, frame_duration: {}ms", frame_timestamp, frame_number, encode_duration, send_duration, frame_duration);
+            trace!(
+                "frame_timestamp: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us, frame_duration: {}ms",
+                frame_timestamp, frame_number, encode_duration, send_duration, frame_duration
+            );
             frame_number += 1;
         }
 
         if shutdown_flag.is_cancelled() {
             info!("Shutting down camera capture");
-            break
+            break;
         }
     }
 
