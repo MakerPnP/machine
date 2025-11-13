@@ -20,7 +20,11 @@ impl FpsStats {
     pub fn update(&mut self, now: Instant) -> Option<FpsSnapshot> {
         let latest_fps = if let Some(last) = self.last_update {
             let elapsed = now.duration_since(last).as_secs_f32();
-            if elapsed > 0.0 { 1.0 / elapsed } else { return None; }
+            if elapsed > 0.0 {
+                1.0 / elapsed
+            } else {
+                return None;
+            }
         } else {
             self.last_update = Some(now);
             return None; // first frame, can't compute FPS yet
@@ -36,7 +40,11 @@ impl FpsStats {
 
         // compute snapshot
         let min = self.history.iter().copied().fold(f32::INFINITY, f32::min);
-        let max = self.history.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let max = self
+            .history
+            .iter()
+            .copied()
+            .fold(f32::NEG_INFINITY, f32::max);
         let avg = self.history.iter().copied().sum::<f32>() / self.history.len() as f32;
 
         Some(FpsSnapshot {
@@ -64,9 +72,9 @@ pub struct FpsSnapshot {
 }
 
 pub mod egui {
-    use egui::{Ui, Color32, Response};
-    use egui_plot::{Bar, BarChart, Legend, Plot};
     use crate::fps_stats::FpsStats;
+    use egui::{Color32, Response, Ui};
+    use egui_plot::{Bar, BarChart, Legend, Plot};
 
     pub fn show_frame_durations(ui: &mut Ui, fps_stats: &FpsStats) -> Response {
         let durations = fps_stats.frame_durations_ms();
@@ -75,7 +83,11 @@ pub mod egui {
         let bars: Vec<Bar> = durations
             .iter()
             .enumerate()
-            .map(|(i, &duration)| Bar::new(i as f64, duration as f64).width(1.0).fill(Color32::GREEN))
+            .map(|(i, &duration)| {
+                Bar::new(i as f64, duration as f64)
+                    .width(1.0)
+                    .fill(Color32::GREEN)
+            })
             .collect();
 
         let chart = BarChart::new("durations", bars)
@@ -83,7 +95,6 @@ pub mod egui {
             .width(1.0); // spacing width
 
         ui.label("Frame durations (ms)");
-
 
         Plot::new("Normal Distribution Demo")
             .legend(Legend::default())

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 /// for windows/msys2/ucrt64 build (requires gnu toolchain):
 /// `cargo build --target x86_64-pc-windows-gnu`
 /// or:
@@ -21,33 +20,53 @@ use std::collections::HashMap;
 /// Reference: https://github.com/twistedfall/opencv-rust/issues/307
 ///
 /// no other combinations tested.
-
 use anyhow::Result;
+use log::{debug, error, info, trace, warn};
 use opencv::{imgcodecs, prelude::*, videoio};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::{
-    signal,
+    net::UdpSocket,
+    select, signal,
     sync::broadcast::{self, Sender},
     time::{self, Duration},
-    net::UdpSocket, select
 };
-use log::{debug, error, info, trace, warn};
 
-use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_controller_stack, register_edge_interface}, topic, well_known::DeviceInfo, Address, NetStackSendError};
+use ergot::{
+    Address, NetStackSendError, endpoint,
+    toolkits::tokio_udp::{
+        EdgeStack, new_controller_stack, new_std_queue, register_edge_interface,
+    },
+    topic,
+    well_known::DeviceInfo,
+};
 
-use std::convert::TryInto;
-use std::pin::pin;
+use camerastreamer_ergot_shared::{
+    CameraFrameChunk, CameraFrameChunkKind, CameraFrameImageChunk, CameraFrameMeta,
+    CameraStreamerCommand, CameraStreamerCommandRequest, CameraStreamerCommandResponse,
+    CameraStreamerCommandResult,
+};
 use ergot::interface_manager::InterfaceSendError;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
-use tokio::sync::broadcast::Receiver;
+use std::convert::TryInto;
+use std::pin::pin;
 use tokio::sync::Mutex;
-use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind, CameraFrameImageChunk, CameraFrameMeta, CameraStreamerCommand, CameraStreamerCommandRequest, CameraStreamerCommandResponse, CameraStreamerCommandResult};
+use tokio::sync::broadcast::Receiver;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
+topic!(
+    CameraFrameChunkTopic,
+    CameraFrameChunk,
+    "topic/camera_stream"
+);
 
-endpoint!(CameraStreamerCommandEndpoint, CameraStreamerCommandRequest, CameraStreamerCommandResponse, "topic/camera");
+endpoint!(
+    CameraStreamerCommandEndpoint,
+    CameraStreamerCommandRequest,
+    CameraStreamerCommandResponse,
+    "topic/camera"
+);
 
 // TODO have some system whereby the server broadcasts it's availability via UDP (udis, swarm-discovery, etc) and the camera client finds it, instead of hardcoding the IP address.
 const REMOTE_ADDR: &str = "127.0.0.1:5001";
@@ -103,11 +122,17 @@ async fn main() -> Result<()> {
 
     udp_socket.connect(REMOTE_ADDR).await?;
 
-    let basic_services_handle = tracker.spawn(basic_services(stack.clone(), 0, shutdown_flag.clone()));
+    let basic_services_handle =
+        tracker.spawn(basic_services(stack.clone(), 0, shutdown_flag.clone()));
 
     let clients: Arc<Mutex<HashMap<Address, CameraClient>>> = Arc::new(Mutex::new(HashMap::new()));
 
-    let camera_command_handler_handle = tracker.spawn(camera_command_handler(stack.clone(), clients.clone(), tx.clone(), shutdown_flag.clone()));
+    let camera_command_handler_handle = tracker.spawn(camera_command_handler(
+        stack.clone(),
+        clients.clone(),
+        tx.clone(),
+        shutdown_flag.clone(),
+    ));
 
     register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Controller)
         .await
@@ -161,9 +186,15 @@ async fn basic_services(stack: EdgeStack, port: u16, shutdown_flag: Cancellation
     info!("Basic services stopped");
 }
 
-async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<Address, CameraClient>>>, tx: Sender<Arc<CameraFrame>>, global_shutdown_flag: CancellationToken) {
-
-    let server_socket = stack.endpoints().single_server::<CameraStreamerCommandEndpoint>(None);
+async fn camera_command_handler(
+    stack: EdgeStack,
+    clients: Arc<Mutex<HashMap<Address, CameraClient>>>,
+    tx: Sender<Arc<CameraFrame>>,
+    global_shutdown_flag: CancellationToken,
+) {
+    let server_socket = stack
+        .endpoints()
+        .single_server::<CameraStreamerCommandEndpoint>(None);
     let server_socket = pin!(server_socket);
     let mut hdl = server_socket.attach();
     let port = hdl.port();
@@ -181,16 +212,23 @@ async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<Add
                         // TODO how do we know the network and node id is correct here?
 
                         let client_shutdown_flag = CancellationToken::new();
-                        let handle = tokio::task::spawn(camera_streamer(stack.clone(), rx, address, client_shutdown_flag.clone()));
+                        let handle = tokio::task::spawn(camera_streamer(
+                            stack.clone(),
+                            rx,
+                            address,
+                            client_shutdown_flag.clone(),
+                        ));
                         let camera_client = CameraClient {
                             handle,
-                            shutdown_flag: client_shutdown_flag
+                            shutdown_flag: client_shutdown_flag,
                         };
                         clients.insert(address, camera_client);
 
                         info!("Streaming started. address: {}", address);
 
-                        CameraStreamerCommandResponse { result: CameraStreamerCommandResult::Ok }
+                        CameraStreamerCommandResponse {
+                            result: CameraStreamerCommandResult::Ok,
+                        }
                     }
                     CameraStreamerCommand::StopStreaming { address } => {
                         let mut clients = clients.lock().await;
@@ -199,11 +237,16 @@ async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<Add
                             let _ = client.handle.await;
                             info!("Streaming stopped. address: {}", address);
                         } else {
-                            warn!("Request to stop streaming received with no active client. address: {}", address);
+                            warn!(
+                                "Request to stop streaming received with no active client. address: {}",
+                                address
+                            );
                         }
 
-                        CameraStreamerCommandResponse { result: CameraStreamerCommandResult::Ok }
-                    },
+                        CameraStreamerCommandResponse {
+                            result: CameraStreamerCommandResult::Ok,
+                        }
+                    }
                 }
             }
         };
@@ -231,13 +274,19 @@ async fn camera_command_handler(stack: EdgeStack, clients: Arc<Mutex<HashMap<Add
     info!("Camera command handler stopped");
 }
 
-async fn capture_loop(tx: Sender<Arc<CameraFrame>>, shutdown_flag: CancellationToken) -> Result<()> {
+async fn capture_loop(
+    tx: Sender<Arc<CameraFrame>>,
+    shutdown_flag: CancellationToken,
+) -> Result<()> {
     // Open default camera (index 0)
     let mut cam = videoio::VideoCapture::new(0, videoio::CAP_ANY)?; // 0 = default device
     if !videoio::VideoCapture::is_opened(&cam)? {
         anyhow::bail!("Unable to open default camera");
     }
-    info!("Backend: {}", cam.get_backend_name().unwrap_or("Unknown".to_string()));
+    info!(
+        "Backend: {}",
+        cam.get_backend_name().unwrap_or("Unknown".to_string())
+    );
     info!("GUID: {}", cam.get(videoio::CAP_PROP_GUID)?);
     info!("HW_DEVICE: {}", cam.get(videoio::CAP_PROP_HW_DEVICE)?);
     cam.set(videoio::CAP_PROP_FRAME_WIDTH, f64::from(WIDTH))?;
@@ -268,7 +317,6 @@ async fn capture_loop(tx: Sender<Arc<CameraFrame>>, shutdown_flag: CancellationT
             let frame_duration = (frame_instant - previous_frame_at).as_millis();
             previous_frame_at = frame_instant;
 
-
             // Encode to JPEG (quality default). You can set params to reduce quality/size.
             let encode_start = time::Instant::now();
             let mut buf = opencv::core::Vector::new();
@@ -296,20 +344,28 @@ async fn capture_loop(tx: Sender<Arc<CameraFrame>>, shutdown_flag: CancellationT
             let send_end = time::Instant::now();
             let send_duration = (send_end - send_start).as_micros();
 
-            info!("frame_timestamp: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us, frame_duration: {}ms", frame_timestamp, frame_number, encode_duration, send_duration, frame_duration);
+            info!(
+                "frame_timestamp: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us, frame_duration: {}ms",
+                frame_timestamp, frame_number, encode_duration, send_duration, frame_duration
+            );
             frame_number += 1;
         }
-        
+
         if shutdown_flag.is_cancelled() {
             info!("Shutting down camera capture");
-            break
+            break;
         }
     }
 
     Ok(())
 }
 
-async fn camera_streamer(stack: EdgeStack, mut rx: Receiver<Arc<CameraFrame>>, destination: Address, shutdown_flag: CancellationToken) {
+async fn camera_streamer(
+    stack: EdgeStack,
+    mut rx: Receiver<Arc<CameraFrame>>,
+    destination: Address,
+    shutdown_flag: CancellationToken,
+) {
     info!("camera streamer started. destination: {}", destination);
     let mut interval = time::interval(Duration::from_secs(1));
     loop {

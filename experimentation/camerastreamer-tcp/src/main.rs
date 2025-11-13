@@ -20,11 +20,10 @@
 /// Reference: https://github.com/twistedfall/opencv-rust/issues/307
 ///
 /// no other combinations tested.
-
-
 // server.rs
 use anyhow::Result;
 use bytes::Bytes;
+use log::{debug, error, info, trace};
 use opencv::{imgcodecs, prelude::*, videoio};
 use std::sync::Arc;
 use tokio::{
@@ -32,7 +31,6 @@ use tokio::{
     sync::broadcast::{self, Sender},
     time::{self, Duration},
 };
-use log::{debug, error, info, trace};
 
 const ADDR: &str = "0.0.0.0:5000";
 const WIDTH: i32 = 1280;
@@ -112,12 +110,21 @@ async fn capture_loop(tx: Sender<Arc<Bytes>>) -> Result<()> {
         let send_end = time::Instant::now();
         let send_duration = (send_end - send_start).as_micros() as u32;
 
-        trace!("now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us", time::Instant::now(), frame_number, encode_duration, send_duration);
+        trace!(
+            "now: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us",
+            time::Instant::now(),
+            frame_number,
+            encode_duration,
+            send_duration
+        );
         frame_number += 1;
     }
 }
 
-async fn handle_client(mut socket: tokio::net::TcpStream, rx: &mut tokio::sync::broadcast::Receiver<Arc<Bytes>>) -> Result<()> {
+async fn handle_client(
+    mut socket: tokio::net::TcpStream,
+    rx: &mut tokio::sync::broadcast::Receiver<Arc<Bytes>>,
+) -> Result<()> {
     use tokio::io::AsyncWriteExt;
 
     loop {
@@ -126,7 +133,10 @@ async fn handle_client(mut socket: tokio::net::TcpStream, rx: &mut tokio::sync::
             Ok(b) => b,
             Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped_frames)) => {
                 // If lagged, try to get the next available
-                debug!("lagged, trying to get next frame.  skipped: {}", skipped_frames);
+                debug!(
+                    "lagged, trying to get next frame.  skipped: {}",
+                    skipped_frames
+                );
                 continue;
             }
             Err(e) => return Err(anyhow::anyhow!(e)),

@@ -1,5 +1,5 @@
-use std::fs;
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 
 fn main() {
@@ -18,7 +18,8 @@ fn main() {
 /// Required when
 fn configure_windows_msvc() {
     // MSVC detection
-    let vcpkg_root = detect_vcpkg().expect("VCPKG_ROOT not found; install vcpkg or set environment variable");
+    let vcpkg_root =
+        detect_vcpkg().expect("VCPKG_ROOT not found; install vcpkg or set environment variable");
 
     let lib_dir = vcpkg_root.join("installed/x64-windows/lib");
     let include_dir = vcpkg_root.join("installed/x64-windows/include");
@@ -36,7 +37,9 @@ fn configure_windows_msvc() {
         let value = env::var("OPENCV_DISABLE_PROBES");
 
         if Ok("vcpkg_cmake".to_string()) != value {
-            panic!("environment variable OPENCV_DISABLE_PROBES must be set to `vcpkg_cmake` for debug builds");
+            panic!(
+                "environment variable OPENCV_DISABLE_PROBES must be set to `vcpkg_cmake` for debug builds"
+            );
         }
     }
     println!("cargo::rerun-if-env-changed=OPENCV_DISABLE_PROBES");
@@ -69,7 +72,9 @@ fn configure_windows_msys2_gnu() {
     println!("cargo:rustc-link-lib=dylib=stdc++");
 
     // link Windows system libs
-    for lib in ["winmm", "gdi32", "comctl32", "ole32", "uuid", "ws2_32", "opengl32", "shell32"] {
+    for lib in [
+        "winmm", "gdi32", "comctl32", "ole32", "uuid", "ws2_32", "opengl32", "shell32",
+    ] {
         println!("cargo:rustc-link-lib=dylib={}", lib);
     }
 
@@ -99,7 +104,11 @@ fn detect_vcpkg() -> Option<PathBuf> {
     } else {
         // Try common install path
         let default = PathBuf::from("D:\\Programs\\vcpkg");
-        if default.exists() { Some(default) } else { None }
+        if default.exists() {
+            Some(default)
+        } else {
+            None
+        }
     }
 }
 
@@ -108,13 +117,12 @@ fn copy_msvc_dlls() {
     let vcpkg_root = env::var("VCPKG_ROOT").unwrap();
     let out_dir = out_dir();
 
-
     let profile = env::var("PROFILE").unwrap(); // "debug" or "release"
     if profile == "release" || profile == "debug" {
         copy_opencv_release_dlls(&vcpkg_root, &out_dir);
-//    } else if profile == "debug" {
-// disabled, program crashes on startup with the libprotobufd.dll null string error.
-//        copy_opencv_debug_dlls(&vcpkg_root, out_dir);
+    //    } else if profile == "debug" {
+    // disabled, program crashes on startup with the libprotobufd.dll null string error.
+    //        copy_opencv_debug_dlls(&vcpkg_root, out_dir);
     } else {
         println!("ignoring unknown profile: {}", profile);
     }
@@ -148,10 +156,17 @@ fn copy_opencv_debug_dlls(vcpkg_root: &String, out_dir: PathBuf) {
         "abseil_dlld",
         "tesseract55d",
         "libsharpyuv",
-        "libprotobufd"
+        "libprotobufd",
     ];
 
-    copy_dlls(bin_dir.clone(), out_dir.clone(), &debug_dlls.iter().map(|s| s.to_string() + ".dll").collect::<Vec<_>>());
+    copy_dlls(
+        bin_dir.clone(),
+        out_dir.clone(),
+        &debug_dlls
+            .iter()
+            .map(|s| s.to_string() + ".dll")
+            .collect::<Vec<_>>(),
+    );
 }
 
 fn copy_opencv_release_dlls(vcpkg_root: &String, out_dir: &PathBuf) {
@@ -182,10 +197,17 @@ fn copy_opencv_release_dlls(vcpkg_root: &String, out_dir: &PathBuf) {
         "abseil_dll",
         "tesseract55",
         "libsharpyuv",
-        "libprotobuf"
+        "libprotobuf",
     ];
 
-    copy_dlls(bin_dir, out_dir.clone(), &release_dlls.iter().map(|s| s.to_string() + ".dll").collect::<Vec<_>>());
+    copy_dlls(
+        bin_dir,
+        out_dir.clone(),
+        &release_dlls
+            .iter()
+            .map(|s| s.to_string() + ".dll")
+            .collect::<Vec<_>>(),
+    );
 }
 
 fn copy_dlls(bin_dir: PathBuf, out_dir: PathBuf, dlls: &[String]) {
@@ -217,7 +239,11 @@ fn copy_gnu_dlls() {
         "libprotobuf.dll",
     ];
 
-    copy_dlls(bin_dir, out_dir, &dlls.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+    copy_dlls(
+        bin_dir,
+        out_dir,
+        &dlls.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+    );
 }
 
 /// Determine output directory for build

@@ -38,7 +38,10 @@ fn main() {
 
             // Generate a step pulse
             step_pin_state = true;
-            println!("Loop {:4}: STEP pulse HIGH for {} µs", loop_idx, min_pulse_us);
+            println!(
+                "Loop {:4}: STEP pulse HIGH for {} µs",
+                loop_idx, min_pulse_us
+            );
 
             // Simulate pulse duration
             sleep(Duration::from_micros(min_pulse_us as u64));

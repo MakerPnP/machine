@@ -1,8 +1,8 @@
-use std::ops::{Deref, DerefMut};
 use ergot::Address;
 use postcard_schema::Schema;
 use postcard_schema::schema::{DataModelType, NamedType};
 use serde::{Deserialize, Serialize};
+use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Serialize, Deserialize, Schema, Clone)]
 pub struct CameraStreamerCommandRequest {
@@ -11,7 +11,7 @@ pub struct CameraStreamerCommandRequest {
 
 #[derive(Debug, Serialize, Deserialize, Schema, Clone)]
 pub struct CameraStreamerCommandResponse {
-    pub result: CameraStreamerCommandResult
+    pub result: CameraStreamerCommandResult,
 }
 
 #[derive(Debug, Serialize, Deserialize, Schema, Clone, PartialEq)]
@@ -23,7 +23,10 @@ pub enum CameraStreamerCommand {
 #[derive(Debug, Serialize, Deserialize, Schema, Clone)]
 pub enum CameraStreamerCommandResult {
     Ok,
-    Error { code: CameraStreamerCommandError, args: Vec<String> },
+    Error {
+        code: CameraStreamerCommandError,
+        args: Vec<String>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, Schema, Clone, Copy, PartialEq, Eq)]
@@ -61,7 +64,10 @@ pub struct CameraFrameImageChunk {
 pub struct TimeStampUTC(pub chrono::DateTime<chrono::Utc>);
 
 impl postcard_schema::Schema for TimeStampUTC {
-    const SCHEMA: &'static NamedType = &NamedType { name: "timestamp_utc", ty: &DataModelType::I64 };
+    const SCHEMA: &'static NamedType = &NamedType {
+        name: "timestamp_utc",
+        ty: &DataModelType::I64,
+    };
 }
 
 impl Deref for TimeStampUTC {

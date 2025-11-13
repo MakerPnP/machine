@@ -1,27 +1,37 @@
 use std::collections::HashMap;
 // client.rs
-use eframe::{egui, App, CreationContext, Frame, NativeOptions};
-use image::ImageFormat;
-use std::thread;
-use std::pin::pin;
-use std::sync::Arc;
-use std::time::Duration;
+use crate::fps_stats::FpsStats;
+use crate::fps_stats::egui::show_frame_durations;
+use camerastreamer_ergot_shared::{
+    CameraFrameChunk, CameraFrameChunkKind, CameraStreamerCommand, CameraStreamerCommandRequest,
+    CameraStreamerCommandResponse, TimeStampUTC,
+};
 use eframe::epaint::textures::TextureOptions;
-use egui::{Color32, ColorImage, Context, Rect, RichText, UiBuilder, Vec2, ViewportBuilder, ViewportCommand};
-use ergot::{endpoint, toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface}, topic, well_known::DeviceInfo, Address, FrameKind};
+use eframe::{App, CreationContext, Frame, NativeOptions, egui};
+use egui::{
+    Color32, ColorImage, Context, Rect, RichText, UiBuilder, Vec2, ViewportBuilder, ViewportCommand,
+};
 use ergot::interface_manager::profiles::direct_edge::EDGE_NODE_ID;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
-use ergot::well_known::{NameRequirement, SocketQuery};
 use ergot::traits::Endpoint;
-use tokio::runtime::Runtime;
+use ergot::well_known::{NameRequirement, SocketQuery};
+use ergot::{
+    Address, FrameKind, endpoint,
+    toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface},
+    topic,
+    well_known::DeviceInfo,
+};
+use image::ImageFormat;
 use log::{debug, error, info, trace, warn};
-use tokio::{net::UdpSocket, select};
-use tokio::sync::{broadcast, watch};
+use std::pin::pin;
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
+use tokio::runtime::Runtime;
 use tokio::sync::watch::{Receiver, Sender};
+use tokio::sync::{broadcast, watch};
 use tokio::time::Instant;
-use camerastreamer_ergot_shared::{CameraFrameChunk, CameraFrameChunkKind, CameraStreamerCommand, CameraStreamerCommandRequest, CameraStreamerCommandResponse, TimeStampUTC};
-use crate::fps_stats::egui::show_frame_durations;
-use crate::fps_stats::FpsStats;
+use tokio::{net::UdpSocket, select};
 
 mod fps_stats;
 const REMOTE_ADDR: &str = "127.0.0.1:5000";
@@ -30,10 +40,23 @@ const TARGET_FPS: u8 = 30;
 const SCHEDULED_FPS_MIN: u8 = 5;
 const SCHEDULED_FPS_MAX: u8 = 60;
 
-topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
-endpoint!(CameraStreamerCommandEndpoint, CameraStreamerCommandRequest, CameraStreamerCommandResponse, "topic/camera");
+topic!(
+    CameraFrameChunkTopic,
+    CameraFrameChunk,
+    "topic/camera_stream"
+);
+endpoint!(
+    CameraStreamerCommandEndpoint,
+    CameraStreamerCommandRequest,
+    CameraStreamerCommandResponse,
+    "topic/camera"
+);
 
-fn start_network_thread(tx_out: Sender<CameraFrame>, context: Context, app_event_tx: Arc<broadcast::Sender<AppEvent>>) {
+fn start_network_thread(
+    tx_out: Sender<CameraFrame>,
+    context: Context,
+    app_event_tx: Arc<broadcast::Sender<AppEvent>>,
+) {
     // run a tokio runtime in background thread
     thread::spawn(move || {
         let rt = Runtime::new().expect("create tokio runtime");
@@ -45,8 +68,12 @@ fn start_network_thread(tx_out: Sender<CameraFrame>, context: Context, app_event
     });
 }
 
-async fn network_task(remote_addr: &str, tx_out: Sender<CameraFrame>, context: Context, app_event_tx: Arc<broadcast::Sender<AppEvent>>) -> anyhow::Result<()> {
-
+async fn network_task(
+    remote_addr: &str,
+    tx_out: Sender<CameraFrame>,
+    context: Context,
+    app_event_tx: Arc<broadcast::Sender<AppEvent>>,
+) -> anyhow::Result<()> {
     let queue = new_std_queue(1024 * 1024);
     let stack: EdgeStack = new_target_stack(&queue, 1400);
     let udp_socket = UdpSocket::bind(LOCAL_ADDR).await?;
@@ -54,7 +81,12 @@ async fn network_task(remote_addr: &str, tx_out: Sender<CameraFrame>, context: C
     udp_socket.connect(remote_addr).await?;
 
     tokio::task::spawn(basic_services(stack.clone(), 0));
-    let camera_frame_listener_handle = tokio::task::spawn(camera_frame_listener(stack.clone(), tx_out, context.clone(), app_event_tx.subscribe()));
+    let camera_frame_listener_handle = tokio::task::spawn(camera_frame_listener(
+        stack.clone(),
+        tx_out,
+        context.clone(),
+        app_event_tx.subscribe(),
+    ));
 
     let mut app_event_rx = app_event_tx.subscribe();
 
@@ -80,8 +112,15 @@ async fn network_task(remote_addr: &str, tx_out: Sender<CameraFrame>, context: C
     Ok(())
 }
 
-async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<CameraFrame>, context: Context, mut app_event_rx: broadcast::Receiver<AppEvent>) -> Result<(), anyhow::Error> {
-    let subber = stack.topics().bounded_receiver::<CameraFrameChunkTopic, 320>(None);
+async fn camera_frame_listener(
+    stack: EdgeStack,
+    tx_out: Sender<CameraFrame>,
+    context: Context,
+    mut app_event_rx: broadcast::Receiver<AppEvent>,
+) -> Result<(), anyhow::Error> {
+    let subber = stack
+        .topics()
+        .bounded_receiver::<CameraFrameChunkTopic, 320>(None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe_unicast();
 
@@ -108,7 +147,16 @@ async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<CameraFrame>, co
         return Err(anyhow::anyhow!("No discovery results"));
     }
 
-    let response = stack.endpoints().request::<CameraStreamerCommandEndpoint>(res[0].address, &CameraStreamerCommandRequest { command: CameraStreamerCommand::StartStreaming { address } }, None).await;
+    let response = stack
+        .endpoints()
+        .request::<CameraStreamerCommandEndpoint>(
+            res[0].address,
+            &CameraStreamerCommandRequest {
+                command: CameraStreamerCommand::StartStreaming { address },
+            },
+            None,
+        )
+        .await;
     if let Err(e) = response {
         return Err(anyhow::anyhow!("Error sending start request: {:?}", e));
     }
@@ -129,7 +177,6 @@ async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<CameraFrame>, co
     let mut frame_timestamps = std::collections::VecDeque::with_capacity(60);
 
     loop {
-
         select! {
             app_event = app_event_rx.recv() => {
                 match app_event {
@@ -300,8 +347,16 @@ async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<CameraFrame>, co
         }
     }
 
-
-    let response = stack.endpoints().request::<CameraStreamerCommandEndpoint>(res[0].address, &CameraStreamerCommandRequest { command: CameraStreamerCommand::StopStreaming { address } }, None).await;
+    let response = stack
+        .endpoints()
+        .request::<CameraStreamerCommandEndpoint>(
+            res[0].address,
+            &CameraStreamerCommandRequest {
+                command: CameraStreamerCommand::StopStreaming { address },
+            },
+            None,
+        )
+        .await;
     if let Err(e) = response {
         return Err(anyhow::anyhow!("Error sending stop request: {:?}", e));
     }
@@ -350,7 +405,6 @@ enum AppEvent {
 
 impl CameraApp {
     fn new(cc: &CreationContext) -> Self {
-
         // Create event channel
         let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
 
@@ -360,9 +414,11 @@ impl CameraApp {
                 warn!("Ctrl+C received, shutting down.");
                 let _ = app_event_tx.send(AppEvent::Shutdown);
             }
-        }).expect("Error setting Ctrl+C handler");
+        })
+        .expect("Error setting Ctrl+C handler");
 
-        let (camera_image_tx, camera_image_rx) = watch::channel::<CameraFrame>(CameraFrame::default());
+        let (camera_image_tx, camera_image_rx) =
+            watch::channel::<CameraFrame>(CameraFrame::default());
 
         let app_event_tx = Arc::new(app_event_tx);
         start_network_thread(camera_image_tx, cc.egui_ctx.clone(), app_event_tx.clone());
@@ -389,9 +445,7 @@ impl CameraApp {
 }
 
 impl App for CameraApp {
-
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
-
         let now = std::time::Instant::now();
 
         if ctx.cumulative_frame_nr() != self.gui_frame_number {
@@ -400,7 +454,6 @@ impl App for CameraApp {
         }
 
         if let Ok(true) = self.rx.has_changed() {
-
             if now > self.render_after {
                 let camera_frame = self.rx.borrow_and_update().clone();
 
@@ -414,9 +467,9 @@ impl App for CameraApp {
                 self.camera_frame_number += 1;
                 self.camera_fps_snapshot = self.camera_fps_stats.update(now);
 
-                debug!("received frame, frame_number: {}, snapshot: {:?}",
-                    self.camera_frame_number,
-                    self.camera_fps_snapshot
+                debug!(
+                    "received frame, frame_number: {}, snapshot: {:?}",
+                    self.camera_frame_number, self.camera_fps_snapshot
                 );
 
                 self.timestamp = (*camera_frame.timestamp).into();
@@ -425,7 +478,8 @@ impl App for CameraApp {
                     tex.set(camera_frame.image, TextureOptions::default());
                 } else {
                     // create texture first time
-                    self.texture = Some(ctx.load_texture("camera", camera_frame.image, Default::default()));
+                    self.texture =
+                        Some(ctx.load_texture("camera", camera_frame.image, Default::default()));
                 }
             } else {
                 trace!("waiting for next frame to be ready");
@@ -444,18 +498,25 @@ impl App for CameraApp {
             .constrain(false)
             .show(ctx, |ui| {
                 if let Some(tex) = &self.texture {
-                    ui.add(egui::Image::new(tex).maintain_aspect_ratio(true).max_size(ui.max_rect().size()));
+                    ui.add(
+                        egui::Image::new(tex)
+                            .maintain_aspect_ratio(true)
+                            .max_size(ui.max_rect().size()),
+                    );
                     let overlay_clip_rect = ui.clip_rect();
 
-                    let mut overlay_ui = ui.new_child(UiBuilder::new()
-                        .max_rect(ui.clip_rect())
-                    );
+                    let mut overlay_ui = ui.new_child(UiBuilder::new().max_rect(ui.clip_rect()));
                     overlay_ui.set_clip_rect(overlay_clip_rect);
-                    overlay_ui.add(egui::Label::new(RichText::new(format!("{}", self.timestamp)).color(Color32::GREEN)).selectable(false));
+                    overlay_ui.add(
+                        egui::Label::new(
+                            RichText::new(format!("{}", self.timestamp)).color(Color32::GREEN),
+                        )
+                        .selectable(false),
+                    );
                 } else {
                     ui.label("Waiting for first frame...");
                 }
-        });
+            });
 
         egui::Window::new("Stats")
             .default_pos([1320.0, 10.0])
@@ -469,10 +530,7 @@ impl App for CameraApp {
                         if let Some(snapshot) = &self.gui_fps_snapshot {
                             ui.label(format!(
                                 "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
-                                snapshot.latest,
-                                snapshot.min,
-                                snapshot.max,
-                                snapshot.avg
+                                snapshot.latest, snapshot.min, snapshot.max, snapshot.avg
                             ));
 
                             show_frame_durations(ui, &self.gui_fps_stats);
@@ -489,10 +547,7 @@ impl App for CameraApp {
                         if let Some(snapshot) = &self.camera_fps_snapshot {
                             ui.label(format!(
                                 "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
-                                snapshot.latest,
-                                snapshot.min,
-                                snapshot.max,
-                                snapshot.avg
+                                snapshot.latest, snapshot.min, snapshot.max, snapshot.avg
                             ));
 
                             show_frame_durations(ui, &self.camera_fps_stats);
@@ -521,8 +576,7 @@ fn main() -> eframe::Result {
     env_logger::init();
 
     let options = eframe::NativeOptions {
-        viewport: ViewportBuilder::default()
-            .with_inner_size([1700.0, 830.0]),
+        viewport: ViewportBuilder::default().with_inner_size([1700.0, 830.0]),
         ..NativeOptions::default()
     };
     eframe::run_native(

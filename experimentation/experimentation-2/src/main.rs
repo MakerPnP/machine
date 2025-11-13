@@ -96,9 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             input.target_position[0],
         );
 
-        let result = ruckig
-            .update(&input, &mut output)
-            .unwrap();
+        let result = ruckig.update(&input, &mut output).unwrap();
         output.pass_to_input(&mut input);
 
         println!(
@@ -171,7 +169,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Total steps pulsed: {}", total_steps_pulsed);
 
     // this should always be true, since the steps are deterministically calculated
-    debug_assert_eq!(total_steps_requested, total_steps_pulsed, "Step count mismatch!");
+    debug_assert_eq!(
+        total_steps_requested, total_steps_pulsed,
+        "Step count mismatch!"
+    );
 
     if total_steps_pulsed == total_steps_requested {
         println!("All steps accounted for");
@@ -187,14 +188,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .chain(&step_time_points)
         .cloned()
         .collect::<Vec<f64>>();
-    let x_min = all_x
-        .iter()
-        .cloned()
-        .fold(f64::INFINITY, f64::min);
-    let x_max = all_x
-        .iter()
-        .cloned()
-        .fold(f64::NEG_INFINITY, f64::max);
+    let x_min = all_x.iter().cloned().fold(f64::INFINITY, f64::min);
+    let x_max = all_x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
     // Find y-range across all datasets
     let all_y = pos_data
@@ -205,17 +200,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .chain(&step_number_points)
         .cloned()
         .collect::<Vec<f64>>();
-    let y_min = all_y
-        .iter()
-        .cloned()
-        .fold(f64::INFINITY, f64::min);
-    let y_max = all_y
-        .iter()
-        .cloned()
-        .fold(f64::NEG_INFINITY, f64::max);
+    let y_min = all_y.iter().cloned().fold(f64::INFINITY, f64::min);
+    let y_max = all_y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
     let mut chart = ChartBuilder::on(&root)
-        .caption("Position (mm) vs Time (s) with Step Edges", ("sans-serif", 20))
+        .caption(
+            "Position (mm) vs Time (s) with Step Edges",
+            ("sans-serif", 20),
+        )
         .margin(10)
         .x_label_area_size(40)
         .y_label_area_size(60)
@@ -229,10 +221,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     chart
         .draw_series(LineSeries::new(
-            time_data
-                .iter()
-                .cloned()
-                .zip(pos_data.iter().cloned()),
+            time_data.iter().cloned().zip(pos_data.iter().cloned()),
             &RED,
         ))?
         .label("Position")
@@ -240,10 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     chart
         .draw_series(LineSeries::new(
-            time_data
-                .iter()
-                .cloned()
-                .zip(velocity_data.iter().cloned()),
+            time_data.iter().cloned().zip(velocity_data.iter().cloned()),
             &BLUE,
         ))?
         .label("Velocity")
@@ -262,10 +248,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     chart
         .draw_series(LineSeries::new(
-            time_data
-                .iter()
-                .cloned()
-                .zip(jerk_data.iter().cloned()),
+            time_data.iter().cloned().zip(jerk_data.iter().cloned()),
             &MAGENTA,
         ))?
         .label("Jerk")
@@ -281,7 +264,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             2,
             &BLACK,
             &|_coord, size, style| {
-                return EmptyElement::at((_coord.0, _coord.1)) + Circle::new((0, 0), size, style.filled());
+                return EmptyElement::at((_coord.0, _coord.1))
+                    + Circle::new((0, 0), size, style.filled());
             },
         ))?
         .label("Step")

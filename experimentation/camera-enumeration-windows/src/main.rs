@@ -52,36 +52,36 @@ use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 
 use windows::{
-    core::*,
     Win32::{
-        Foundation::{MAX_PATH},
         Devices::{
-            DeviceAndDriverInstallation::*,
             DeviceAndDriverInstallation::SetupDiGetDevicePropertyW,
-            Properties::{DEVPKEY_Device_ReportedDeviceIdsHash, DEVPROPTYPE}
+            DeviceAndDriverInstallation::*,
+            Properties::{DEVPKEY_Device_ReportedDeviceIdsHash, DEVPROPTYPE},
+        },
+        Foundation::MAX_PATH,
+        Media::MediaFoundation::{
+            IMFActivate, IMFAttributes, MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
+            MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
+            MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK, MFCreateAttributes,
+            MFEnumDeviceSources, MFShutdown, MFStartup,
         },
         System::Com::*,
-        System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED},
-        Media::MediaFoundation::{
-            MFStartup, MFShutdown,
-            MFCreateAttributes,
-            MFEnumDeviceSources,
-            MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
-            MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
-            IMFAttributes, IMFActivate,
-            MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
-            MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK,
-        },
+        System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize},
     },
+    core::*,
 };
 
 fn main() -> Result<()> {
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).unwrap(); }
+    unsafe {
+        CoInitializeEx(None, COINIT_APARTMENTTHREADED).unwrap();
+    }
 
     get_video_capture_devices()?;
     enumerate_mf_devices()?;
 
-    unsafe { CoUninitialize(); }
+    unsafe {
+        CoUninitialize();
+    }
     Ok(())
 }
 
@@ -145,14 +145,12 @@ fn enumerate_mf_devices() -> Result<()> {
     Ok(())
 }
 
-
 fn pwstr_to_string(pwstr: PWSTR) -> String {
     if pwstr.is_null() {
         return String::new();
     }
     unsafe { pwstr.to_string().unwrap_or_default() }
 }
-
 
 fn get_video_capture_devices() -> Result<()> {
     unsafe {
@@ -165,7 +163,12 @@ fn get_video_capture_devices() -> Result<()> {
         );
 
         let guid = &GUID_DEVINTERFACE_VIDEO_CAPTURE;
-        let hdevinfo = SetupDiGetClassDevsW(Some(guid), None, None, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE)?;
+        let hdevinfo = SetupDiGetClassDevsW(
+            Some(guid),
+            None,
+            None,
+            DIGCF_PRESENT | DIGCF_DEVICEINTERFACE,
+        )?;
 
         let mut index = 0;
         loop {
@@ -174,13 +177,9 @@ fn get_video_capture_devices() -> Result<()> {
                 ..Default::default()
             };
 
-            if SetupDiEnumDeviceInterfaces(
-                hdevinfo,
-                None,
-                guid,
-                index,
-                &mut device_interface_data,
-            ).is_err() {
+            if SetupDiEnumDeviceInterfaces(hdevinfo, None, guid, index, &mut device_interface_data)
+                .is_err()
+            {
                 // no more devices
                 break;
             };
@@ -218,24 +217,23 @@ fn get_video_capture_devices() -> Result<()> {
                 required_size,
                 None,
                 Some(&mut dev_info_data),
-            ).is_err() {
+            )
+            .is_err()
+            {
                 index += 1;
                 continue;
             };
 
             // Get device instance ID (contains VID + PID + serial if available)
             let mut buf = [0u16; MAX_PATH as usize];
-            let res = CM_Get_Device_IDW(
-                dev_info_data.DevInst,
-                &mut buf,
-                0,
-            );
+            let res = CM_Get_Device_IDW(dev_info_data.DevInst, &mut buf, 0);
             if res != CONFIGRET(0) {
                 index += 1;
                 continue;
             }
 
-            let device_id = OsString::from_wide(&buf[..buf.iter().position(|&c| c==0).unwrap_or(buf.len())]);
+            let device_id =
+                OsString::from_wide(&buf[..buf.iter().position(|&c| c == 0).unwrap_or(buf.len())]);
             let device_id = device_id.to_string_lossy();
 
             println!("Device {}: {}", index, device_id);
@@ -252,9 +250,14 @@ fn get_video_capture_devices() -> Result<()> {
                 Some(&mut hash_bytes),
                 Some(&mut required_size),
                 0,
-            ).is_ok() {
+            )
+            .is_ok()
+            {
                 let reported_hash_le = u32::from_le_bytes(hash_bytes);
-                println!("  Reported Device IDs hash = {:08X} ({:?})", reported_hash_le, hash_bytes);
+                println!(
+                    "  Reported Device IDs hash = {:08X} ({:?})",
+                    reported_hash_le, hash_bytes
+                );
             } else {
                 println!("  Could not read Reported Device IDs hash");
             }
