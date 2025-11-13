@@ -1,0 +1,8 @@
+[package]
+name = "tracing-test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tracing-subscriber = { version = "0.3.20", features = ["fmt", "env-filter"] }
+tracing = { version = "0.1.41", features = ["release_max_level_info"] }
