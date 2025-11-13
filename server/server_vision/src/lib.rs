@@ -97,7 +97,7 @@ pub async fn capture_loop(
             let send_end = time::Instant::now();
             let send_duration = (send_end - send_start).as_micros() as u32;
 
-            trace!(
+            debug!(
                 "frame_timestamp: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us, frame_duration: {}ms",
                 frame_timestamp, frame_number, encode_duration, send_duration, frame_duration
             );
