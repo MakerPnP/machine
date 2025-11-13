@@ -23,7 +23,11 @@ pub async fn capture_loop(
     if !videoio::VideoCapture::is_opened(&cam)? {
         anyhow::bail!("Unable to open default camera");
     }
-    info!("Backend: {}", cam.get_backend_name().unwrap_or("Unknown".to_string()));
+    info!(
+        "Backend: {}",
+        cam.get_backend_name()
+            .unwrap_or("Unknown".to_string())
+    );
     info!("GUID: {}", cam.get(videoio::CAP_PROP_GUID)?);
     info!("HW_DEVICE: {}", cam.get(videoio::CAP_PROP_HW_DEVICE)?);
     cam.set(videoio::CAP_PROP_FRAME_WIDTH, f64::from(camera_definition.width))?;
