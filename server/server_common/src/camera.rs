@@ -6,7 +6,7 @@ pub struct CameraDefinition {
 
     pub width: u32,
     pub height: u32,
-    pub fps: u16,
+    pub fps: f32,
 }
 
 #[derive(Clone)]

@@ -66,9 +66,11 @@ async fn main() -> io::Result<()> {
         stream_config: CameraStreamConfig {
             jpeg_quality: 95,
         },
-        width: 1920,
-        height: 1280,
-        fps: 30,
+        // width: 1920,
+        // height: 1280,
+        width: 640,
+        height: 480,
+        fps: 7.5,
     }];
 
     // Create event channel
@@ -392,7 +394,7 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                                 }
 
                                 // TODO document the '* 2' magic number, try reducing it too.
-                                let broadcast_cap = (camera_definition.fps * 2) as usize;
+                                let broadcast_cap = (camera_definition.fps * 2_f32).round() as usize;
 
                                 // Create broadcast channel for frames (Arc<Bytes> so we cheaply clone for each client)
                                 let (tx, rx) = broadcast::channel::<Arc<CameraFrame>>(broadcast_cap);
