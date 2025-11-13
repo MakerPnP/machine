@@ -70,7 +70,7 @@ async fn main() -> io::Result<()> {
         // height: 1280,
         width: 640,
         height: 480,
-        fps: 7.5,
+        fps: 30.0,
     }];
 
     // Create event channel
