@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_Devices_DeviceAndDriverInstallation", "Win32_Foundation", "Devices"]}
+windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_Devices_DeviceAndDriverInstallation", "Win32_Foundation", "Devices", "Win32_Devices_Properties"] }

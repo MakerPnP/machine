@@ -1,7 +1,7 @@
 //! Attempt to enumerate video capture devices using Media Foundation.
 //!
 //! example output from enumerate_mf_devices (first run)
-//! ```notrust
+//! ```not_rust
 //! Found 3 video capture device(s)
 //! Device 0: Microsoft® LifeCam Studio(TM)
 //!   Symbolic link (stable ID): \\?\usb#vid_045e&pid_0772&mi_00#a&6e1307a&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\global
@@ -23,11 +23,30 @@
 //!
 //! example output from `get_video_capture_devices`
 //!
-//! ```notrust
+//! ```not_rust
 //! Device 0: USB\VID_045E&PID_0772&MI_00\A&6E1307A&0&0000
 //! Device 1: USB\VID_045E&PID_0294&MI_00\A&2F495D5D&0&0000
 //! Device 2: USB\VID_32E6&PID_9211&MI_00\9&351A8E0&0&0000
 //! ```
+//!
+//! Windows device manager reports these 'Device reported IDs hash`
+//! ```not_rust
+//! Video Camera: 3C94C699
+//! Microsoft® LifeCam Studio(TM): 8B68F660
+//! icspring camera: 8FC1CF89
+//! ```
+//!
+//! Adding some extra code to read them results in this
+//! ```not_rust
+//! Device 0: USB\VID_045E&PID_0772&MI_00\A&6E1307A&0&0000
+//!   Reported Device IDs hash = 8B68F660 ([96, 246, 104, 139])
+//! Device 1: USB\VID_045E&PID_0294&MI_00\A&2F495D5D&0&0000
+//!   Reported Device IDs hash = 3C94C699 ([153, 198, 148, 60])
+//! Device 2: USB\VID_32E6&PID_9211&MI_00\9&351A8E0&0&0000
+//!   Reported Device IDs hash = 8FC1CF89 ([137, 207, 193, 143])
+//! ```
+//!
+//! If you move devices between ports, the device ID remains consistent.
 
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
@@ -36,7 +55,11 @@ use windows::{
     core::*,
     Win32::{
         Foundation::{MAX_PATH},
-        Devices::DeviceAndDriverInstallation::*,
+        Devices::{
+            DeviceAndDriverInstallation::*,
+            DeviceAndDriverInstallation::SetupDiGetDevicePropertyW,
+            Properties::{DEVPKEY_Device_ReportedDeviceIdsHash, DEVPROPTYPE}
+        },
         System::Com::*,
         System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED},
         Media::MediaFoundation::{
@@ -51,7 +74,6 @@ use windows::{
         },
     },
 };
-
 
 fn main() -> Result<()> {
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).unwrap(); }
@@ -217,6 +239,25 @@ fn get_video_capture_devices() -> Result<()> {
             let device_id = device_id.to_string_lossy();
 
             println!("Device {}: {}", index, device_id);
+
+            let mut hash_bytes = [0u8; 4]; // 4 bytes for u32
+            let mut property_type = DEVPROPTYPE(0);
+            let mut required_size = 0;
+
+            if SetupDiGetDevicePropertyW(
+                hdevinfo,
+                &dev_info_data,
+                &DEVPKEY_Device_ReportedDeviceIdsHash,
+                &mut property_type,
+                Some(&mut hash_bytes),
+                Some(&mut required_size),
+                0,
+            ).is_ok() {
+                let reported_hash_le = u32::from_le_bytes(hash_bytes);
+                println!("  Reported Device IDs hash = {:08X} ({:?})", reported_hash_le, hash_bytes);
+            } else {
+                println!("  Could not read Reported Device IDs hash");
+            }
 
             index += 1;
         }
