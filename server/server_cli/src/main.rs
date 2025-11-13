@@ -71,6 +71,7 @@ async fn main() -> io::Result<()> {
         width: 640,
         height: 480,
         fps: 30.0,
+        four_cc: Some(['Y', 'U', 'Y', '2']),
     }];
 
     // Create event channel
