@@ -31,7 +31,10 @@ pub async fn capture_loop(
     cam.set(videoio::CAP_PROP_FPS, f64::from(camera_definition.fps))?;
     cam.set(videoio::CAP_PROP_BUFFERSIZE, f64::from(1))?;
 
-    let period = Duration::from_secs_f64(1.0 / camera_definition.fps as f64);
+    let configured_fps = cam.get(videoio::CAP_PROP_FPS)? as f32;
+    info!("Configured FPS: {}", configured_fps);
+
+    let period = Duration::from_secs_f64(1.0 / configured_fps as f64);
 
     let mut interval = time::interval(period);
     interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
