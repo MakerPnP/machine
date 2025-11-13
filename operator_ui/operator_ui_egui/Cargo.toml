@@ -69,6 +69,7 @@ ergot                = { workspace = true }
 serde                = { version = "1.0.219", features = ["derive"] }
 anyhow               = "1.0.100"
 ctrlc                = "3.5.1"
+chrono = "0.4.42"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

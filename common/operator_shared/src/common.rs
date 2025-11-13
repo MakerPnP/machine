@@ -3,8 +3,8 @@ use core::ops::{Deref, DerefMut};
 use postcard_schema::schema::{DataModelType, NamedType};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TimeStampUTC(chrono::DateTime<chrono::Utc>);
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+pub struct TimeStampUTC(pub chrono::DateTime<chrono::Utc>);
 
 impl postcard_schema::Schema for TimeStampUTC {
     const SCHEMA: &'static NamedType = &NamedType {

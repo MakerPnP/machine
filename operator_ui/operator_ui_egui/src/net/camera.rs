@@ -9,6 +9,7 @@ use ergot::{Address, topic};
 use image::ImageFormat;
 use operator_shared::camera::{CameraCommand, CameraFrameChunk, CameraFrameChunkKind, CameraIdentifier};
 use operator_shared::commands::OperatorCommandRequest;
+use operator_shared::common::TimeStampUTC;
 use tokio::select;
 use tokio::sync::broadcast;
 use tokio::sync::watch::Sender;
@@ -17,15 +18,17 @@ use tracing::{debug, error, info, trace, warn};
 
 use crate::events::AppEvent;
 use crate::net::commands::OperatorCommandEndpoint;
+use crate::{SCHEDULED_FPS_MAX, SCHEDULED_FPS_MIN, TARGET_FPS};
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
 pub async fn camera_frame_listener(
     stack: EdgeStack,
-    tx_out: Sender<ColorImage>,
+    tx_out: Sender<CameraFrame>,
     context: Context,
     remote_address: Address,
     mut app_event_rx: broadcast::Receiver<AppEvent>,
+    target_fps: u8,
 ) -> anyhow::Result<()> {
     let camera_identifier = CameraIdentifier::new(0);
 
@@ -57,9 +60,15 @@ pub async fn camera_frame_listener(
         chunks: Vec<Option<Vec<u8>>>,
         received_count: u32,
         start_time: Instant,
+        frame_timestamp: TimeStampUTC,
+        frame_number: u64,
+        frame_interval: Duration,
     }
 
     let mut in_progress: HashMap<u64, InProgressFrame> = HashMap::new();
+
+    let mut target_fps = target_fps as f32;
+    let mut frame_timestamps = std::collections::VecDeque::with_capacity(60);
 
     loop {
         select! {
@@ -80,11 +89,54 @@ pub async fn camera_frame_listener(
 
                 let entry_and_image_chunk = match &chunk.kind {
                     CameraFrameChunkKind::Meta(frame_meta) => {
+
+
+                        // Update timestamps for FPS estimation
+                        frame_timestamps.push_back(frame_meta.frame_timestamp);
+                        if frame_timestamps.len() > (TARGET_FPS * 2) as usize {
+                            frame_timestamps.pop_front();
+                        }
+
+                        // Recompute effective FPS
+                        if frame_timestamps.len() >= 2 {
+                            let mut iter = frame_timestamps.iter();
+                            let newest = iter.next_back().unwrap().0;
+                            let previous: chrono::DateTime<chrono::Utc> = iter.next_back().unwrap().0;
+                            let oldest = frame_timestamps.front().unwrap().0;
+
+                            let newest_previous_span = newest - previous;
+                            let total_span = newest - oldest;
+
+                            let frame_count = frame_timestamps.len() - 1;
+                            let measured_fps = frame_count as f64 / total_span.as_seconds_f64();
+
+
+                            // Smooth update using exponential moving average
+                            let alpha = 0.1;
+                            target_fps = (1.0 - alpha) * target_fps + alpha * (measured_fps as f32);
+
+                            debug!("estimated FPS: {:.1}, target FPS: {:.1}, total_span: {}ms, span: {}ms",
+                                measured_fps,
+                                target_fps,
+                                total_span.num_milliseconds(),
+                                newest_previous_span.num_milliseconds(),
+                            );
+                        }
+
+                        // schedule next render
+                        let clamped_fps = target_fps.clamp(SCHEDULED_FPS_MIN.into(), SCHEDULED_FPS_MAX.into());
+
+                        let frame_interval = Duration::from_secs_f64(1.0 / clamped_fps as f64);
+
                         in_progress.insert(chunk.frame_number, InProgressFrame {
                             total_chunks: frame_meta.total_chunks,
                             chunks: vec![None; frame_meta.total_chunks as usize],
                             received_count: 0,
                             start_time: Instant::now(),
+                            frame_timestamp: frame_meta.frame_timestamp.clone(),
+                            frame_number: chunk.frame_number,
+                            frame_interval,
+
                         });
                         continue;
                     }
@@ -130,8 +182,7 @@ pub async fn camera_frame_listener(
                         }
                     }
 
-                    let before = std::time::Instant::now();
-                    debug!("received camera frame from server, frame_number: {}, chunks: {}, timestamp: {:?}", chunk.frame_number, entry.total_chunks, before);
+                    debug!("received camera frame from server, frame_number: {}, chunks: {}, frame_timestamp: {:?}, frame_interval: {}ms", chunk.frame_number, entry.total_chunks, entry.frame_timestamp, entry.frame_interval.as_millis());
 
                     // Decode JPEG
                     let before = std::time::Instant::now();
@@ -142,14 +193,20 @@ pub async fn camera_frame_listener(
                             let (w, h) = (rgba.width() as usize, rgba.height() as usize);
                             let color_image = ColorImage::from_rgba_unmultiplied([w, h], &rgba.into_raw());
 
-                            let _ = tx_out.send(color_image);
+                            let camera_frame = CameraFrame {
+                                image: color_image,
+                                timestamp: entry.frame_timestamp,
+                                frame_number: entry.frame_number,
+                                frame_interval: entry.frame_interval,
+                            };
+
+                            let _ = tx_out.send(camera_frame);
                             context.request_repaint();
 
                             let after = std::time::Instant::now();
-                            trace!("sent frame to egui, frame_number: {}, size: {} bytes, timestamp: {:?}, decoding: {}us, imagegen+send: {}us, total-elapsed: {}us",
+                            trace!("sent frame to egui, frame_number: {}, size: {} bytes, decoding: {}us, imagegen+send: {}us, total-elapsed: {}us",
                                 chunk.frame_number,
                                 jpeg_data.len(),
-                                after,
                                 (point1 - before).as_micros(),
                                 (after - point1).as_micros(),
                                 (after - before).as_micros(),
@@ -197,4 +254,23 @@ pub async fn camera_frame_listener(
     info!("camera frame listener stopped, address: {}", remote_address);
 
     Ok(())
+}
+
+#[derive(Clone, Debug)]
+pub struct CameraFrame {
+    pub image: ColorImage,
+    pub timestamp: TimeStampUTC,
+    pub frame_number: u64,
+    pub frame_interval: Duration,
+}
+
+impl Default for CameraFrame {
+    fn default() -> Self {
+        Self {
+            image: Default::default(),
+            timestamp: chrono::Utc::now().into(),
+            frame_number: 0,
+            frame_interval: Duration::from_secs(0),
+        }
+    }
 }

@@ -1,6 +1,5 @@
 use std::{pin::pin, time::Duration};
 
-use eframe::epaint::ColorImage;
 use egui_mobius::Value;
 use ergot::traits::Endpoint;
 use ergot::well_known::{NameRequirement, SocketQuery};
@@ -18,10 +17,10 @@ use tracing::{debug, info, warn};
 
 use crate::app::AppState;
 use crate::events::AppEvent;
-use crate::net::camera::camera_frame_listener;
+use crate::net::camera::{CameraFrame, camera_frame_listener};
 use crate::net::commands::{OperatorCommandEndpoint, heartbeat_sender};
 use crate::net::services::basic_services;
-use crate::{LOCAL_ADDR, REMOTE_ADDR};
+use crate::{LOCAL_ADDR, REMOTE_ADDR, TARGET_FPS};
 
 pub mod camera;
 pub mod commands;
@@ -30,7 +29,7 @@ pub mod services;
 pub async fn ergot_task(
     _spawner: Handle,
     state: Value<AppState>,
-    tx_out: Sender<ColorImage>,
+    tx_out: Sender<CameraFrame>,
     app_event_tx: broadcast::Sender<AppEvent>,
 ) -> anyhow::Result<()> {
     let queue = new_std_queue(4096);
@@ -85,6 +84,8 @@ pub async fn ergot_task(
         app_event_tx.subscribe(),
     ));
 
+    // TODO this should be done per-camera
+
     let camera_frame_listener_handle = {
         let context = state.lock().unwrap().context.clone();
         tokio::task::spawn(camera_frame_listener(
@@ -93,6 +94,7 @@ pub async fn ergot_task(
             context,
             command_endpoint_remote_address,
             app_event_tx.subscribe(),
+            TARGET_FPS,
         ))
     };
 

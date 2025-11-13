@@ -269,7 +269,7 @@ async fn camera_frame_listener(stack: EdgeStack, tx_out: Sender<CameraFrame>, co
                             trace!("sent frame to egui, frame_number: {}, size: {} bytes, timestamp: {:?}, decoding: {}us, imagegen+send: {}us, total-elapsed: {}us",
                                 chunk.frame_number,
                                 jpeg_data.len(),
-                                after,
+                                entry.frame_timestamp,
                                 (point1 - decode_before).as_micros(),
                                 (after - point1).as_micros(),
                                 (after - decode_before).as_micros(),
@@ -328,6 +328,7 @@ struct CameraApp {
     rx: Receiver<CameraFrame>,
     texture: Option<egui::TextureHandle>,
     render_after: std::time::Instant,
+    timestamp: chrono::DateTime<chrono::Utc>,
 
     gui_fps_stats: FpsStats,
     gui_fps_snapshot: Option<fps_stats::FpsSnapshot>,
@@ -340,7 +341,6 @@ struct CameraApp {
 
     app_event_tx: Arc<broadcast::Sender<AppEvent>>,
     app_event_rx: broadcast::Receiver<AppEvent>,
-    timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
