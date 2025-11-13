@@ -7,6 +7,8 @@ pub struct CameraDefinition {
     pub width: u32,
     pub height: u32,
     pub fps: f32,
+    /// See https://fourcc.org
+    pub four_cc: Option<[char; 4]>,
 }
 
 #[derive(Clone)]

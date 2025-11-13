@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use log::{info, trace};
+use log::{debug, info, trace};
+use opencv::videoio::VideoWriter;
 use opencv::{imgcodecs, prelude::*, videoio};
 use server_common::camera::CameraDefinition;
 use tokio::sync::broadcast;
@@ -34,6 +35,14 @@ pub async fn capture_loop(
     cam.set(videoio::CAP_PROP_FRAME_HEIGHT, f64::from(camera_definition.height))?;
     cam.set(videoio::CAP_PROP_FPS, f64::from(camera_definition.fps))?;
     cam.set(videoio::CAP_PROP_BUFFERSIZE, f64::from(1))?;
+    cam.set(videoio::CAP_PROP_FORMAT, f64::from(1))?;
+
+    if let Some(four_cc) = camera_definition.four_cc {
+        let four_cc_i32 = VideoWriter::fourcc(four_cc[0], four_cc[1], four_cc[2], four_cc[3])?;
+        info!("FourCC: {:?} ({} / 0x{:08x})", four_cc, four_cc_i32, four_cc_i32);
+
+        cam.set(videoio::CAP_PROP_FOURCC, f64::from(four_cc_i32))?;
+    }
 
     let configured_fps = cam.get(videoio::CAP_PROP_FPS)? as f32;
     info!("Configured FPS: {}", configured_fps);
