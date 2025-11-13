@@ -3,7 +3,7 @@
 args="$*"
 
 # List of directories to process
-dirs=("common" "firmware" "ioboard" "operator_ui" "server")
+dirs=("common" "firmware" "ioboard" "operator_ui" "server" "experimentation")
 
 # Iterate through each directory in the list
 for dir in "${dirs[@]}"; do
