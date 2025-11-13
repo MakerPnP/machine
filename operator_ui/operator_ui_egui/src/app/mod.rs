@@ -2,7 +2,6 @@ use std::thread;
 use std::thread::JoinHandle;
 
 use async_std::prelude::StreamExt;
-use eframe::epaint::ColorImage;
 use egui::{Context, Ui, Vec2, ViewportBuilder, ViewportClass, ViewportCommand, ViewportId};
 use egui_extras::install_image_loaders;
 use egui_i18n::tr;
@@ -19,6 +18,7 @@ use ui::status::StatusUi;
 
 use crate::config::Config;
 use crate::events::AppEvent;
+use crate::net::camera::CameraFrame;
 use crate::net::ergot_task;
 use crate::runtime::tokio_runtime::TokioRuntime;
 use crate::task;
@@ -63,7 +63,9 @@ pub struct AppState {
 }
 
 pub struct UiState {
+    // TODO there should be done per-camera
     pub(crate) camera_ui: CameraUi,
+
     pub(crate) controls_ui: ControlsUi,
     pub(crate) diagnostics_ui: DiagnosticsUi,
     pub(crate) plot_ui: PlotUi,
@@ -72,7 +74,7 @@ pub struct UiState {
 }
 
 impl AppState {
-    pub fn init(sender: Enqueue<UiCommand>, context: Context, camera_rx: watch::Receiver<ColorImage>) -> Self {
+    pub fn init(sender: Enqueue<UiCommand>, context: Context, camera_rx: watch::Receiver<CameraFrame>) -> Self {
         let ui_state = UiState {
             camera_ui: CameraUi::new(camera_rx),
             controls_ui: ControlsUi::default(),
@@ -168,7 +170,8 @@ impl OperatorUiApp {
         instance.app_event_broadcast = Some((app_event_tx, app_event_rx));
 
         // Start camera instance
-        let (camera_tx, camera_rx) = watch::channel::<ColorImage>(ColorImage::default());
+        // TODO this should be done per-camera
+        let (camera_tx, camera_rx) = watch::channel::<CameraFrame>(CameraFrame::default());
 
         let (app_signal, mut app_slot) = egui_mobius::factory::create_signal_slot::<UiCommand>();
 
