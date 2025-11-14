@@ -8,6 +8,7 @@ use tokio::{select, time};
 use tracing::error;
 
 use crate::events::AppEvent;
+use crate::net::shutdown::app_shutdown_handler;
 
 endpoint!(
     OperatorCommandEndpoint,
@@ -16,7 +17,9 @@ endpoint!(
     "topic/operator/command"
 );
 
-pub async fn heartbeat_sender(stack: EdgeStack, address: Address, mut receiver: Receiver<AppEvent>) {
+pub async fn heartbeat_sender(stack: EdgeStack, address: Address, app_event_rx: Receiver<AppEvent>) {
+    let mut app_shutdown_handler = Box::pin(app_shutdown_handler(app_event_rx));
+
     let command_client = stack
         .endpoints()
         .client::<OperatorCommandEndpoint>(address, None);
@@ -29,7 +32,6 @@ pub async fn heartbeat_sender(stack: EdgeStack, address: Address, mut receiver: 
 
     loop {
         // At either stage (waiting response or waiting for tick) we could receive a shutdown event
-        // TODO find a way to do this better (DRY)
 
         let request = OperatorCommandRequest::Heartbeat(index);
         select! {
@@ -48,15 +50,8 @@ pub async fn heartbeat_sender(stack: EdgeStack, address: Address, mut receiver: 
                     }
                 }
             }
-            msg = receiver.recv() => {
-                let Ok(msg) = msg else {
-                    break
-                };
-                match msg {
-                    AppEvent::Shutdown => {
-                        break;
-                    }
-                }
+            _ = &mut app_shutdown_handler => {
+                break
             }
         }
 
@@ -64,15 +59,8 @@ pub async fn heartbeat_sender(stack: EdgeStack, address: Address, mut receiver: 
             _ = ticker.tick() => {
                 index = index.wrapping_add(1);
             }
-            msg = receiver.recv() => {
-                let Ok(msg) = msg else {
-                    break
-                };
-                match msg {
-                    AppEvent::Shutdown => {
-                        break;
-                    }
-                }
+            _ = &mut app_shutdown_handler => {
+                break
             }
         }
     }

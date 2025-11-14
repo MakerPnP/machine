@@ -11,12 +11,11 @@ use operator_shared::camera::{CameraCommand, CameraFrameChunk, CameraFrameChunkK
 use operator_shared::commands::OperatorCommandRequest;
 use operator_shared::common::TimeStampUTC;
 use tokio::select;
-use tokio::sync::broadcast;
 use tokio::sync::watch::Sender;
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 
-use crate::events::AppEvent;
 use crate::net::commands::OperatorCommandEndpoint;
 use crate::{SCHEDULED_FPS_MAX, SCHEDULED_FPS_MIN, TARGET_FPS};
 
@@ -27,11 +26,10 @@ pub async fn camera_frame_listener(
     tx_out: Sender<CameraFrame>,
     context: Context,
     remote_address: Address,
-    mut app_event_rx: broadcast::Receiver<AppEvent>,
+    shutdown_token: CancellationToken,
+    camera_identifier: CameraIdentifier,
     target_fps: u8,
 ) -> anyhow::Result<()> {
-    let camera_identifier = CameraIdentifier::new(0);
-
     let command_client = stack
         .endpoints()
         .client::<OperatorCommandEndpoint>(remote_address, None);
@@ -48,6 +46,7 @@ pub async fn camera_frame_listener(
             camera_identifier,
             CameraCommand::StartStreaming {
                 port_id,
+                fps: target_fps,
             },
         ))
         .await;
@@ -72,17 +71,9 @@ pub async fn camera_frame_listener(
 
     loop {
         select! {
-            app_event = app_event_rx.recv() => {
-                match app_event {
-                    Ok(event) => match event {
-                        AppEvent::Shutdown => {
-                            break
-                        }
-                    }
-                    Err(_) => {
-                        break
-                    }
-                }
+            _ = shutdown_token.cancelled() => {
+                info!("Frame listener shutdown requested. identifier: {}", camera_identifier);
+                break
             }
             msg = hdl.recv() => {
                 let chunk = &msg.t;

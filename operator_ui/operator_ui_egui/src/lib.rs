@@ -11,7 +11,7 @@ const LOCAL_ADDR: &str = "192.168.18.41:8002";
 const TARGET_FPS: u8 = 30;
 
 const SCHEDULED_FPS_MIN: u8 = 5;
-const SCHEDULED_FPS_MAX: u8 = 100;
+const SCHEDULED_FPS_MAX: u8 = 30;
 
 mod app;
 pub use app::OperatorUiApp;

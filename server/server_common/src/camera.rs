@@ -25,6 +25,5 @@ pub enum CameraSource {
 
 #[derive(Clone)]
 pub struct OpenCVCameraConfig {
-    // TODO currently unused, need to enumerate cameras and pick the right one.
-    pub identifier: String,
+    pub index: i32,
 }

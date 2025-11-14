@@ -58,21 +58,47 @@ async fn main() -> io::Result<()> {
     env_logger::init();
     console_subscriber::init();
 
-    let camera_definitions = vec![CameraDefinition {
-        name: "Default camera".to_string(),
-        source: CameraSource::OpenCV(OpenCVCameraConfig {
-            identifier: "TODO".to_string(),
-        }),
-        stream_config: CameraStreamConfig {
-            jpeg_quality: 95,
+    let camera_definitions = vec![
+        CameraDefinition {
+            name: "Microsoft LifeCam Studio".to_string(),
+            source: CameraSource::OpenCV(OpenCVCameraConfig {
+                index: 0,
+            }),
+            stream_config: CameraStreamConfig {
+                jpeg_quality: 95,
+            },
+            width: 1920,
+            height: 1280,
+            fps: 30.0,
+            four_cc: None,
         },
-        // width: 1920,
-        // height: 1280,
-        width: 640,
-        height: 480,
-        fps: 30.0,
-        four_cc: Some(['Y', 'U', 'Y', '2']),
-    }];
+        CameraDefinition {
+            name: "B&W Global shutter".to_string(),
+            source: CameraSource::OpenCV(OpenCVCameraConfig {
+                index: 1,
+            }),
+            stream_config: CameraStreamConfig {
+                jpeg_quality: 95,
+            },
+            width: 640,
+            height: 480,
+            fps: 100.0,
+            four_cc: Some(['Y', 'U', 'Y', '2']),
+        },
+        CameraDefinition {
+            name: "Microsoft XBox Vision Live".to_string(),
+            source: CameraSource::OpenCV(OpenCVCameraConfig {
+                index: 2,
+            }),
+            stream_config: CameraStreamConfig {
+                jpeg_quality: 95,
+            },
+            width: 640,
+            height: 480,
+            fps: 30.0,
+            four_cc: Some(['Y', 'U', 'Y', '2']),
+        },
+    ];
 
     // Create event channel
     let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
@@ -303,7 +329,7 @@ async fn io_board_command_sender(stack: RouterStack, app_event_rx: Receiver<AppE
 }
 
 async fn yeet_listener(stack: RouterStack, app_event_rx: Receiver<AppEvent>) {
-    let mut app_shutdown_handler = Box::pin(crate::app_shutdown_handler(app_event_rx));
+    let mut app_shutdown_handler = Box::pin(app_shutdown_handler(app_event_rx));
 
     let subber = stack
         .topics()
@@ -349,6 +375,8 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
     let mut hdl = server_socket.attach();
     let command_server_port_id = hdl.port();
 
+    let mut camera_managers = HashMap::new();
+
     info!("Camera command server, port_id: {}", command_server_port_id);
 
     let timeout_duration = Duration::from_secs(10);
@@ -374,83 +402,60 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
                     }
                     OperatorCommandRequest::CameraCommand(identifier, camera_command) => {
                         match camera_command {
-                            CameraCommand::StartStreaming { port_id } => {
+                            CameraCommand::StartStreaming { port_id, fps } => {
+                                let camera_definition = {
+                                    let app_state = app_state.lock().await;
+                                    let Some(camera_definition) = camera_definition_for_identifier(&app_state.camera_definitions, identifier) else {
+                                        return OperatorCommandResponse::CameraCommandResult(
+                                            Err(CameraCommandError::new(CameraCommandErrorCode::InvalidIdentifier))
+                                        )
+                                    };
+
+                                    let clients = clients.lock().await;
+                                    if clients.contains_key(&identifier) {
+                                        return OperatorCommandResponse::CameraCommandResult(
+                                            Err(CameraCommandError::new(CameraCommandErrorCode::Busy))
+                                        )
+                                    }
+                                    camera_definition.clone()
+                                };
+
                                 let address = Address {
                                     network_id: source.network_id,
                                     node_id: source.node_id,
                                     port_id: *port_id
                                 };
-                                let app_state = app_state.lock().await;
-                                let mut clients = clients.lock().await;
-                                let Some(camera_definition) = camera_definition_for_identifier(&app_state.camera_definitions, identifier) else {
-                                    return OperatorCommandResponse::CameraCommandResult(
-                                        Err(CameraCommandError { code: CameraCommandErrorCode::InvalidIdentifier, args: Vec::new()})
-                                    )
-                                };
 
-                                if clients.contains_key(&identifier) {
-                                    return OperatorCommandResponse::CameraCommandResult(
-                                        Err(CameraCommandError { code: CameraCommandErrorCode::Busy, args: Vec::new()})
-                                    )
-                                }
-
-                                // TODO document the '* 2' magic number, try reducing it too.
-                                let broadcast_cap = (camera_definition.fps * 2_f32).round() as usize;
-
-                                // Create broadcast channel for frames (Arc<Bytes> so we cheaply clone for each client)
-                                let (tx, rx) = broadcast::channel::<Arc<CameraFrame>>(broadcast_cap);
-
-                                let client_shutdown_flag = CancellationToken::new();
-
-                                // Spawn tasks
-
-                                let capture_handle = tokio::task::Builder::new().name(&format!("camera-{}/capture", identifier)).spawn({
-                                    let camera_definition = camera_definition.clone();
-                                    let client_shutdown_flag = client_shutdown_flag.clone();
-                                    async move {
-                                        if let Err(e) = capture_loop(tx, camera_definition, client_shutdown_flag).await {
-                                            error!("capture loop error: {e:?}");
-                                        }
-                                    }
-                                }).unwrap();
-                                let streamer_handle = tokio::task::Builder::new().name(&format!("camera-{}/streamer", identifier)).spawn({
-                                    let camera_definition = camera_definition.clone();
-                                    let stack = stack.clone();
-                                    let client_shutdown_flag = client_shutdown_flag.clone();
-                                    async move {
-                                        if let Err(e) = camera_streamer(stack, rx, camera_definition, CAMERA_CHUNK_SIZE, address, client_shutdown_flag).await {
-                                            error!("streamer loop error: {e:?}");
-                                        }
-                                    }
-                                }).unwrap();
-
-                                clients.insert(identifier.clone(), CameraHandle {
-                                    capture_handle,
-                                    streamer_handle,
-                                    address,
-                                    shutdown_flag: client_shutdown_flag
-                                });
-
-                                info!("Streaming started. identifier: {}, port_id: {}", identifier, port_id);
+                                let camera_shutdown_flag = CancellationToken::new();
+                                let camera_manager = tokio::spawn(camera_manager(*identifier, camera_definition, address, app_state.clone(), *fps, camera_shutdown_flag.clone(), stack.clone()));
+                                camera_managers.insert(*identifier, (camera_manager, camera_shutdown_flag));
 
                                 OperatorCommandResponse::CameraCommandResult(
                                     Ok(CameraStreamerCommandResult::Acknowledged)
                                 )
                             }
                             CameraCommand::StopStreaming { port_id } => {
-                                let mut clients = clients.lock().await;
-                                if let Some(client) = clients.remove(&identifier) {
-                                    client.shutdown_flag.cancel();
+                                if let Some((handle, shutdown_flag)) = camera_managers.remove(&identifier) {
+                                    // spawn a task to shutdown the camera manager, then respond immediately.
+                                    tokio::spawn({
+                                        let port_id = *port_id;
+                                        let identifier = *identifier;
+                                        async move {
+                                            info!("Stopping camera. identifier: {}. port_id: {}", identifier, port_id);
+                                            shutdown_flag.cancel();
+                                            let _ = handle.await;
+                                            info!("Camera stopped. identifier: {}. port_id: {}", identifier, port_id);
+                                        }
+                                    });
 
-                                    // wait for the capture first, then the streamer
-                                    let _ = client.capture_handle.await;
-                                    let _ = client.streamer_handle.await;
+                                    OperatorCommandResponse::CameraCommandResult(
+                                        Ok(CameraStreamerCommandResult::Acknowledged)
+                                    )
+                                } else {
+                                    OperatorCommandResponse::CameraCommandResult(
+                                        Err(CameraCommandError::new(CameraCommandErrorCode::NotStreaming))
+                                    )
                                 }
-                                info!("Streaming stopped. port_id: {}", port_id);
-
-                                OperatorCommandResponse::CameraCommandResult(
-                                    Ok(CameraStreamerCommandResult::Acknowledged)
-                                )
                             },
                         }
                     }
@@ -459,29 +464,97 @@ async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) 
         }
     }
 
-    let mut clients = clients.lock().await;
-    let clients_to_cancel = clients.drain().collect::<Vec<_>>();
-
-    for (index, (identifier, client)) in clients_to_cancel
-        .into_iter()
-        .enumerate()
-    {
-        info!(
-            "Stopping streaming client {}. identifier: {}, address: {}",
-            index, identifier, client.address
-        );
-
-        // TODO notify client that streaming is stopped
-
-        client.shutdown_flag.cancel();
-
-        let _ = client.capture_handle.await;
-        let _ = client.streamer_handle.await;
+    info!("Shutting down all cameras");
+    for (_identifier, (handle, shutdown_flag)) in camera_managers.into_iter() {
+        shutdown_flag.cancel();
+        let _ = handle.await;
     }
+
     info!("Camera command handler stopped");
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum AppEvent {
     Shutdown,
+}
+
+async fn camera_manager(
+    identifier: CameraIdentifier,
+    camera_definition: CameraDefinition,
+    address: Address,
+    app_state: Arc<Mutex<AppState>>,
+    fps: u8,
+    shutdown_flag: CancellationToken,
+    stack: RouterStack,
+) {
+    // TODO document the '* 2' magic number, try reducing it too.
+    let broadcast_cap = (camera_definition.fps * 2_f32).round() as usize;
+
+    // Create broadcast channel for frames (Arc<Bytes> so we cheaply clone for each client)
+    let (tx, rx) = broadcast::channel::<Arc<CameraFrame>>(broadcast_cap);
+
+    let capture_handle = tokio::task::Builder::new()
+        .name(&format!("camera-{}/capture", identifier))
+        .spawn({
+            let camera_definition = camera_definition.clone();
+            let shutdown_flag = shutdown_flag.clone();
+            async move {
+                if let Err(e) = capture_loop(tx, camera_definition, shutdown_flag.clone()).await {
+                    error!("capture loop error: {e:?}");
+                    shutdown_flag.cancel();
+                }
+            }
+        })
+        .unwrap();
+    let streamer_handle = tokio::task::Builder::new()
+        .name(&format!("camera-{}/streamer", identifier))
+        .spawn({
+            let camera_definition = camera_definition.clone();
+            let stack = stack.clone();
+            let shutdown_flag = shutdown_flag.clone();
+            async move {
+                if let Err(e) = camera_streamer(
+                    stack,
+                    rx,
+                    camera_definition,
+                    CAMERA_CHUNK_SIZE,
+                    address,
+                    shutdown_flag.clone(),
+                    fps,
+                )
+                .await
+                {
+                    error!("streamer loop error: {e:?}");
+                    shutdown_flag.cancel();
+                }
+            }
+        })
+        .unwrap();
+
+    {
+        let app_state = app_state.lock().await;
+        let mut camera_clients = app_state.camera_clients.lock().await;
+        camera_clients.insert(identifier.clone(), CameraHandle {
+            capture_handle,
+            streamer_handle,
+            address,
+            shutdown_flag: shutdown_flag.clone(),
+        });
+    }
+
+    info!("Streaming started. identifier: {}, address: {}", identifier, address);
+
+    shutdown_flag.cancelled().await;
+
+    info!("Camera manager stopping. identifier: {}", identifier);
+
+    let app_state = app_state.lock().await;
+    let mut camera_clients = app_state.camera_clients.lock().await;
+
+    if let Some(client) = camera_clients.remove(&identifier) {
+        // wait for the capture first, then the streamer
+        let _ = client.capture_handle.await;
+        let _ = client.streamer_handle.await;
+    }
+    info!("Camera manager stopped. identifier: {}", identifier);
 }

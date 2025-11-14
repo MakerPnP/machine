@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use log::{debug, info, trace};
+use log::{debug, info};
 use opencv::videoio::VideoWriter;
 use opencv::{imgcodecs, prelude::*, videoio};
-use server_common::camera::CameraDefinition;
+use server_common::camera::{CameraDefinition, CameraSource};
 use tokio::sync::broadcast;
 use tokio::time::{self, Duration};
 use tokio_util::sync::CancellationToken;
@@ -19,18 +19,27 @@ pub async fn capture_loop(
     camera_definition: CameraDefinition,
     shutdown_flag: CancellationToken,
 ) -> anyhow::Result<()> {
+    let CameraSource::OpenCV(open_cv_camera_config) = camera_definition.source else {
+        // not an OpenCV camera
+        anyhow::bail!("Not an OpenCV camera")
+    };
+
     // Open default camera (index 0)
-    let mut cam = videoio::VideoCapture::new(0, videoio::CAP_ANY)?; // 0 = default device
+    let mut cam = videoio::VideoCapture::new(open_cv_camera_config.index, videoio::CAP_ANY)?; // 0 = default device
     if !videoio::VideoCapture::is_opened(&cam)? {
-        anyhow::bail!("Unable to open default camera");
+        anyhow::bail!(
+            "Unable to open OpenCV camera. OpenCVCamera: {}",
+            open_cv_camera_config.index
+        );
     }
     info!(
-        "Backend: {}",
+        "OpenCVCamera: {}, GUID: {}, HW_DEVICE: {}, Backend: {}",
+        open_cv_camera_config.index,
+        cam.get(videoio::CAP_PROP_GUID)?,
+        cam.get(videoio::CAP_PROP_HW_DEVICE)?,
         cam.get_backend_name()
             .unwrap_or("Unknown".to_string())
     );
-    info!("GUID: {}", cam.get(videoio::CAP_PROP_GUID)?);
-    info!("HW_DEVICE: {}", cam.get(videoio::CAP_PROP_HW_DEVICE)?);
     cam.set(videoio::CAP_PROP_FRAME_WIDTH, f64::from(camera_definition.width))?;
     cam.set(videoio::CAP_PROP_FRAME_HEIGHT, f64::from(camera_definition.height))?;
     cam.set(videoio::CAP_PROP_FPS, f64::from(camera_definition.fps))?;
@@ -39,13 +48,19 @@ pub async fn capture_loop(
 
     if let Some(four_cc) = camera_definition.four_cc {
         let four_cc_i32 = VideoWriter::fourcc(four_cc[0], four_cc[1], four_cc[2], four_cc[3])?;
-        info!("FourCC: {:?} ({} / 0x{:08x})", four_cc, four_cc_i32, four_cc_i32);
+        info!(
+            "OpenCVCamera: {}, FourCC: {:?} ({} / 0x{:08x})",
+            open_cv_camera_config.index, four_cc, four_cc_i32, four_cc_i32
+        );
 
         cam.set(videoio::CAP_PROP_FOURCC, f64::from(four_cc_i32))?;
     }
 
     let configured_fps = cam.get(videoio::CAP_PROP_FPS)? as f32;
-    info!("Configured FPS: {}", configured_fps);
+    info!(
+        "OpenCVCamera: {}, Configured FPS: {}",
+        open_cv_camera_config.index, configured_fps
+    );
 
     let period = Duration::from_secs_f64(1.0 / configured_fps as f64);
 
@@ -98,14 +113,19 @@ pub async fn capture_loop(
             let send_duration = (send_end - send_start).as_micros() as u32;
 
             debug!(
-                "frame_timestamp: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us, frame_duration: {}ms",
-                frame_timestamp, frame_number, encode_duration, send_duration, frame_duration
+                "OpenCVCamera: {}, frame_timestamp: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us, frame_duration: {}ms",
+                open_cv_camera_config.index,
+                frame_timestamp,
+                frame_number,
+                encode_duration,
+                send_duration,
+                frame_duration
             );
             frame_number += 1;
         }
 
         if shutdown_flag.is_cancelled() {
-            info!("Shutting down camera capture");
+            info!("Shutting down camera capture. Index: {}", open_cv_camera_config.index);
             break;
         }
     }
