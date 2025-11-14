@@ -58,7 +58,9 @@ egui-i18n            = { workspace = true }
 
 # tasks/async
 egui_mobius          = { workspace = true, features = ["serde"] }
-tokio                = { workspace = true, features = ["full"]}
+tokio                = { workspace = true, features = ["full", "tracing"]}
+tokio-util           = { workspace = true, features = ["rt"] }
+console-subscriber   = { workspace = true }
 futures              = { workspace = true }
 async-std            = { workspace = true }
 

@@ -1,8 +1,15 @@
 use ergot::toolkits::tokio_udp::EdgeStack;
 use ergot::well_known::DeviceInfo;
 use tokio::select;
+use tokio::sync::broadcast;
+use tracing::info;
 
-pub async fn basic_services(stack: EdgeStack, port: u16) {
+use crate::events::AppEvent;
+use crate::net::shutdown::app_shutdown_handler;
+
+pub async fn basic_services(stack: EdgeStack, port: u16, app_event_rx: broadcast::Receiver<AppEvent>) {
+    let do_app_shutdown_handler = app_shutdown_handler(app_event_rx);
+
     let info = DeviceInfo {
         name: Some("OperatorUI".try_into().unwrap()),
         description: Some(
@@ -20,5 +27,9 @@ pub async fn basic_services(stack: EdgeStack, port: u16) {
     select! {
         _ = do_pings => {}
         _ = do_info => {}
+        _ = do_app_shutdown_handler => {
+            info!("basic services shutdown requested, stopping");
+        },
+
     }
 }

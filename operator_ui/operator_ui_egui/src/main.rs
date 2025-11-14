@@ -16,9 +16,9 @@ use operator_ui_egui::LOGO;
 /// To enable logging, set the environment variable appropriately, for example:
 /// `RUST_LOG=debug,eframe=warn,egui_glow=warn,egui=warn`
 use tracing::info;
+use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, fmt};
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
@@ -71,9 +71,17 @@ fn main() -> eframe::Result {
 }
 
 fn early_init() {
+    let console_layer = console_subscriber::spawn(); // handles Tokio instrumentation internally
+
+    let fmt_layer = tracing_subscriber::fmt::layer();
+
+    // Apply EnvFilter to fmt_layer only
+    let fmt_filter =
+        tracing_subscriber::EnvFilter::from_default_env().add_directive("operator_ui_egui=info".parse().unwrap()); // your app logs
+
     tracing_subscriber::registry()
-        .with(fmt::layer())
-        .with(EnvFilter::from_default_env())
+        .with(fmt_layer.with_filter(fmt_filter))
+        .with(console_layer) // no filter needed
         .init();
 
     info!("Started");

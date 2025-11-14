@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
 use std::thread;
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use async_std::prelude::StreamExt;
 use egui::{Context, Ui, Vec2, ViewportBuilder, ViewportClass, ViewportCommand, ViewportId};
@@ -7,6 +9,9 @@ use egui_extras::install_image_loaders;
 use egui_i18n::tr;
 use egui_mobius::types::{Enqueue, ValueGuard};
 use egui_mobius::{Slot, Value};
+use ergot::Address;
+use ergot::toolkits::tokio_udp::EdgeStack;
+use operator_shared::camera::CameraIdentifier;
 use tokio::sync::{broadcast, watch};
 use tracing::{info, trace, warn};
 use ui::camera::CameraUi;
@@ -18,43 +23,16 @@ use ui::status::StatusUi;
 
 use crate::config::Config;
 use crate::events::AppEvent;
-use crate::net::camera::CameraFrame;
+use crate::net::camera::{CameraFrame, camera_frame_listener};
 use crate::net::ergot_task;
 use crate::runtime::tokio_runtime::TokioRuntime;
-use crate::task;
 use crate::ui_commands::{UiCommand, handle_command};
-use crate::workspace::{ToggleDefinition, ViewportState, Workspaces};
+use crate::workspace::{ViewportState, Workspaces};
+use crate::{TARGET_FPS, task};
 
 mod ui;
 
 pub const MIN_TOUCH_SIZE: Vec2 = Vec2::splat(24.0);
-
-pub static TOGGLE_DEFINITIONS: [ToggleDefinition; 6] = [
-    ToggleDefinition {
-        key: "camera",
-        kind: PaneKind::Camera,
-    },
-    ToggleDefinition {
-        key: "controls",
-        kind: PaneKind::Controls,
-    },
-    ToggleDefinition {
-        key: "diagnostics",
-        kind: PaneKind::Diagnostics,
-    },
-    ToggleDefinition {
-        key: "plot",
-        kind: PaneKind::Plot,
-    },
-    ToggleDefinition {
-        key: "settings",
-        kind: PaneKind::Settings,
-    },
-    ToggleDefinition {
-        key: "status",
-        kind: PaneKind::Status,
-    },
-];
 
 pub struct AppState {
     pub(crate) command_sender: Enqueue<UiCommand>,
@@ -63,8 +41,7 @@ pub struct AppState {
 }
 
 pub struct UiState {
-    // TODO there should be done per-camera
-    pub(crate) camera_ui: CameraUi,
+    pub(crate) camera_uis: BTreeMap<CameraIdentifier, CameraUi>,
 
     pub(crate) controls_ui: ControlsUi,
     pub(crate) diagnostics_ui: DiagnosticsUi,
@@ -74,9 +51,9 @@ pub struct UiState {
 }
 
 impl AppState {
-    pub fn init(sender: Enqueue<UiCommand>, context: Context, camera_rx: watch::Receiver<CameraFrame>) -> Self {
+    pub fn init(sender: Enqueue<UiCommand>, context: Context) -> Self {
         let ui_state = UiState {
-            camera_ui: CameraUi::new(camera_rx),
+            camera_uis: BTreeMap::new(),
             controls_ui: ControlsUi::default(),
             diagnostics_ui: DiagnosticsUi::default(),
             plot_ui: PlotUi::default(),
@@ -97,11 +74,58 @@ impl AppState {
     fn ui_state(&mut self) -> ValueGuard<'_, UiState> {
         self.ui_state.lock().unwrap()
     }
+
+    pub fn add_camera(
+        &self,
+        camera_identifier: CameraIdentifier,
+        stack: EdgeStack,
+        command_endpoint_remote_address: Address,
+    ) {
+        let shutdown_token = tokio_util::sync::CancellationToken::new();
+        let (camera_tx, camera_rx) = watch::channel::<CameraFrame>(CameraFrame::default());
+
+        let camera_frame_listener_handle = {
+            let context = self.context.clone();
+            tokio::task::spawn(camera_frame_listener(
+                stack,
+                camera_tx,
+                context,
+                command_endpoint_remote_address,
+                shutdown_token.clone(),
+                camera_identifier.clone(),
+                TARGET_FPS,
+            ))
+        };
+
+        info!("Started camera frame listener.  id: {}", camera_identifier);
+
+        let camera_ui = CameraUi::new(camera_rx, camera_frame_listener_handle, shutdown_token);
+
+        let mut ui_state = self.ui_state.lock().unwrap();
+        let result = ui_state
+            .camera_uis
+            .insert(camera_identifier, camera_ui);
+        assert!(result.is_none(), "Camera id already exists");
+    }
+
+    pub async fn stop_all_cameras(&self) {
+        let mut ui_state = self.ui_state.lock().unwrap();
+        let camera_uis = std::mem::take(&mut ui_state.camera_uis);
+
+        for (camera_identifier, camera_ui) in camera_uis.into_iter() {
+            info!("Stopping camera UI.  id: {}", camera_identifier);
+            camera_ui.shutdown().await;
+        }
+        info!("All camera frame listeners finished");
+    }
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct OperatorUiApp {
+    #[serde(skip)]
+    shutdown_state: ShutdownState,
+
     config: Value<Config>,
 
     #[serde(skip)]
@@ -122,11 +146,19 @@ pub struct OperatorUiApp {
     networking_handle: Option<JoinHandle<()>>,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum ShutdownState {
+    NotStarted,
+    ShutdownRequested,
+    ShutdownComplete,
+}
+
 impl Default for OperatorUiApp {
     fn default() -> Self {
         let (_signal, slot) = egui_mobius::factory::create_signal_slot::<UiCommand>();
 
         Self {
+            shutdown_state: ShutdownState::NotStarted,
             config: Default::default(),
             state: None,
             workspaces: Value::new(Workspaces::default()),
@@ -169,15 +201,11 @@ impl OperatorUiApp {
 
         instance.app_event_broadcast = Some((app_event_tx, app_event_rx));
 
-        // Start camera instance
-        // TODO this should be done per-camera
-        let (camera_tx, camera_rx) = watch::channel::<CameraFrame>(CameraFrame::default());
-
         let (app_signal, mut app_slot) = egui_mobius::factory::create_signal_slot::<UiCommand>();
 
         let app_message_sender = app_signal.sender.clone();
 
-        let app_state = AppState::init(app_message_sender.clone(), cc.egui_ctx.clone(), camera_rx);
+        let app_state = AppState::init(app_message_sender.clone(), cc.egui_ctx.clone());
 
         {
             let mut viewports = instance.viewports.lock().unwrap();
@@ -253,6 +281,7 @@ impl OperatorUiApp {
         // Start networking
         let networking_handle = thread::spawn({
             let state = instance.state.as_mut().unwrap().clone();
+            let workspaces = instance.workspaces.clone();
             let app_event_tx = instance
                 .app_event_broadcast
                 .as_ref()
@@ -260,7 +289,7 @@ impl OperatorUiApp {
                 .0
                 .clone();
             move || {
-                let _ = spawner.block_on(ergot_task(spawner.clone(), state, camera_tx, app_event_tx));
+                let _ = spawner.block_on(ergot_task(spawner.clone(), state, workspaces, app_event_tx));
                 info!("Network thread shutdown");
             }
         });
@@ -288,6 +317,16 @@ impl OperatorUiApp {
             .lock()
             .unwrap()
     }
+
+    // FIXME this only appears to show a model on one or the other viewport.
+    fn show_shutdown_modal(shutdown_state: ShutdownState, ctx: &Context, viewport_id: ViewportId) {
+        if !matches!(shutdown_state, ShutdownState::NotStarted) {
+            egui::modal::Modal::new(egui::Id::new("shutdown-modal").with(viewport_id)).show(ctx, |ui| {
+                // TODO translate
+                ui.heading("Shutting down...");
+            });
+        }
+    }
 }
 
 impl eframe::App for OperatorUiApp {
@@ -313,6 +352,7 @@ impl eframe::App for OperatorUiApp {
             if viewport_id == ViewportId::ROOT {
                 let mut viewport = viewport.lock().unwrap();
                 viewport.ui(ctx);
+                //Self::show_shutdown_modal(self.shutdown_state, ctx, viewport_id);
             } else {
                 let unformatted_viewport_id = format!("{:?}", viewport_id);
                 let formatted_viewport_id = unformatted_viewport_id.trim_matches('\"');
@@ -327,6 +367,8 @@ impl eframe::App for OperatorUiApp {
 
                 ctx.show_viewport_deferred(viewport_id, viewport_builder, {
                     let viewport = viewport.clone();
+                    //let viewport_id = viewport_id;
+                    //let shutdown_state = self.shutdown_state.clone();
 
                     move |ctx, viewport_class| {
                         if !matches!(viewport_class, ViewportClass::Deferred) {
@@ -337,6 +379,8 @@ impl eframe::App for OperatorUiApp {
                         let mut viewport = viewport.lock().unwrap();
 
                         viewport.ui(ctx);
+
+                        //Self::show_shutdown_modal(shutdown_state, ctx, viewport_id);
 
                         let mut workspaces = viewport.workspaces.lock().unwrap();
                         let mut workspace = workspaces.active();
@@ -350,33 +394,79 @@ impl eframe::App for OperatorUiApp {
             }
         }
 
+        Self::show_shutdown_modal(self.shutdown_state, ctx, ViewportId::ROOT);
+
         if let Some((_, app_event_rx)) = self.app_event_broadcast.as_mut() {
             if let Ok(event) = app_event_rx.try_recv() {
                 match event {
                     AppEvent::Shutdown => {
-                        info!("GUI received shutdown event, shutting down");
-                        ctx.send_viewport_cmd(ViewportCommand::Close)
+                        info!("GUI received shutdown event");
+                        if matches!(self.shutdown_state, ShutdownState::NotStarted) {
+                            self.shutdown_state = ShutdownState::ShutdownRequested;
+                        }
                     }
+                }
+            }
+        }
+
+        if matches!(self.shutdown_state, ShutdownState::ShutdownRequested) {
+            let is_done = || {
+                // we need to keep broadcasting shutdown events until the networking task has finished.
+                // the networking task may not have completed it's own startup
+                let _ = self
+                    .app_event_broadcast
+                    .as_ref()
+                    .unwrap()
+                    .0
+                    .send(AppEvent::Shutdown)
+                    .unwrap();
+
+                let Some(networking_handle) = &self.networking_handle else {
+                    return true;
+                };
+
+                networking_handle.is_finished()
+            };
+
+            if is_done() {
+                info!("All tasks finished, shutting down");
+                ctx.send_viewport_cmd(ViewportCommand::Close);
+                self.shutdown_state = ShutdownState::ShutdownComplete;
+            } else {
+                // force a re-check of the shutdown state
+                ctx.request_repaint_after(Duration::from_millis(100));
+            }
+        }
+
+        if ctx.input(|i| i.viewport().close_requested()) {
+            info!("User requested shut down");
+            match self.shutdown_state {
+                ShutdownState::NotStarted => {
+                    self.shutdown_state = ShutdownState::ShutdownRequested;
+                    ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+                }
+                ShutdownState::ShutdownRequested => {
+                    // not finished yet
+                    ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+                }
+                ShutdownState::ShutdownComplete => {
+                    // allow the close
                 }
             }
         }
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        info!("GUI shutting down");
-        let _ = self
-            .app_event_broadcast
-            .as_ref()
-            .unwrap()
-            .0
-            .send(AppEvent::Shutdown)
-            .unwrap();
+        if let Some(networking_handle) = &self.networking_handle {
+            assert!(networking_handle.is_finished(), "Network task not finished");
+        }
+        info!("GUI shutdown complete");
     }
 }
 
-#[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq, Debug, Clone, Copy, Hash)]
 pub enum PaneKind {
-    Camera,
+    Camera { id: CameraIdentifier },
     Controls,
     Diagnostics,
     Plot,
@@ -386,7 +476,15 @@ pub enum PaneKind {
 
 pub(crate) fn show_panel_content(kind: &PaneKind, ui: &mut Ui, ui_state: &mut UiState) {
     match kind {
-        PaneKind::Camera => ui_state.camera_ui.ui(ui),
+        PaneKind::Camera {
+            id,
+        } => {
+            if let Some(camera_ui) = ui_state.camera_uis.get_mut(id) {
+                camera_ui.ui(ui);
+            } else {
+                ui.spinner();
+            }
+        }
         PaneKind::Controls => ui_state.controls_ui.ui(ui),
         PaneKind::Diagnostics => ui_state.diagnostics_ui.ui(ui),
         PaneKind::Plot => ui_state.plot_ui.ui(ui),

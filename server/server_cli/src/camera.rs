@@ -27,10 +27,14 @@ pub async fn camera_streamer(
     chunk_size: usize,
     address: Address,
     shutdown_flag: CancellationToken,
+    // the target fps of the camera stream.  which may be lower than the actual fps of the camera
+    target_fps: u8,
 ) -> Result<()> {
     info!("camera streamer started. destination: {}", address);
 
     let mut interval = time::interval(Duration::from_secs(1));
+    let mut next_frame_at = time::Instant::now();
+    let target_fps_interval = Duration::from_secs_f32(1.0 / target_fps as f32);
 
     loop {
         select! {
@@ -41,8 +45,13 @@ pub async fn camera_streamer(
                 }
             }
             frame = rx.recv() => {
+                let now = time::Instant::now();
+                if now < next_frame_at {
+                    // skip this frame, the client requested a lower frame rate.
+                    continue;
+                }
 
-                // Receive latest frame (await)
+                // Receive oldest frame (await)
                 let camera_frame = match frame {
                     Ok(b) => b,
                     Err(broadcast::error::RecvError::Lagged(skipped_frames)) => {
@@ -57,8 +66,6 @@ pub async fn camera_streamer(
 
                 let total_bytes = jpeg_bytes.len() as u32;
                 let total_chunks = (total_bytes + (chunk_size as u32) - 1) / chunk_size as u32;
-
-                let now = time::Instant::now();
 
                 trace!("Sending frame, now: {:?}, frame_number: {}, total_chunks: {}, len: {}", now, camera_frame.frame_number, total_chunks, total_bytes);
 
@@ -131,7 +138,19 @@ pub async fn camera_streamer(
 
                 if ok {
                     trace!("Frame sent. frame_number: {}", frame_number);
+
+                    // if sending the frame failed, we need to send the next-received frame immediately
+                    // we only update the `next_frame_at` if the frame was successfully sent.
+
+                    let now = time::Instant::now();
+                    next_frame_at += target_fps_interval;
+                    if now > next_frame_at {
+                        // catch up if we fall behind
+                        next_frame_at = now + target_fps_interval;
+                    }
+
                 }
+
             }
         }
     }

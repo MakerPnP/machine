@@ -1,3 +1,4 @@
+use std::hash::{Hash, Hasher};
 use std::sync::mpsc::Sender;
 
 use eframe::emath::{NumExt, Pos2, Vec2};
@@ -10,7 +11,7 @@ use egui_mobius::types::{Enqueue, ValueGuard};
 use egui_tiles::{ContainerKind, SimplificationOptions, Tabs, Tile, TileId, Tiles, Tree, UiResponse};
 use tracing::{debug, info, trace};
 
-use crate::app::{MIN_TOUCH_SIZE, PaneKind, TOGGLE_DEFINITIONS, UiState};
+use crate::app::{MIN_TOUCH_SIZE, PaneKind, UiState};
 use crate::fps_stats::egui::show_frame_durations;
 use crate::fps_stats::{FpsSnapshot, FpsStats};
 use crate::ui_commands::{UiCommand, ViewportUiAction, ViewportUiCommand};
@@ -67,7 +68,7 @@ impl ViewportConfig {
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
 #[serde(default)]
 pub struct ViewportTreeConfig {
-    pub(crate) tree: Tree<PaneKind>,
+    pub(crate) tree: Tree<AppPane>,
 }
 
 impl Default for ViewportTreeConfig {
@@ -95,7 +96,7 @@ impl ViewportTreeConfig {
 
             // is there a tile for this one?
             let is_open = self.tree.tiles.iter().any(
-                |(_tile_id, tile_kind)| matches!(tile_kind, Tile::Pane(pane_kind) if *pane_kind == toggle_state.kind),
+                |(_tile_id, tile_kind)| matches!(tile_kind, Tile::Pane(app_pane) if app_pane.kind == toggle_state.kind),
             );
 
             if !is_open {
@@ -103,7 +104,14 @@ impl ViewportTreeConfig {
                 let root = self.tree.root();
                 dump_tiles(&mut self.tree.tiles, root);
 
-                add_pane_to_root(&mut self.tree, toggle_state.kind, ContainerKind::Tabs);
+                add_pane_to_root(
+                    &mut self.tree,
+                    AppPane {
+                        kind: toggle_state.kind,
+                        key: toggle_state.key.clone(),
+                    },
+                    ContainerKind::Tabs,
+                );
             }
         }
 
@@ -111,7 +119,7 @@ impl ViewportTreeConfig {
         let tiles_to_close = self.tree.tiles.iter().filter_map(|(tile_id, tile)| {
             let should_close = toggle_states.iter().any(|candidate| {
                 let is_tile_for_this_viewport = matches!(candidate.mode, ViewMode::Tile(candidate_viewport_id) if candidate_viewport_id == viewport_id);
-                let same_kind_of_pane = matches!(tile, Tile::Pane(kind) if *kind == candidate.kind);
+                let same_kind_of_pane = matches!(tile, Tile::Pane(app_pane) if app_pane.kind == candidate.kind);
                 let result = !is_tile_for_this_viewport && same_kind_of_pane;
                 if false {
                     trace!("should close?. tile {:?}: is_tile_for_this_viewport: {} same_kind_of_pane: {} = {}", tile_id, is_tile_for_this_viewport, same_kind_of_pane, result);
@@ -131,7 +139,7 @@ impl ViewportTreeConfig {
         }
     }
 
-    pub fn create_tree() -> Tree<PaneKind> {
+    pub fn create_tree() -> Tree<AppPane> {
         let mut tiles = Tiles::default();
 
         let root_tabs = vec![];
@@ -477,11 +485,7 @@ impl ViewportState {
                                     }
                                 });
 
-                            for kind in workspace.left_toggles.iter() {
-                                let toggle_definition = TOGGLE_DEFINITIONS.iter().find(|candidate| candidate.kind == *kind).unwrap();
-
-                                let toggle_state = workspace.toggle_states.iter().find(|candidate| candidate.kind == *kind).unwrap();
-
+                            for toggle_state in workspace.toggle_states.iter() {
                                 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
                                 enum ToggleStatus {
                                     Disabled,
@@ -521,11 +525,11 @@ impl ViewportState {
                                     let button_width = left_panel_width
                                         .at_least(MIN_TOUCH_SIZE.x)
                                         .at_most(MIN_TOUCH_SIZE.x * 2.0);
-                                    ui.add_sized(Vec2::new(button_width, ui.available_height()), egui::Label::new(tr!(&format!("panel-{}-icon", toggle_definition.key)))
+                                    ui.add_sized(Vec2::new(button_width, ui.available_height()), egui::Label::new(tr!(&format!("panel-{}-icon", toggle_state.key)))
                                         .selectable(false));
 
                                     if left_panel_width > MIN_TOUCH_SIZE.x * 2.0 {
-                                        ui.add(egui::Label::new(tr!(&format!("panel-{}-name", toggle_definition.key))).selectable(false));
+                                        ui.add(egui::Label::new(tr!(&format!("panel-{}-name", toggle_state.key))).selectable(false));
                                     }
                                 }).response;
 
@@ -533,21 +537,20 @@ impl ViewportState {
 
                                 let interaction = response.interact(Sense::click());
                                 if interaction.double_clicked() {
-                                    sender.send(UiCommand::ViewportUiCommand(self.id, ViewportUiCommand::SetPanelMode(*kind, window_mode))).expect("sent");
+                                    sender.send(UiCommand::ViewportUiCommand(self.id, ViewportUiCommand::SetPanelMode(toggle_state.kind, window_mode))).expect("sent");
                                 } else if interaction.clicked() {
-
                                     match toggle_state.mode {
                                         ViewMode::Disabled => {
                                             // if it's not enabled, make it a window
-                                            sender.send(UiCommand::ViewportUiCommand(self.id, ViewportUiCommand::SetPanelMode(*kind, window_mode))).expect("sent");
+                                            sender.send(UiCommand::ViewportUiCommand(self.id, ViewportUiCommand::SetPanelMode(toggle_state.kind, window_mode))).expect("sent");
                                         }
 
                                         // otherwise, if it's not active, activate it
                                         ViewMode::Tile(viewport_id) if viewport_id == self.id => {
-                                            request_make_visible.replace(*toggle_state);
+                                            request_make_visible.replace(toggle_state.clone());
                                         }
                                         ViewMode::Window(viewport_id) if viewport_id == self.id => {
-                                            request_make_visible.replace(*toggle_state);
+                                            request_make_visible.replace(toggle_state.clone());
                                         }
                                         _ => {
                                             // on a different viewport
@@ -559,10 +562,10 @@ impl ViewportState {
                             }
                         });
 
-                    match request_make_visible {
+                    match &request_make_visible {
                         Some(toggle_state) if matches!(toggle_state.mode, ViewMode::Tile(r_viewport_id) if r_viewport_id == self.id) => {
 
-                            let tile_id = workspace_viewport_tree_config.tree.tiles.find_pane( &toggle_state.kind).unwrap();
+                            let tile_id = workspace_viewport_tree_config.tree.tiles.find_pane( &AppPane { kind: toggle_state.kind, key: toggle_state.key.clone() }).unwrap();
                             workspace_viewport_tree_config.tree.make_active( |candidate_id, _tile | candidate_id == tile_id);
 
 
@@ -639,8 +642,7 @@ impl ViewportState {
         };
 
         for (toggle_index, toggle_state) in windows.into_iter() {
-            let kind_key = kind_key(&toggle_state.kind);
-            let title_i18n_key = title_i18n_key(kind_key);
+            let title_i18n_key = title_i18n_key(&toggle_state.key);
             let title = tr!(&title_i18n_key);
 
             let mut applicable_actions: Vec<ViewportAction> = vec![];
@@ -669,7 +671,7 @@ impl ViewportState {
 
             let style = &ctx.style();
 
-            let window_id = ui_id.with(kind_key);
+            let window_id = ui_id.with(&toggle_state);
             ctx.memory(|memory| {
                 if let Some(rect) = memory.area_rect(window_id) {
                     // IMPORTANT we can't just use the `toggle_state` from the loop iterator.
@@ -763,7 +765,7 @@ impl ViewportState {
 
             if let Some(window) = window {
                 match request_make_visible {
-                    Some(requested_toggle_state)
+                    Some(ref requested_toggle_state)
                         if requested_toggle_state.mode == ViewMode::Window(self.id)
                             && requested_toggle_state.kind == toggle_state.kind =>
                     {
@@ -809,12 +811,21 @@ pub struct ToggleDefinition {
     pub kind: PaneKind,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Copy, Clone, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
 pub struct ToggleState {
     pub(crate) kind: PaneKind,
+    pub(crate) key: String,
+
     pub(crate) mode: ViewMode,
     pub(crate) window_position: Option<Pos2>,
     pub(crate) window_size: Option<Vec2>,
+}
+
+impl Hash for ToggleState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.kind.hash(state);
+        self.key.hash(state);
+    }
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -849,14 +860,20 @@ impl TreeBehavior {
     }
 }
 
-impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
-    fn pane_ui(&mut self, ui: &mut Ui, tile_id: TileId, kind: &mut PaneKind) -> UiResponse {
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Hash)]
+pub struct AppPane {
+    pub kind: PaneKind,
+    /// i18n key
+    pub key: String,
+}
+
+impl egui_tiles::Behavior<AppPane> for TreeBehavior {
+    fn pane_ui(&mut self, ui: &mut Ui, tile_id: TileId, pane: &mut AppPane) -> UiResponse {
         let in_tab = self.container_is_tabs;
 
         let mut ui_state = self.ui_state.lock().unwrap();
 
-        let kind_key = kind_key(&kind);
-        let title_i18n_key = title_i18n_key(kind_key);
+        let title_i18n_key = title_i18n_key(&pane.key);
         let title = tr!(&title_i18n_key);
 
         let mut dragged = false;
@@ -864,7 +881,7 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
         if !in_tab {
             show_panel_title_and_controls(
                 self.viewport_id,
-                &kind,
+                &pane.kind,
                 title,
                 self.command_sender.clone(),
                 ui,
@@ -877,7 +894,7 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
             ui.separator();
         }
 
-        app::show_panel_content(&kind, ui, &mut ui_state);
+        app::show_panel_content(&pane.kind, ui, &mut ui_state);
 
         dragged |= self.container_is_tabs && matches!(self.drag, Some(drag_id) if drag_id == tile_id);
 
@@ -894,15 +911,13 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
         }
     }
 
-    fn tab_title_for_pane(&mut self, pane: &PaneKind) -> WidgetText {
-        let kind_key = kind_key(pane);
-
-        let title_i18n_key = format!("panel-{}-window-title", kind_key);
+    fn tab_title_for_pane(&mut self, pane: &AppPane) -> WidgetText {
+        let title_i18n_key = format!("panel-{}-window-title", pane.key);
 
         tr!(&title_i18n_key).into()
     }
 
-    fn is_tab_closable(&self, _tiles: &Tiles<PaneKind>, _tile_id: TileId) -> bool {
+    fn is_tab_closable(&self, _tiles: &Tiles<AppPane>, _tile_id: TileId) -> bool {
         // We use the X buttons in the tab title bar area instead. This is for a few of reasons:
         // 1. less space consumed when multiple tabs.
         // 2. less visual clutter
@@ -913,12 +928,12 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
         false
     }
 
-    fn on_tab_close(&mut self, _tiles: &mut Tiles<PaneKind>, _tile_id: TileId) -> bool {
-        if let Some(Tile::Pane(kind)) = _tiles.get(_tile_id) {
+    fn on_tab_close(&mut self, _tiles: &mut Tiles<AppPane>, _tile_id: TileId) -> bool {
+        if let Some(Tile::Pane(app_pane)) = _tiles.get(_tile_id) {
             self.command_sender
                 .send(UiCommand::ViewportUiCommand(
                     self.viewport_id,
-                    ViewportUiCommand::ClosePanel(*kind),
+                    ViewportUiCommand::ClosePanel(app_pane.kind),
                 ))
                 .expect("sent");
         }
@@ -928,18 +943,18 @@ impl egui_tiles::Behavior<PaneKind> for TreeBehavior {
 
     fn top_bar_right_ui(
         &mut self,
-        _tiles: &Tiles<PaneKind>,
+        _tiles: &Tiles<AppPane>,
         _ui: &mut Ui,
         _tile_id: TileId,
         _tabs: &Tabs,
         _scroll_offset: &mut f32,
     ) {
         if let Some(tile_id) = _tabs.active {
-            if let Some(Tile::Pane(kind)) = _tiles.get(tile_id) {
+            if let Some(Tile::Pane(app_pane)) = _tiles.get(tile_id) {
                 let mut dragged = false;
                 show_panel_controls(
                     self.viewport_id,
-                    &kind,
+                    &app_pane.kind,
                     self.command_sender.clone(),
                     _ui,
                     true,
@@ -1084,50 +1099,43 @@ fn show_panel_controls<T>(
 #[serde(default)]
 pub struct WorkspaceConfig {
     pub(crate) toggle_states: Vec<ToggleState>,
-    pub(crate) left_toggles: Vec<PaneKind>,
     pub(crate) viewport_tree_configs: HashMap<ViewportId, ViewportTreeConfig>,
     pub(crate) viewport_configs: HashMap<ViewportId, ViewportConfig>,
 }
 
 impl Default for WorkspaceConfig {
     fn default() -> Self {
-        let left_toggles = TOGGLE_DEFINITIONS
-            .iter()
-            .map(|candidate| candidate.kind)
-            .collect::<Vec<_>>();
-
         let toggle_states = vec![
             ToggleState {
-                mode: ViewMode::Tile(ViewportId::ROOT),
-                kind: PaneKind::Camera,
-                window_position: None,
-                window_size: None,
-            },
-            ToggleState {
+                key: "controls".to_string(),
                 mode: ViewMode::Tile(ViewportId::ROOT),
                 kind: PaneKind::Controls,
                 window_position: None,
                 window_size: None,
             },
             ToggleState {
+                key: "diagnostics".to_string(),
                 mode: ViewMode::Window(ViewportId::ROOT),
                 kind: PaneKind::Diagnostics,
                 window_position: None,
                 window_size: None,
             },
             ToggleState {
+                key: "plot".to_string(),
                 mode: ViewMode::Disabled,
                 kind: PaneKind::Plot,
                 window_position: None,
                 window_size: None,
             },
             ToggleState {
+                key: "settings".to_string(),
                 mode: ViewMode::Window(ViewportId::ROOT),
                 kind: PaneKind::Settings,
                 window_position: None,
                 window_size: None,
             },
             ToggleState {
+                key: "status".to_string(),
                 mode: ViewMode::Tile(ViewportId::ROOT),
                 kind: PaneKind::Status,
                 window_position: None,
@@ -1136,7 +1144,6 @@ impl Default for WorkspaceConfig {
         ];
 
         Self {
-            left_toggles,
             toggle_states,
             viewport_tree_configs: Default::default(),
             viewport_configs: Default::default(),
@@ -1165,6 +1172,7 @@ pub enum WorkspaceError {
     InvalidWorkspaceIndex,
     AlreadyActive,
     CannotRemoveActiveWorkspace,
+    DuplicateToggleKey,
 }
 
 impl Workspaces {
@@ -1238,19 +1246,37 @@ impl Workspaces {
     pub fn count(&self) -> usize {
         self.workspaces.len()
     }
-}
 
-pub(crate) fn kind_key(kind: &PaneKind) -> &str {
-    TOGGLE_DEFINITIONS
-        .iter()
-        .find_map(|candidate| {
-            if candidate.kind == *kind {
-                Some(candidate.key)
-            } else {
-                None
-            }
-        })
-        .unwrap()
+    pub fn add_toggle(&mut self, toggle: ToggleDefinition) -> Result<(), WorkspaceError> {
+        let duplicate_key = self.workspaces.iter().any(|workspace| {
+            let workspace = workspace.lock().unwrap();
+            workspace
+                .toggle_states
+                .iter()
+                .any(|it| it.kind == toggle.kind && it.key == toggle.key)
+        });
+        if duplicate_key {
+            return Err(WorkspaceError::DuplicateToggleKey);
+        }
+
+        let mut workspace = self.active();
+
+        let viewport_id = ViewportId::ROOT;
+
+        let toggle_state = ToggleState {
+            key: toggle.key.to_string(),
+            kind: toggle.kind,
+            mode: ViewMode::Window(viewport_id),
+            window_position: None,
+            window_size: None,
+        };
+
+        workspace
+            .toggle_states
+            .push(toggle_state);
+
+        Ok(())
+    }
 }
 
 //

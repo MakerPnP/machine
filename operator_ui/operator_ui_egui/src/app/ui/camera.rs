@@ -7,6 +7,8 @@ use egui_i18n::tr;
 use egui_mobius::Value;
 use egui_tool_windows::ToolWindows;
 use tokio::sync::watch::Receiver;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::trace;
 
 use crate::fps_stats::egui::show_frame_durations;
@@ -16,8 +18,11 @@ use crate::net::camera::CameraFrame;
 pub(crate) struct CameraUi {
     rx: Receiver<CameraFrame>,
     texture: Option<egui::TextureHandle>,
-    render_after: Instant,
+    next_frame_at: Instant,
     timestamp: chrono::DateTime<chrono::Utc>,
+
+    camera_frame_listener_handle: JoinHandle<anyhow::Result<()>>,
+    shutdown_token: CancellationToken,
 
     camera_frame_number: u64,
     camera_fps_stats: Value<FpsStats>,
@@ -27,12 +32,19 @@ pub(crate) struct CameraUi {
 }
 
 impl CameraUi {
-    pub fn new(rx: Receiver<CameraFrame>) -> Self {
+    pub fn new(
+        rx: Receiver<CameraFrame>,
+        camera_frame_listener_handle: JoinHandle<anyhow::Result<()>>,
+        shutdown_token: CancellationToken,
+    ) -> Self {
         Self {
             rx,
             texture: None,
-            render_after: Instant::now(),
+            next_frame_at: Instant::now(),
             timestamp: Default::default(),
+
+            camera_frame_listener_handle,
+            shutdown_token,
 
             camera_fps_stats: Value::new(FpsStats::new(300)),
             camera_fps_snapshot: None,
@@ -41,6 +53,11 @@ impl CameraUi {
             lag_counter: 0,
         }
     }
+
+    pub async fn shutdown(self) {
+        self.shutdown_token.cancel();
+        let _ = self.camera_frame_listener_handle.await;
+    }
 }
 
 impl CameraUi {
@@ -48,12 +65,12 @@ impl CameraUi {
         let now = std::time::Instant::now();
 
         if let Ok(true) = self.rx.has_changed() {
-            if now > self.render_after {
+            if now > self.next_frame_at {
                 let camera_frame = self.rx.borrow_and_update().clone();
-                self.render_after += camera_frame.frame_interval;
-                if now > self.render_after {
+                self.next_frame_at += camera_frame.frame_interval;
+                if now > self.next_frame_at {
                     // catch up if we fall behind
-                    self.render_after = now + camera_frame.frame_interval;
+                    self.next_frame_at = now + camera_frame.frame_interval;
                     self.lag_counter = self.lag_counter.wrapping_add(1);
                 }
 
@@ -86,27 +103,33 @@ impl CameraUi {
 
         // Schedule next repaint at render_after or sooner
         let repaint_delay = self
-            .render_after
+            .next_frame_at
             .saturating_duration_since(now.into());
         ui.ctx()
             .request_repaint_after(repaint_delay);
 
-        egui::ScrollArea::both().show(ui, |ui| {
-            if let Some(tex) = &self.texture {
-                egui::Image::new(tex)
-                    .max_size(ui.available_size())
-                    .maintain_aspect_ratio(true)
-                    .ui(ui);
+        egui::ScrollArea::both()
+            //.id_salt(ui.id().with("content-scroll"))
+            .show(ui, |ui| {
+                if let Some(tex) = &self.texture {
+                    egui::Image::new(tex)
+                        .max_size(ui.available_size())
+                        .maintain_aspect_ratio(true)
+                        .ui(ui);
 
-                let mut overlay_ui = ui.new_child(UiBuilder::new().max_rect(ui.clip_rect()));
-                overlay_ui.add(
-                    egui::Label::new(RichText::new(format!("{}", self.timestamp)).color(Color32::GREEN))
-                        .selectable(false),
-                );
-            } else {
-                ui.label(tr!("camera-message-waiting"));
-            }
-        });
+                    let mut overlay_ui = ui.new_child(
+                        UiBuilder::new()
+                            //.id_salt(ui.id().with("overlay"))
+                            .max_rect(ui.clip_rect()),
+                    );
+                    overlay_ui.add(
+                        egui::Label::new(RichText::new(format!("{}", self.timestamp)).color(Color32::GREEN))
+                            .selectable(false),
+                    );
+                } else {
+                    ui.label(tr!("camera-message-waiting"));
+                }
+            });
 
         let fps_stats_id = ui.make_persistent_id(
             ui.id()
@@ -123,20 +146,22 @@ impl CameraUi {
                     let camera_frame_number = self.camera_frame_number;
 
                     move |ui| {
-                        egui::ScrollArea::both().show(ui, |ui| {
-                            Frame::group(ui.style()).show(ui, |ui| {
-                                ui.label(format!("Frame: {}", camera_frame_number));
-                                if let Some(snapshot) = &camera_fps_snapshot {
-                                    ui.label(format!(
-                                        "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
-                                        snapshot.latest, snapshot.min, snapshot.max, snapshot.avg
-                                    ));
+                        egui::ScrollArea::both()
+                            .id_salt(ui.id().with("tool-window-scroll"))
+                            .show(ui, |ui| {
+                                Frame::group(ui.style()).show(ui, |ui| {
+                                    ui.label(format!("Frame: {}", camera_frame_number));
+                                    if let Some(snapshot) = &camera_fps_snapshot {
+                                        ui.label(format!(
+                                            "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
+                                            snapshot.latest, snapshot.min, snapshot.max, snapshot.avg
+                                        ));
 
-                                    let camera_fps_stats = camera_fps_stats.lock().unwrap();
-                                    show_frame_durations(ui, &camera_fps_stats);
-                                }
+                                        let camera_fps_stats = camera_fps_stats.lock().unwrap();
+                                        show_frame_durations(ui, &camera_fps_stats);
+                                    }
+                                });
                             });
-                        });
                     }
                 });
         });

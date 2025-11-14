@@ -35,14 +35,26 @@ pub struct CameraFrameImageChunk {
 
 #[derive(Debug, Serialize, Deserialize, Schema, Clone, PartialEq)]
 pub enum CameraCommand {
-    StartStreaming { port_id: u8 },
+    StartStreaming { port_id: u8, fps: u8 },
     StopStreaming { port_id: u8 },
     // TODO
     // GetCameraProperties,
     // SetCameraProperties { properties: CameraProperties },
 }
 
-#[derive(Debug, Serialize, Deserialize, Schema, Clone, Copy, PartialEq, Hash, Eq)]
+#[derive(
+    Debug,
+    Serialize,
+    Deserialize,
+    Schema,
+    Clone,
+    Copy,
+    PartialEq,
+    Hash,
+    Eq,
+    PartialOrd,
+    Ord
+)]
 pub struct CameraIdentifier(u8);
 
 impl CameraIdentifier {
@@ -88,4 +100,19 @@ pub struct CameraCommandError {
 pub enum CameraCommandErrorCode {
     InvalidIdentifier = 0,
     Busy = 1,
+    NotStreaming = 2,
+}
+
+impl CameraCommandError {
+    pub fn new(code: CameraCommandErrorCode) -> Self {
+        Self {
+            code,
+            args: Vec::new(),
+        }
+    }
+
+    pub fn with_args(mut self, args: Vec<CommandArg>) -> Self {
+        self.args = args;
+        self
+    }
 }
