@@ -79,6 +79,7 @@ impl AppState {
         camera_identifier: CameraIdentifier,
         stack: EdgeStack,
         command_endpoint_remote_address: Address,
+        target_fps: f32,
     ) {
         let shutdown_token = tokio_util::sync::CancellationToken::new();
         let (camera_tx, camera_rx) = watch::channel::<CameraFrame>(CameraFrame::default());
@@ -92,7 +93,7 @@ impl AppState {
                 command_endpoint_remote_address,
                 shutdown_token.clone(),
                 camera_identifier.clone(),
-                TARGET_FPS,
+                target_fps,
             ))
         };
 
