@@ -20,7 +20,7 @@ use crate::net::commands::{OperatorCommandEndpoint, heartbeat_sender};
 use crate::net::services::basic_services;
 use crate::net::shutdown::app_shutdown_handler;
 use crate::workspace::{ToggleDefinition, WorkspaceError, Workspaces};
-use crate::{LOCAL_ADDR, REMOTE_ADDR};
+use crate::{LOCAL_ADDR, REMOTE_ADDR, SCHEDULED_FPS_MAX, TARGET_FPS};
 
 pub mod camera;
 pub mod commands;
@@ -92,17 +92,16 @@ pub async fn ergot_task(
     ));
 
     // TODO enumerate the available cameras from the server
-    let camera_identifiers = [
-        CameraIdentifier::new(0),
-        CameraIdentifier::new(1),
-        // CameraIdentifier::new(2)
+    let camera_configs = [
+        (CameraIdentifier::new(0), TARGET_FPS),
+        (CameraIdentifier::new(1), SCHEDULED_FPS_MAX),
     ];
 
-    info!("Starting cameras. ids: {:?}", camera_identifiers);
-    for camera_identifier in camera_identifiers.iter() {
+    info!("Starting cameras. ids: {:?}", camera_configs);
+    for (camera_identifier, target_fps) in camera_configs.iter() {
         {
             let app_state = state.lock().unwrap();
-            app_state.add_camera(*camera_identifier, stack.clone(), command_endpoint_remote_address);
+            app_state.add_camera(*camera_identifier, stack.clone(), command_endpoint_remote_address,  *target_fps);
         }
 
         {

@@ -10,7 +10,7 @@ const LOCAL_ADDR: &str = "192.168.18.41:8002";
 //      server via camera discovery
 const TARGET_FPS: f32 = 30.0;
 const SCHEDULED_FPS_MIN: f32 = 5.0;
-const SCHEDULED_FPS_MAX: f32 = 30.0;
+const SCHEDULED_FPS_MAX: f32 = 60.0;
 
 mod app;
 pub use app::OperatorUiApp;
