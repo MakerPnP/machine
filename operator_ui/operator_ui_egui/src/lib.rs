@@ -8,10 +8,9 @@ const LOCAL_ADDR: &str = "192.168.18.41:8002";
 
 // TODO remove `TARGET_FPS` it's value should come from the per-camera FPS configuration on the
 //      server via camera discovery
-const TARGET_FPS: u8 = 30;
-
-const SCHEDULED_FPS_MIN: u8 = 5;
-const SCHEDULED_FPS_MAX: u8 = 30;
+const TARGET_FPS: f32 = 30.0;
+const SCHEDULED_FPS_MIN: f32 = 5.0;
+const SCHEDULED_FPS_MAX: f32 = 30.0;
 
 mod app;
 pub use app::OperatorUiApp;

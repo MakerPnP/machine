@@ -28,13 +28,13 @@ pub async fn camera_streamer(
     address: Address,
     shutdown_flag: CancellationToken,
     // the target fps of the camera stream.  which may be lower than the actual fps of the camera
-    target_fps: u8,
+    target_fps: f32,
 ) -> Result<()> {
     info!("camera streamer started. destination: {}", address);
 
     let mut interval = time::interval(Duration::from_secs(1));
     let mut next_frame_at = time::Instant::now();
-    let target_fps_interval = Duration::from_secs_f32(1.0 / target_fps as f32);
+    let target_fps_interval = Duration::from_secs_f32(1.0 / target_fps);
 
     loop {
         select! {
