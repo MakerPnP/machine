@@ -66,7 +66,7 @@ pub async fn camera_frame_listener(
 
     let mut in_progress: HashMap<u64, InProgressFrame> = HashMap::new();
 
-    let mut target_fps = target_fps as f32;
+    let mut target_fps = target_fps;
     let mut frame_timestamps = std::collections::VecDeque::with_capacity(60);
 
     loop {
