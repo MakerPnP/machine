@@ -400,8 +400,8 @@ impl eframe::App for OperatorUiApp {
             if let Ok(event) = app_event_rx.try_recv() {
                 match event {
                     AppEvent::Shutdown => {
-                        info!("GUI received shutdown event");
                         if matches!(self.shutdown_state, ShutdownState::NotStarted) {
+                            info!("GUI received shutdown event, starting shutdown");
                             self.shutdown_state = ShutdownState::ShutdownRequested;
                         }
                     }
