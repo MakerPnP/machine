@@ -101,7 +101,12 @@ pub async fn ergot_task(
     for (camera_identifier, target_fps) in camera_configs.iter() {
         {
             let app_state = state.lock().unwrap();
-            app_state.add_camera(*camera_identifier, stack.clone(), command_endpoint_remote_address,  *target_fps);
+            app_state.add_camera(
+                *camera_identifier,
+                stack.clone(),
+                command_endpoint_remote_address,
+                *target_fps,
+            );
         }
 
         {
