@@ -10,7 +10,6 @@ use ergot::{
     topic,
 };
 use operator_shared::camera::CameraIdentifier;
-use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::{net::UdpSocket, select, time};
 use tracing::{debug, error, info, warn};
@@ -29,7 +28,6 @@ pub mod services;
 pub mod shutdown;
 
 pub async fn ergot_task(
-    _spawner: Handle,
     state: Value<AppState>,
     workspaces: Value<Workspaces>,
     app_event_tx: broadcast::Sender<AppEvent>,
@@ -142,8 +140,11 @@ pub async fn ergot_task(
     }
     info!("Network shut down requested");
 
-    let app_state = state.lock().unwrap();
-    app_state.stop_all_cameras().await;
+    let camera_uis = {
+        let app_state = state.lock().unwrap();
+        app_state.prepare_stop_all_cameras()
+    };
+    AppState::stop_all_cameras(camera_uis).await;
 
     info!("Waiting for heartbeat sender to finish");
     let _ = heartbeat_sender.await;

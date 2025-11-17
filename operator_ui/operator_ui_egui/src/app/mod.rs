@@ -1,6 +1,4 @@
 use std::collections::BTreeMap;
-use std::thread;
-use std::thread::JoinHandle;
 use std::time::Duration;
 
 use async_std::prelude::StreamExt;
@@ -12,6 +10,7 @@ use egui_mobius::{Slot, Value};
 use ergot::Address;
 use ergot::toolkits::tokio_udp::EdgeStack;
 use operator_shared::camera::CameraIdentifier;
+use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
 use tracing::{info, trace, warn};
 use ui::camera::CameraUi;
@@ -108,10 +107,13 @@ impl AppState {
         assert!(result.is_none(), "Camera id already exists");
     }
 
-    pub async fn stop_all_cameras(&self) {
+    pub(crate) fn prepare_stop_all_cameras(&self) -> BTreeMap<CameraIdentifier, CameraUi> {
         let mut ui_state = self.ui_state.lock().unwrap();
         let camera_uis = std::mem::take(&mut ui_state.camera_uis);
+        camera_uis
+    }
 
+    pub(crate) async fn stop_all_cameras(camera_uis: BTreeMap<CameraIdentifier, CameraUi>) {
         for (camera_identifier, camera_ui) in camera_uis.into_iter() {
             info!("Stopping camera UI.  id: {}", camera_identifier);
             camera_ui.shutdown().await;
@@ -143,7 +145,12 @@ pub struct OperatorUiApp {
     #[serde(skip)]
     app_event_broadcast: Option<(broadcast::Sender<AppEvent>, broadcast::Receiver<AppEvent>)>,
     #[serde(skip)]
-    networking_handle: Option<JoinHandle<()>>,
+    networking_handle: Option<tokio::task::JoinHandle<()>>,
+
+    #[serde(skip)]
+    spawner: Option<Handle>,
+    #[serde(skip)]
+    runtime: Option<TokioRuntime>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -166,6 +173,8 @@ impl Default for OperatorUiApp {
             slot,
             app_event_broadcast: None,
             networking_handle: None,
+            spawner: None,
+            runtime: None,
         }
     }
 }
@@ -238,7 +247,10 @@ impl OperatorUiApp {
         // Safety: `Self::state()` is now safe to call.
 
         let runtime = TokioRuntime::new();
-        let spawner = runtime.runtime().handle().clone();
+        let tokio_runtime = runtime.runtime();
+
+        let spawner = tokio_runtime.handle().clone();
+        instance.spawner = Some(spawner.clone());
 
         // Define a handler function for the slot
         let handler = {
@@ -247,6 +259,7 @@ impl OperatorUiApp {
             let app_message_sender = app_message_sender.clone();
             let workspaces = instance.workspaces.clone();
             let viewports = instance.viewports.clone();
+            let spawner = spawner.clone();
 
             move |command: UiCommand| {
                 let task = handle_command(
@@ -259,7 +272,7 @@ impl OperatorUiApp {
                 );
 
                 if let Some(mut stream) = task::into_stream(task) {
-                    runtime.runtime().spawn({
+                    spawner.spawn({
                         let app_message_sender = app_message_sender.clone();
                         async move {
                             trace!("running stream future");
@@ -279,7 +292,7 @@ impl OperatorUiApp {
         app_slot.start(handler);
 
         // Start networking
-        let networking_handle = thread::spawn({
+        let networking_handle = spawner.spawn({
             let state = instance.state.as_mut().unwrap().clone();
             let workspaces = instance.workspaces.clone();
             let app_event_tx = instance
@@ -288,12 +301,15 @@ impl OperatorUiApp {
                 .unwrap()
                 .0
                 .clone();
-            move || {
-                let _ = spawner.block_on(ergot_task(spawner.clone(), state, workspaces, app_event_tx));
-                info!("Network thread shutdown");
+
+            async move {
+                let _ = ergot_task(state, workspaces, app_event_tx).await;
+                info!("Network task finished");
             }
         });
+
         instance.networking_handle = Some(networking_handle);
+        instance.runtime = Some(runtime);
 
         {
             instance
