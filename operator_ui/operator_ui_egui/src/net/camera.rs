@@ -28,7 +28,7 @@ pub async fn camera_frame_listener(
     remote_address: Address,
     shutdown_token: CancellationToken,
     camera_identifier: CameraIdentifier,
-    target_fps: u8,
+    target_fps: f32,
 ) -> anyhow::Result<()> {
     let command_client = stack
         .endpoints()
@@ -80,11 +80,9 @@ pub async fn camera_frame_listener(
 
                 let entry_and_image_chunk = match &chunk.kind {
                     CameraFrameChunkKind::Meta(frame_meta) => {
-
-
                         // Update timestamps for FPS estimation
                         frame_timestamps.push_back(frame_meta.frame_timestamp);
-                        if frame_timestamps.len() > (TARGET_FPS * 2) as usize {
+                        if frame_timestamps.len() > (TARGET_FPS * 2.0) as usize {
                             frame_timestamps.pop_front();
                         }
 

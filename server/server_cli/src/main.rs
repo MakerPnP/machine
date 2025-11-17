@@ -483,10 +483,12 @@ async fn camera_manager(
     camera_definition: CameraDefinition,
     address: Address,
     app_state: Arc<Mutex<AppState>>,
-    fps: u8,
+    target_fps: f32,
     shutdown_flag: CancellationToken,
     stack: RouterStack,
 ) {
+    let constrained_fps = target_fps.min(camera_definition.fps);
+
     // TODO document the '* 2' magic number, try reducing it too.
     let broadcast_cap = (camera_definition.fps * 2_f32).round() as usize;
 
@@ -520,7 +522,7 @@ async fn camera_manager(
                     CAMERA_CHUNK_SIZE,
                     address,
                     shutdown_flag.clone(),
-                    fps,
+                    constrained_fps,
                 )
                 .await
                 {

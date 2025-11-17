@@ -35,7 +35,7 @@ pub struct CameraFrameImageChunk {
 
 #[derive(Debug, Serialize, Deserialize, Schema, Clone, PartialEq)]
 pub enum CameraCommand {
-    StartStreaming { port_id: u8, fps: u8 },
+    StartStreaming { port_id: u8, fps: f32 },
     StopStreaming { port_id: u8 },
     // TODO
     // GetCameraProperties,
