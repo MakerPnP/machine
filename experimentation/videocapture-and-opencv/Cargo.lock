@@ -3933,6 +3933,7 @@ dependencies = [
  "opencv",
  "serde",
  "video-capture",
+ "x-media",
 ]
 
 [[package]]

@@ -6,6 +6,10 @@
 //! The frames are then processed using OpenCV and the results are displayed using egui.
 //!
 //! The OpenCV face detection classifier is used to detect faces in the video frames.
+//!
+//! References:
+//! https://learn.microsoft.com/en-us/windows/win32/medfound/recommended-8-bit-yuv-formats-for-video-rendering
+//! https://www.itu.int/dms_pubrec/itu-r/rec/bt/r-rec-bt.601-7-201103-i!!pdf-e.pdf
 
 use eframe::epaint::StrokeKind;
 use eframe::{CreationContext, Frame};
@@ -13,9 +17,7 @@ use egui::{ColorImage, Context, Pos2, RichText, TextureHandle, UiBuilder, Vec2, 
 use log::{debug, error, info};
 use opencv::core::{AlgorithmHint, CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
 use opencv::imgproc;
-use opencv::imgproc::{
-    COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2, COLOR_YUV2BGR_YVYU,
-};
+use opencv::imgproc::{COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2, COLOR_YUV2BGR_YVYU};
 use opencv::objdetect::CascadeClassifier;
 use opencv::prelude::*;
 use std::ffi::OsString;
@@ -346,6 +348,92 @@ where
 
             bgr_mat
         }
+        // Add support for I420 (YUV 4:2:0 planar)
+        (PixelFormat::I420, None) => {
+            // Get the three planes: Y, U, V
+            let mut planes_iter = planes.into_iter();
+            let y_plane = planes_iter.next().unwrap();
+            let u_plane = planes_iter.next().unwrap();
+            let v_plane = planes_iter.next().unwrap();
+
+            let y_data = y_plane.data().unwrap();
+            let u_data = u_plane.data().unwrap();
+            let v_data = v_plane.data().unwrap();
+
+            let y_stride = y_plane.stride().unwrap();
+            let u_stride = u_plane.stride().unwrap();
+            let v_stride = v_plane.stride().unwrap();
+
+            // Create mats for all planes
+            let y_mat = unsafe {
+                Mat::new_rows_cols_with_data_unsafe(
+                    height as i32,
+                    width as i32,
+                    CV_8UC1,
+                    y_data.as_ptr() as *mut std::ffi::c_void,
+                    y_stride as usize,
+                )
+                    .unwrap()
+            };
+
+            // U and V planes have half the width and height in 4:2:0 subsampling
+            let u_mat = unsafe {
+                Mat::new_rows_cols_with_data_unsafe(
+                    (height / 2) as i32,
+                    (width / 2) as i32,
+                    CV_8UC1,
+                    u_data.as_ptr() as *mut std::ffi::c_void,
+                    u_stride as usize,
+                )
+                    .unwrap()
+            };
+
+            let v_mat = unsafe {
+                Mat::new_rows_cols_with_data_unsafe(
+                    (height / 2) as i32,
+                    (width / 2) as i32,
+                    CV_8UC1,
+                    v_data.as_ptr() as *mut std::ffi::c_void,
+                    v_stride as usize,
+                )
+                    .unwrap()
+            };
+
+            // Create a BGR mat for output
+            let mut bgr_mat =
+                unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
+
+            // Merge the planes into a single YUV mat
+            let mut yuv_mat = unsafe {
+                Mat::new_rows_cols(height as i32 * 3 / 2, width as i32, CV_8UC1)
+            }.unwrap();
+
+            // Copy Y plane (full size)
+            let y_roi_rect = opencv::core::Rect::new(0, 0, width as i32, height as i32);
+            let y_roi = y_mat.roi(y_roi_rect).unwrap();
+            y_roi.copy_to(&mut yuv_mat).unwrap();
+
+            // Copy U plane (quarter size) to the correct position
+            let u_roi_rect = opencv::core::Rect::new(0, height as i32, (width / 2) as i32, (height / 2) as i32);
+            let u_roi = u_mat.roi(u_roi_rect).unwrap();
+            u_roi.copy_to(&mut yuv_mat).unwrap();
+
+            // Copy V plane (quarter size) to the correct position
+            let v_roi_rect = opencv::core::Rect::new((width / 2) as i32, height as i32, (width / 2) as i32, (height / 2) as i32);
+            let v_roi = v_mat.roi(v_roi_rect).unwrap();
+            v_roi.copy_to(&mut yuv_mat).unwrap();
+
+            // Convert to BGR
+            imgproc::cvt_color(
+                &yuv_mat,
+                &mut bgr_mat,
+                COLOR_YUV2BGR_I420,
+                0,
+                AlgorithmHint::ALGO_HINT_DEFAULT,
+            ).unwrap();
+
+            bgr_mat
+        },
         _ => {
             panic!(
                 "Unsupported pixel format: {:?}. Common formats include YUYV, UYVY, NV12, RGB24, BGR24",

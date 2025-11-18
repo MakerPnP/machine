@@ -22,3 +22,6 @@ log              = { version = "0.4.28" }
 
 # Serialization and Deserialization
 serde            = { version = "1.0.228", features = ["derive"] }
+
+[dev-dependencies]
+x-media = "0.1.3"
