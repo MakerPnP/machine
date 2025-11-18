@@ -14,6 +14,7 @@
 use eframe::epaint::StrokeKind;
 use eframe::{CreationContext, Frame};
 use egui::{ColorImage, Context, Pos2, RichText, TextureHandle, UiBuilder, Vec2, Widget};
+use egui_ltreeview::{Action, TreeView};
 use log::{debug, error, info};
 use opencv::core::{AlgorithmHint, CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
 use opencv::imgproc;
@@ -29,7 +30,6 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
-use egui_ltreeview::{Action, TreeView};
 use video_capture::error::DeviceError;
 use video_capture::media::media_frame::MediaFrameDescription;
 use video_capture::media::video::PixelFormat;
@@ -150,7 +150,15 @@ fn camera_enumeration_thread_main() -> Result<Vec<CameraEnumerationResult>, Devi
     Ok(cameras)
 }
 
-fn camera_thread_main(app_state: Arc<Mutex<AppState>>) {
+#[derive(Debug, Clone)]
+struct ModeSelection {
+    camera_index: usize,
+    resolution: Resolution,
+    video_format: VideoFormat,
+    frame_rate: f32,
+}
+
+fn camera_thread_main(app_state: Arc<Mutex<AppState>>, mode_selection: ModeSelection) {
     // Create a default instance of camera manager
     let mut cam_mgr = match CameraManager::default() {
         Ok(cam_mgr) => cam_mgr,
@@ -160,48 +168,8 @@ fn camera_thread_main(app_state: Arc<Mutex<AppState>>) {
         }
     };
 
-    // List all camera devices
-    let devices = cam_mgr.list();
-    for (index, device) in devices.iter().enumerate() {
-        info!(
-            "device. index: {}, name: {}, id: {}",
-            index,
-            device.name(),
-            device.id()
-        );
-    }
-
-    for index in 0..devices.len() {
-        info!("Getting formats for device: {}", index);
-        let Some(device) = cam_mgr.index_mut(index) else {
-            continue;
-        };
-
-        let _ = device.set_output_handler(|_| Ok(()));
-
-        if device.start().is_ok() {
-            // Get supported formats
-            let formats = device.formats();
-            if let Ok(formats) = formats {
-                if let Some(iter) = formats.array_iter() {
-                    for format in iter {
-                        if let Variant::UInt32(code) = format["format"] {
-                            info!("format code: {:?}", code);
-                            info!("format: {:?}", VideoFormat::try_from(code).unwrap());
-                        }
-                        info!("color-range: {:?}", format["color-range"]);
-                        info!("width: {:?}", format["width"]);
-                        info!("height: {:?}", format["height"]);
-                        info!("frame-rates: {:?}", format["frame-rates"]);
-                    }
-                }
-            }
-            let _ = device.stop();
-        }
-    }
-
     // Get the first camera
-    let device = match cam_mgr.index_mut(0) {
+    let device = match cam_mgr.index_mut(mode_selection.camera_index) {
         Some(device) => device,
         None => {
             error!("no camera found");
@@ -280,9 +248,12 @@ fn camera_thread_main(app_state: Arc<Mutex<AppState>>) {
 
     // Configure the camera
     let mut option = Variant::new_dict();
-    option["width"] = 1280.into();
-    option["height"] = 720.into();
-    option["frame-rate"] = 30.0.into();
+    option["width"] = mode_selection.resolution.width.into();
+    option["height"] = mode_selection.resolution.height.into();
+    option["frame-rate"] = mode_selection.frame_rate.into();
+    let format_code: u32 = mode_selection.video_format.into();
+    option["format"] = format_code.into();
+
     if let Err(e) = device.configure(option) {
         error!("{:?}", e.to_string());
     }
@@ -674,7 +645,7 @@ impl CameraApp {
         let handle = thread::spawn(camera_enumeration_thread_main);
         ui_state.enumeration_handle = Some(handle);
     }
-    pub(crate) fn start_capture(&mut self) {
+    pub(crate) fn start_capture(&mut self, mode_selection: ModeSelection) {
         let ui_state = self.ui_state.as_mut().unwrap();
 
         if ui_state.capture_handle.is_some() {
@@ -697,7 +668,7 @@ impl CameraApp {
         // Start camera thread here as before, passing app_state.clone()
         let handle = thread::spawn({
             let app_state = ui_state.shared_state.clone();
-            move || camera_thread_main(app_state)
+            move || camera_thread_main(app_state, mode_selection)
         });
 
         ui_state.capture_handle = Some(handle);
@@ -770,21 +741,11 @@ impl eframe::App for CameraApp {
                     ui.group(|ui| {
                         ui.set_width(ui.available_width());
                         egui::Grid::new("settings").show(ui, |ui| {
-                            // TODO camera selection
-                            if false {
-                                ui.label("Camera:");
-                                egui::ComboBox::from_id_salt("camera")
-                                    .selected_text({
-                                        "First camera"
-                                    })
-                                    .show_ui(ui, |ui| {
-                                        ui.label("First camera");
-                                    });
-                                ui.end_row();
-                            }
                             let ui_state = self.ui_state.as_mut().unwrap();
                             let started = ui_state.capture_handle.is_some();
                             let enumerating = ui_state.enumeration_handle.is_some();
+                            let have_cameras = !ui_state.cameras.is_empty();
+
                             let can_start = !(started || enumerating);
 
                             ui.add_enabled_ui(can_start, |ui| {
@@ -797,30 +758,24 @@ impl eframe::App for CameraApp {
                             }
                             ui.end_row();
 
-                            ui.add_enabled_ui(can_start, |ui| {
-                                if ui.button("Start").clicked() {
-                                    self.start_capture();
-                                }
-                            });
                             ui.add_enabled_ui(started, |ui| {
                                 if ui.button("Stop").clicked() {
                                     self.stop_capture();
                                 }
                             });
+                            if have_cameras {
+                                ui.label("Double-click a framerate to start!");
+                            }
                             ui.end_row();
                         });
                     });
                     ui.separator();
                     {
                         let ui_state = self.ui_state.as_mut().unwrap();
-                        for (index, camera) in ui_state.cameras.iter().enumerate() {
-                            ui.label(format!("{}: {}", index, camera.name.as_str()));
-                        }
-
                         // FIXME the treeview takes up space after a restart even though the list is empty, so we check
                         //       remove this if statement once a solution is found
                         if !ui_state.cameras.is_empty() {
-                            let mut modes: HashMap<i32, (usize, Resolution, VideoFormat, f32)> = HashMap::new();
+                            let mut modes: HashMap<i32, ModeSelection> = HashMap::new();
 
                             let (_response, actions) = TreeView::new(ui.make_persistent_id("cameras"))
                                 .allow_drag_and_drop(false)
@@ -843,12 +798,12 @@ impl eframe::App for CameraApp {
                                             for rate in rates.iter() {
                                                 builder.leaf(node_id, format!("{}FPS", rate));
 
-                                                modes.insert(node_id, (
+                                                modes.insert(node_id, ModeSelection {
                                                     camera_index,
-                                                    resolution.clone(),
-                                                    video_format.clone(),
-                                                    rate.clone()
-                                                ));
+                                                    resolution: resolution.clone(),
+                                                    video_format: video_format.clone(),
+                                                    frame_rate: rate.clone()
+                                                });
 
                                                 node_id += 1;
                                             }
@@ -862,11 +817,20 @@ impl eframe::App for CameraApp {
 
                             for action in actions {
                                 match action {
-                                    Action::Activate(node) => {
-
-                                        if let Some(node_id) = node.selected.first() {
-                                            if let Some(mode) = modes.get(node_id) {
+                                    Action::Activate(mut node) => {
+                                        if node.selected.len() == 1 {
+                                            let node_id = node.selected.remove(0);
+                                            if let Some(mode) = modes.get(&node_id) {
                                                 info!("Selected mode {:?}", mode);
+
+                                                let ui_state = self.ui_state.as_mut().unwrap();
+                                                let started = ui_state.capture_handle.is_some();
+                                                let enumerating = ui_state.enumeration_handle.is_some();
+                                                let can_start = !(started || enumerating);
+
+                                                if can_start {
+                                                    self.start_capture(mode.clone());
+                                                }
                                             }
                                         }
                                     }
