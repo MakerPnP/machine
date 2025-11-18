@@ -17,7 +17,10 @@ use egui::{ColorImage, Context, Pos2, RichText, TextureHandle, UiBuilder, Vec2, 
 use log::{debug, error, info};
 use opencv::core::{AlgorithmHint, CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
 use opencv::imgproc;
-use opencv::imgproc::{COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2, COLOR_YUV2BGR_YVYU};
+use opencv::imgproc::{
+    COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2,
+    COLOR_YUV2BGR_YVYU,
+};
 use opencv::objdetect::CascadeClassifier;
 use opencv::prelude::*;
 use std::ffi::OsString;
@@ -373,7 +376,7 @@ where
                     y_data.as_ptr() as *mut std::ffi::c_void,
                     y_stride as usize,
                 )
-                    .unwrap()
+                .unwrap()
             };
 
             // U and V planes have half the width and height in 4:2:0 subsampling
@@ -385,7 +388,7 @@ where
                     u_data.as_ptr() as *mut std::ffi::c_void,
                     u_stride as usize,
                 )
-                    .unwrap()
+                .unwrap()
             };
 
             let v_mat = unsafe {
@@ -396,7 +399,7 @@ where
                     v_data.as_ptr() as *mut std::ffi::c_void,
                     v_stride as usize,
                 )
-                    .unwrap()
+                .unwrap()
             };
 
             // Create a BGR mat for output
@@ -404,9 +407,9 @@ where
                 unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
 
             // Merge the planes into a single YUV mat
-            let mut yuv_mat = unsafe {
-                Mat::new_rows_cols(height as i32 * 3 / 2, width as i32, CV_8UC1)
-            }.unwrap();
+            let mut yuv_mat =
+                unsafe { Mat::new_rows_cols(height as i32 * 3 / 2, width as i32, CV_8UC1) }
+                    .unwrap();
 
             // Copy Y plane (full size)
             let y_roi_rect = opencv::core::Rect::new(0, 0, width as i32, height as i32);
@@ -414,12 +417,18 @@ where
             y_roi.copy_to(&mut yuv_mat).unwrap();
 
             // Copy U plane (quarter size) to the correct position
-            let u_roi_rect = opencv::core::Rect::new(0, height as i32, (width / 2) as i32, (height / 2) as i32);
+            let u_roi_rect =
+                opencv::core::Rect::new(0, height as i32, (width / 2) as i32, (height / 2) as i32);
             let u_roi = u_mat.roi(u_roi_rect).unwrap();
             u_roi.copy_to(&mut yuv_mat).unwrap();
 
             // Copy V plane (quarter size) to the correct position
-            let v_roi_rect = opencv::core::Rect::new((width / 2) as i32, height as i32, (width / 2) as i32, (height / 2) as i32);
+            let v_roi_rect = opencv::core::Rect::new(
+                (width / 2) as i32,
+                height as i32,
+                (width / 2) as i32,
+                (height / 2) as i32,
+            );
             let v_roi = v_mat.roi(v_roi_rect).unwrap();
             v_roi.copy_to(&mut yuv_mat).unwrap();
 
@@ -430,10 +439,11 @@ where
                 COLOR_YUV2BGR_I420,
                 0,
                 AlgorithmHint::ALGO_HINT_DEFAULT,
-            ).unwrap();
+            )
+            .unwrap();
 
             bgr_mat
-        },
+        }
         _ => {
             panic!(
                 "Unsupported pixel format: {:?}. Common formats include YUYV, UYVY, NV12, RGB24, BGR24",
