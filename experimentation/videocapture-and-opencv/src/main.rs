@@ -751,3 +751,125 @@ impl eframe::App for CameraApp {
         eframe::set_value(storage, eframe::APP_KEY, self);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opencv::core::Mat;
+    use std::num::NonZeroU32;
+    use video_capture::media::media_frame::MediaFrame;
+    use video_capture::media::video::VideoFrameDescription;
+
+    #[test]
+    fn test_process_frame_yuyv() {
+        // Create test data for YUYV format
+        // YUYV format alternates Y, U, Y, V bytes (Y0 U0 Y1 V0)
+        let width = 4; // Small test frame
+        let height = 2;
+        let stride = width * 2; // 2 bytes per pixel in YUYV
+
+        // Create a simple YUYV pattern
+        let data = generate_uniform_yuyv_from_rgb(width, height, 64_u8, 128_u8, 192_u8);
+        println!("Data: {:?}", data);
+
+        let frame = MediaFrame::from_data_buffer(
+            VideoFrameDescription {
+                format: PixelFormat::YUYV,
+                color_range: Default::default(),
+                color_matrix: Default::default(),
+                color_primaries: Default::default(),
+                color_transfer_characteristics: Default::default(),
+                width: NonZeroU32::new(width).unwrap(),
+                height: NonZeroU32::new(height).unwrap(),
+                rotation: Default::default(),
+                origin: Default::default(),
+                transparent: false,
+                extra_alpha: false,
+                crop_left: 0,
+                crop_top: 0,
+                crop_right: 0,
+                crop_bottom: 0,
+            },
+            data.as_slice(),
+        )
+        .unwrap();
+
+        // This will be the resulting BGR matrix from processing
+        let mut processed_mat: Option<Mat> = None;
+
+        process_frame(&frame, |mat| {
+            // Capture the processed matrix
+            processed_mat = Some(mat);
+        });
+
+        // Verify the result
+        let mat = processed_mat.unwrap();
+
+        // Check dimensions
+        assert_eq!(mat.rows(), height as i32);
+        assert_eq!(mat.cols(), width as i32);
+
+        // Check type - should be BGR
+        assert_eq!(mat.channels(), 3); // BGR has 3 channels
+
+        // Check content (basic check)
+        let mut avg_b = 0.0;
+        let mut avg_g = 0.0;
+        let mut avg_r = 0.0;
+
+        for i in 0..height as i32 {
+            for j in 0..width as i32 {
+                let pixel = mat.at_2d::<opencv::core::Vec3b>(i, j).unwrap();
+                avg_b += pixel[0] as f64;
+                avg_g += pixel[1] as f64;
+                avg_r += pixel[2] as f64;
+            }
+        }
+
+        let total_pixels = width * height;
+        avg_b /= total_pixels as f64;
+        avg_g /= total_pixels as f64;
+        avg_r /= total_pixels as f64;
+
+        println!("BGR avg: R: {}, G: {}, B: {}", avg_r, avg_g, avg_b);
+        // Allow some margin for conversion differences
+        assert!((avg_r - 64.0).abs() < 10.0);
+        assert!((avg_g - 128.0).abs() < 10.0);
+        assert!((avg_b - 192.0).abs() < 10.0);
+    }
+
+    fn generate_uniform_yuyv_from_rgb(width: u32, height: u32, r: u8, g: u8, b: u8) -> Vec<u8> {
+        let mut yuyv_data = Vec::with_capacity((width * height * 2) as usize);
+
+        // Convert RGB to YUV
+        let (y, u, v) = rgb_to_yuv_itu(r, g, b);
+
+        // Generate uniform YUYV data
+        for _ in 0..height {
+            for _ in (0..width).step_by(2) {
+                // YUYV format: [Y0, U, Y1, V] for two pixels
+                // Since all pixels are the same, Y0 = Y1 = y
+                yuyv_data.extend_from_slice(&[y, u, y, v]);
+            }
+        }
+
+        yuyv_data
+    }
+
+    fn rgb_to_yuv_itu(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
+        let r = r as f32;
+        let g = g as f32;
+        let b = b as f32;
+
+        // BT.601
+        let y = 0.299 * r + 0.587 * g + 0.114 * b;
+        let u = -0.169 * r - 0.331 * g + 0.5 * b + 128.0;
+        let v = 0.5 * r - 0.419 * g - 0.081 * b + 128.0;
+
+        (
+            y.clamp(16.0, 235.0) as u8,
+            u.clamp(16.0, 240.0) as u8,
+            v.clamp(16.0, 240.0) as u8,
+        )
+    }
+}
