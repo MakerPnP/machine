@@ -770,6 +770,20 @@ impl eframe::App for CameraApp {
                         });
                     });
                     ui.separator();
+                    ui.group(|ui| {
+                        ui.set_width(ui.available_width());
+
+                        ui.label("OpenCV path:");
+                        let mut open_cv_path = self.open_cv_path.clone().unwrap_or_default().to_string_lossy().into_owned();
+
+                        if ui.add(egui::TextEdit::singleline(&mut open_cv_path).desired_width(ui.available_width())).changed() {
+                            self.open_cv_path = Some(open_cv_path.into());
+                        };
+
+                        ui.label("For face detection, specify the OpenCV path above.");
+                        ui.label("This program uses the `data/haarcascades/haarcascade_frontalface_default.xml` classifier from the OpenCV data directory.");
+                    });
+                    ui.separator();
                     {
                         let ui_state = self.ui_state.as_mut().unwrap();
                         // FIXME the treeview takes up space after a restart even though the list is empty, so we check
@@ -839,21 +853,6 @@ impl eframe::App for CameraApp {
                             }
                         }
                     }
-
-                    ui.separator();
-                    ui.group(|ui| {
-                        ui.set_width(ui.available_width());
-
-                        ui.label("OpenCV path:");
-                        let mut open_cv_path = self.open_cv_path.clone().unwrap_or_default().to_string_lossy().into_owned();
-
-                        if ui.add(egui::TextEdit::singleline(&mut open_cv_path).desired_width(ui.available_width())).changed() {
-                            self.open_cv_path = Some(open_cv_path.into());
-                        };
-
-                        ui.label("For face detection, specify the OpenCV path above.");
-                        ui.label("This program uses the `data/haarcascades/haarcascade_frontalface_default.xml` classifier from the OpenCV data directory.");
-                    })
                 });
         });
         egui::CentralPanel::default().show(ctx, |ui| {
