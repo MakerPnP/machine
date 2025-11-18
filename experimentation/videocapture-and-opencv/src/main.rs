@@ -29,6 +29,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
+use egui_ltreeview::{Action, TreeView};
 use video_capture::error::DeviceError;
 use video_capture::media::media_frame::MediaFrameDescription;
 use video_capture::media::video::PixelFormat;
@@ -814,6 +815,64 @@ impl eframe::App for CameraApp {
                         let ui_state = self.ui_state.as_mut().unwrap();
                         for (index, camera) in ui_state.cameras.iter().enumerate() {
                             ui.label(format!("{}: {}", index, camera.name.as_str()));
+                        }
+
+                        // FIXME the treeview takes up space after a restart even though the list is empty, so we check
+                        //       remove this if statement once a solution is found
+                        if !ui_state.cameras.is_empty() {
+                            let mut modes: HashMap<i32, (usize, Resolution, VideoFormat, f32)> = HashMap::new();
+
+                            let (_response, actions) = TreeView::new(ui.make_persistent_id("cameras"))
+                                .allow_drag_and_drop(false)
+                                .allow_multi_selection(false)
+                                .show(ui, |builder| {
+                                let mut node_id = 0;
+                                for (camera_index, camera) in ui_state.cameras.iter().enumerate() {
+                                    builder.dir(node_id, format!("{}: {}", camera_index, camera.name.as_str()));
+                                    node_id += 1;
+
+                                    for (resolution, modes_to_rates_mapping) in camera.modes.iter() {
+                                        builder.dir(node_id, format!("{:?}", resolution));
+                                        node_id += 1;
+
+                                        for (mode, rates) in modes_to_rates_mapping.iter() {
+                                            let video_format = VideoFormat::try_from(*mode).unwrap();
+                                            builder.dir(node_id, format!("{:?}", video_format));
+                                            node_id += 1;
+
+                                            for rate in rates.iter() {
+                                                builder.leaf(node_id, format!("{}FPS", rate));
+
+                                                modes.insert(node_id, (
+                                                    camera_index,
+                                                    resolution.clone(),
+                                                    video_format.clone(),
+                                                    rate.clone()
+                                                ));
+
+                                                node_id += 1;
+                                            }
+                                            builder.close_dir();
+                                        }
+                                        builder.close_dir();
+                                    }
+                                    builder.close_dir();
+                                }
+                            });
+
+                            for action in actions {
+                                match action {
+                                    Action::Activate(node) => {
+
+                                        if let Some(node_id) = node.selected.first() {
+                                            if let Some(mode) = modes.get(node_id) {
+                                                info!("Selected mode {:?}", mode);
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
                         }
                     }
 
