@@ -1,3 +1,12 @@
+//! Demonstrates how to use VideoCapture + OpenCV with egui.
+//!
+//! Does NOT use the OpenCV feature `videoio` to capture video frames.
+//!
+//! This example uses the [video_capture](https://crates.io/crates/video_capture) crate to capture video frames from a camera.
+//! The frames are then processed using OpenCV and the results are displayed using egui.
+//!
+//! The OpenCV face detection classifier is used to detect faces in the video frames.
+
 use eframe::epaint::StrokeKind;
 use eframe::{CreationContext, Frame};
 use egui::{ColorImage, Context, Pos2, RichText, TextureHandle, UiBuilder, Vec2, Widget};
@@ -5,8 +14,7 @@ use log::{debug, error, info};
 use opencv::core::{AlgorithmHint, CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
 use opencv::imgproc;
 use opencv::imgproc::{
-    COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2,
-    COLOR_YUV2BGR_YVYU,
+    COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2, COLOR_YUV2BGR_YVYU,
 };
 use opencv::objdetect::CascadeClassifier;
 use opencv::prelude::*;
@@ -24,6 +32,8 @@ use video_capture::{
 };
 
 fn main() -> eframe::Result {
+    env_logger::init();
+
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
         "VideoCapture + OpenCV",
@@ -183,7 +193,6 @@ where
 {
     let mapped = frame.map().unwrap();
     let planes = mapped.planes().unwrap();
-    let plane = planes.into_iter().next().unwrap();
 
     let MediaFrameDescription::Video(vfd) = frame.description() else {
         panic!("unsupported frame type");
@@ -191,70 +200,157 @@ where
 
     // Get format information and create appropriate OpenCV Mat
     let cv_type = match vfd.format {
-        PixelFormat::YUYV => CV_8UC2,   // YUY2, YUYV: Y0 Cb Y1 Cr (YUV 4:2:2)
-        PixelFormat::UYVY => CV_8UC2,   // UYVY: Cb Y0 Cr Y1 (YUV 4:2:2)
-        PixelFormat::YVYU => CV_8UC2,   // YVYU: Y0 Cr Y1 Cb (YUV 4:2:2)
-        PixelFormat::VYUY => CV_8UC2,   // VYUY: Cr Y0 Cb Y1 (YUV 4:2:2)
-        PixelFormat::RGB24 => CV_8UC3,  // RGB 24-bit (8-bit per channel)
-        PixelFormat::BGR24 => CV_8UC3,  // BGR 24-bit (8-bit per channel)
-        PixelFormat::ARGB32 => CV_8UC4, // ARGB 32-bit
-        PixelFormat::BGRA32 => CV_8UC4, // BGRA 32-bit
-        PixelFormat::RGBA32 => CV_8UC4, // RGBA 32-bit
-        PixelFormat::ABGR32 => CV_8UC4, // ABGR 32-bit
-        PixelFormat::Y8 => CV_8UC1,     // Grayscale 8-bit
-        _ => panic!(
-            "Unsupported pixel format: {:?}. Common formats include YUYV, UYVY, RGB24, BGR24",
-            vfd.format
-        ),
+        PixelFormat::YUYV => Some(CV_8UC2), // YUY2, YUYV: Y0 Cb Y1 Cr (YUV 4:2:2)
+        PixelFormat::UYVY => Some(CV_8UC2), // UYVY: Cb Y0 Cr Y1 (YUV 4:2:2)
+        PixelFormat::YVYU => Some(CV_8UC2), // YVYU: Y0 Cr Y1 Cb (YUV 4:2:2)
+        PixelFormat::VYUY => Some(CV_8UC2), // VYUY: Cr Y0 Cb Y1 (YUV 4:2:2)
+        PixelFormat::RGB24 => Some(CV_8UC3), // RGB 24-bit (8-bit per channel)
+        PixelFormat::BGR24 => Some(CV_8UC3), // BGR 24-bit (8-bit per channel)
+        PixelFormat::ARGB32 => Some(CV_8UC4), // ARGB 32-bit
+        PixelFormat::BGRA32 => Some(CV_8UC4), // BGRA 32-bit
+        PixelFormat::RGBA32 => Some(CV_8UC4), // RGBA 32-bit
+        PixelFormat::ABGR32 => Some(CV_8UC4), // ABGR 32-bit
+        PixelFormat::Y8 => Some(CV_8UC1),   // Grayscale 8-bit
+        _ => None,
     };
 
     let width = vfd.width.get();
     let height = vfd.height.get();
 
-    let data = plane.data().unwrap();
-    let stride = plane.stride().unwrap();
+    // Handle different pixel formats appropriately
+    let bgr_mat = match (vfd.format, cv_type) {
+        (
+            PixelFormat::YUYV | PixelFormat::UYVY | PixelFormat::YVYU | PixelFormat::VYUY,
+            Some(cv_type),
+        ) => {
+            let plane = planes.into_iter().next().unwrap();
+            let data = plane.data().unwrap();
+            let stride = plane.stride().unwrap();
 
-    //
-    // Create the OpenCV Mat based on the pixel format
-    //
+            let code = match vfd.format {
+                PixelFormat::YUYV => COLOR_YUV2BGR_YUY2,
+                PixelFormat::YVYU => COLOR_YUV2BGR_YVYU,
+                PixelFormat::UYVY => COLOR_YUV2BGR_UYVY,
+                PixelFormat::VYUY => COLOR_YUV2BGR_YUY2,
+                _ => unreachable!(),
+            };
 
-    let raw_mat = match vfd.format {
-        _ => unsafe {
-            Mat::new_rows_cols_with_data_unsafe(
-                height as i32,
-                width as i32,
-                cv_type,
-                data.as_ptr() as *mut std::ffi::c_void,
-                stride as usize, // step (bytes per row)
+            let raw_mat = unsafe {
+                Mat::new_rows_cols_with_data_unsafe(
+                    height as i32,
+                    width as i32,
+                    cv_type, // 2 channels per pixel
+                    data.as_ptr() as *mut std::ffi::c_void,
+                    stride as usize, // step (bytes per row)
+                )
+                .unwrap()
+            };
+
+            // Convert UYVY to BGR
+            let mut bgr_mat =
+                unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
+            imgproc::cvt_color(
+                &raw_mat,
+                &mut bgr_mat,
+                code,
+                0,
+                AlgorithmHint::ALGO_HINT_DEFAULT,
             )
-            .unwrap()
-        },
-    };
+            .unwrap();
 
-    // For multi-plane formats, we may need additional processing
-    let bgr_mat = unsafe {
-        match vfd.format {
-            PixelFormat::YUYV | PixelFormat::UYVY | PixelFormat::YVYU | PixelFormat::VYUY => {
-                // For YUV formats, convert to BGR for easier processing if needed
-                let mut bgr_mat = Mat::new_rows_cols(height as i32, width as i32, CV_8UC3).unwrap();
-                let code = match vfd.format {
-                    PixelFormat::YUYV => COLOR_YUV2BGR_YUY2,
-                    PixelFormat::YVYU => COLOR_YUV2BGR_YVYU,
-                    PixelFormat::UYVY => COLOR_YUV2BGR_UYVY,
-                    PixelFormat::VYUY => COLOR_YUV2BGR_YUY2,
-                    _ => unreachable!(),
-                };
+            bgr_mat
+        }
+        (PixelFormat::RGB24 | PixelFormat::BGR24, Some(cv_type)) => {
+            let plane = planes.into_iter().next().unwrap();
+            let data = plane.data().unwrap();
+            let stride = plane.stride().unwrap();
+
+            let raw_mat = unsafe {
+                Mat::new_rows_cols_with_data_unsafe(
+                    height as i32,
+                    width as i32,
+                    cv_type,
+                    data.as_ptr() as *mut std::ffi::c_void,
+                    stride as usize,
+                )
+                .unwrap()
+            };
+
+            // For RGB24, convert to BGR if needed for OpenCV processing
+            if vfd.format == PixelFormat::RGB24 {
+                let mut bgr_mat =
+                    unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
                 imgproc::cvt_color(
                     &raw_mat,
                     &mut bgr_mat,
-                    code,
+                    imgproc::COLOR_RGB2BGR,
                     0,
                     AlgorithmHint::ALGO_HINT_DEFAULT,
                 )
                 .unwrap();
                 bgr_mat
+            } else {
+                raw_mat.try_clone().unwrap()
             }
-            _ => raw_mat.try_clone().unwrap(),
+        }
+        (PixelFormat::NV12, None) => {
+            // Get Y plane (first plane) and UV plane (second plane)
+            let mut planes_iter = planes.into_iter();
+            let y_plane = planes_iter.next().unwrap();
+            let uv_plane = planes_iter.next().unwrap();
+
+            let y_data = y_plane.data().unwrap();
+            let uv_data = uv_plane.data().unwrap();
+
+            let y_stride = y_plane.stride().unwrap();
+            let uv_stride = uv_plane.stride().unwrap();
+
+            // Create mats for both planes
+            let y_mat = unsafe {
+                Mat::new_rows_cols_with_data_unsafe(
+                    height as i32,
+                    width as i32,
+                    CV_8UC1,
+                    y_data.as_ptr() as *mut std::ffi::c_void,
+                    y_stride as usize,
+                )
+                .unwrap()
+            };
+
+            // UV plane has half the height and potentially a different stride
+            let uv_mat = unsafe {
+                Mat::new_rows_cols_with_data_unsafe(
+                    (height / 2) as i32,
+                    (width / 2) as i32,
+                    CV_8UC2, // Interleaved U and V
+                    uv_data.as_ptr() as *mut std::ffi::c_void,
+                    uv_stride as usize,
+                )
+                .unwrap()
+            };
+
+            // Create a BGR mat for output
+            let mut bgr_mat =
+                unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
+
+            // Method 1: Use OpenCV's cvtColorTwoPlane
+            // This function explicitly converts from separate Y and UV planes
+            imgproc::cvt_color_two_plane(
+                &y_mat,
+                &uv_mat,
+                &mut bgr_mat,
+                COLOR_YUV2BGR_NV12,
+                AlgorithmHint::ALGO_HINT_DEFAULT,
+            )
+            .unwrap();
+
+            bgr_mat
+        }
+        _ => {
+            panic!(
+                "Unsupported pixel format: {:?}. Common formats include YUYV, UYVY, NV12, RGB24, BGR24",
+                vfd.format
+            );
         }
     };
 

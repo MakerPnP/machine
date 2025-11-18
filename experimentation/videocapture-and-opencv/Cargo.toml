@@ -4,10 +4,21 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-opencv = { version = "0.97.2", features = ["imgcodecs", "imgproc", "objdetect"], default-features = false }
-video-capture = "0.1.1"
-egui = { version = "0.33.0", features = ["persistence"] }
-eframe = { version = "0.33.2", features = ["ron", "serde", "persistence"] }
-chrono = { version = "0.4.42" }
-log = "0.4.28"
-serde = { version = "1.0.228", features = ["derive"] }
+# Computer Vision and Image Processing
+opencv           = { version = "0.97.2", features = ["imgcodecs", "imgproc", "objdetect"], default-features = false }
+video-capture    = { version = "0.1.1" }
+image            = { version = "0.25.8" }
+
+# GUI Framework and User Interface
+egui             = { version = "0.33.0", features = ["persistence"] }
+eframe           = { version = "0.33.2", features = ["ron", "serde", "persistence"] }
+
+# Time and Date Handling
+chrono           = { version = "0.4.42" }
+
+# Logging and Debugging
+env_logger       = { version = "0.11.8" }
+log              = { version = "0.4.28" }
+
+# Serialization and Deserialization
+serde            = { version = "1.0.228", features = ["derive"] }
