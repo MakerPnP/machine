@@ -23,11 +23,13 @@ use opencv::imgproc::{
 };
 use opencv::objdetect::CascadeClassifier;
 use opencv::prelude::*;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
+use video_capture::error::DeviceError;
 use video_capture::media::media_frame::MediaFrameDescription;
 use video_capture::media::video::PixelFormat;
 use video_capture::{
@@ -46,6 +48,105 @@ fn main() -> eframe::Result {
         native_options,
         Box::new(|cc| Ok(Box::new(CameraApp::new(cc)))),
     )
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Resolution {
+    width: u32,
+    height: u32,
+}
+
+#[derive(Clone, Debug)]
+struct CameraEnumerationResult {
+    id: String,
+    name: String,
+
+    // resolution/format/framerate
+    modes: BTreeMap<Resolution, BTreeMap<u32, Vec<f32>>>,
+}
+
+fn camera_enumeration_thread_main() -> Result<Vec<CameraEnumerationResult>, DeviceError> {
+    let mut cameras: Vec<CameraEnumerationResult> = vec![];
+
+    let mut cam_mgr = CameraManager::default()?;
+
+    let device_count = cam_mgr.list().len();
+
+    for index in 0..device_count {
+        info!("Getting formats for device: {}", index);
+        let Some(device) = cam_mgr.index_mut(index) else {
+            continue;
+        };
+
+        // 'device.formats' can't be called until there's an output handler set and the device is started
+        let _ = device.set_output_handler(|_| Ok(()));
+
+        if device.start().is_ok() {
+            // Get supported formats
+            let formats = device.formats();
+            if let Ok(formats) = formats {
+                if let Some(iter) = formats.array_iter() {
+                    let mut enumeration_result = CameraEnumerationResult {
+                        id: device.id().to_string(),
+                        name: device.name().to_string(),
+                        modes: Default::default(),
+                    };
+
+                    for format in iter {
+                        if let Variant::UInt32(video_format_code) = format["format"] {
+                            let Ok(video_format) = VideoFormat::try_from(video_format_code) else {
+                                continue;
+                            };
+
+                            let resolution = match (&format["width"], &format["height"]) {
+                                (Variant::UInt32(width), Variant::UInt32(height)) => {
+                                    Some(Resolution {
+                                        width: *width,
+                                        height: *height,
+                                    })
+                                }
+                                _ => None,
+                            };
+                            let Some(resolution) = resolution else {
+                                continue;
+                            };
+
+                            let frame_rates = if let Variant::Array(rates) = &format["frame-rates"]
+                            {
+                                rates
+                                    .iter()
+                                    .filter_map(|it| match it {
+                                        Variant::Float(rate) => Some(*rate),
+                                        Variant::Double(rate) => Some(*rate as f32),
+                                        _ => None,
+                                    })
+                                    .collect::<Vec<f32>>()
+                            } else {
+                                continue;
+                            };
+
+                            let format_mapping = enumeration_result
+                                .modes
+                                .entry(resolution)
+                                .or_insert(BTreeMap::new());
+
+                            let existing_frame_rates = format_mapping
+                                .entry(video_format_code)
+                                .or_insert_with(|| Vec::new());
+
+                            existing_frame_rates.extend(frame_rates);
+                        }
+                    }
+
+                    cameras.push(enumeration_result);
+                }
+            }
+            let _ = device.stop();
+        }
+    }
+    info!("cameras: {:?}", cameras);
+
+    Ok(cameras)
 }
 
 fn camera_thread_main(app_state: Arc<Mutex<AppState>>) {
@@ -558,9 +659,20 @@ struct UiState {
     latest_result: Option<ProcessingResult>,
     receiver: Receiver<ProcessingResult>,
     capture_handle: Option<JoinHandle<()>>,
+    enumeration_handle: Option<JoinHandle<Result<Vec<CameraEnumerationResult>, DeviceError>>>,
+    cameras: Vec<CameraEnumerationResult>,
 }
 
 impl CameraApp {
+    pub(crate) fn start_enumerating(&mut self) {
+        let ui_state = self.ui_state.as_mut().unwrap();
+        if ui_state.enumeration_handle.is_some() {
+            return;
+        }
+
+        let handle = thread::spawn(camera_enumeration_thread_main);
+        ui_state.enumeration_handle = Some(handle);
+    }
     pub(crate) fn start_capture(&mut self) {
         let ui_state = self.ui_state.as_mut().unwrap();
 
@@ -628,6 +740,8 @@ impl CameraApp {
             latest_result: None,
             receiver,
             capture_handle: None,
+            enumeration_handle: None,
+            cameras: Default::default(),
         };
 
         instance.ui_state = Some(ui_state);
@@ -669,7 +783,20 @@ impl eframe::App for CameraApp {
                             }
                             let ui_state = self.ui_state.as_mut().unwrap();
                             let started = ui_state.capture_handle.is_some();
-                            ui.add_enabled_ui(!started, |ui| {
+                            let enumerating = ui_state.enumeration_handle.is_some();
+                            let can_start = !(started || enumerating);
+
+                            ui.add_enabled_ui(can_start, |ui| {
+                                if ui.button("Enumerate").clicked() {
+                                    self.start_enumerating();
+                                }
+                            });
+                            if enumerating {
+                                ui.spinner();
+                            }
+                            ui.end_row();
+
+                            ui.add_enabled_ui(can_start, |ui| {
                                 if ui.button("Start").clicked() {
                                     self.start_capture();
                                 }
@@ -682,6 +809,14 @@ impl eframe::App for CameraApp {
                             ui.end_row();
                         });
                     });
+                    ui.separator();
+                    {
+                        let ui_state = self.ui_state.as_mut().unwrap();
+                        for (index, camera) in ui_state.cameras.iter().enumerate() {
+                            ui.label(format!("{}: {}", index, camera.name.as_str()));
+                        }
+                    }
+
                     ui.separator();
                     ui.group(|ui| {
                         ui.set_width(ui.available_width());
@@ -759,6 +894,15 @@ impl eframe::App for CameraApp {
         if ui_state.capture_handle.is_some() {
             // TODO use request_repaint_after() based on the camera frame rate
             ctx.request_repaint();
+        }
+
+        if let Some(handle) = ui_state.enumeration_handle.as_mut() {
+            if handle.is_finished() {
+                let handle = ui_state.enumeration_handle.take().unwrap();
+                if let Ok(Ok(cameras)) = handle.join() {
+                    ui_state.cameras = cameras;
+                }
+            }
         }
     }
 
