@@ -2,10 +2,14 @@ use eframe::epaint::StrokeKind;
 use eframe::{CreationContext, Frame};
 use egui::{ColorImage, Context, Pos2, RichText, TextureHandle, UiBuilder, Vec2, Widget};
 use log::{debug, error, info};
-use opencv::core::{AlgorithmHint, CV_8UC2, Vector};
+use opencv::core::{AlgorithmHint, CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
+use opencv::imgproc;
+use opencv::imgproc::{
+    COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2,
+    COLOR_YUV2BGR_YVYU,
+};
 use opencv::objdetect::CascadeClassifier;
 use opencv::prelude::*;
-use opencv::imgproc;
 use std::ffi::OsString;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -93,7 +97,7 @@ fn camera_thread_main(app_state: Arc<Mutex<AppState>>) {
                         // convert into egui specific types and upload texture into the GPU
                         //
 
-                        let color_image = mat_to_color_image(&mat);
+                        let color_image = bgr_mat_to_color_image(&mat);
                         let texture_handle = app_state.context.load_texture(
                             "camera",
                             color_image,
@@ -185,12 +189,24 @@ where
         panic!("unsupported frame type");
     };
 
-    if vfd.format != PixelFormat::YUYV {
-        panic!(
-            "unsupported pixel format, YUYV required. format: {:?}",
+    // Get format information and create appropriate OpenCV Mat
+    let cv_type = match vfd.format {
+        PixelFormat::YUYV => CV_8UC2,   // YUY2, YUYV: Y0 Cb Y1 Cr (YUV 4:2:2)
+        PixelFormat::UYVY => CV_8UC2,   // UYVY: Cb Y0 Cr Y1 (YUV 4:2:2)
+        PixelFormat::YVYU => CV_8UC2,   // YVYU: Y0 Cr Y1 Cb (YUV 4:2:2)
+        PixelFormat::VYUY => CV_8UC2,   // VYUY: Cr Y0 Cb Y1 (YUV 4:2:2)
+        PixelFormat::RGB24 => CV_8UC3,  // RGB 24-bit (8-bit per channel)
+        PixelFormat::BGR24 => CV_8UC3,  // BGR 24-bit (8-bit per channel)
+        PixelFormat::ARGB32 => CV_8UC4, // ARGB 32-bit
+        PixelFormat::BGRA32 => CV_8UC4, // BGRA 32-bit
+        PixelFormat::RGBA32 => CV_8UC4, // RGBA 32-bit
+        PixelFormat::ABGR32 => CV_8UC4, // ABGR 32-bit
+        PixelFormat::Y8 => CV_8UC1,     // Grayscale 8-bit
+        _ => panic!(
+            "Unsupported pixel format: {:?}. Common formats include YUYV, UYVY, RGB24, BGR24",
             vfd.format
-        );
-    }
+        ),
+    };
 
     let width = vfd.width.get();
     let height = vfd.height.get();
@@ -198,20 +214,51 @@ where
     let data = plane.data().unwrap();
     let stride = plane.stride().unwrap();
 
-    let raw_mat = unsafe {
-        Mat::new_rows_cols_with_data_unsafe(
-            height as i32,
-            width as i32, // number of pixels
-            CV_8UC2,      // 2 channels per pixel
-            data.as_ptr() as *mut std::ffi::c_void,
-            stride as usize, // step (bytes per row)
-        )
-        .unwrap()
+    //
+    // Create the OpenCV Mat based on the pixel format
+    //
+
+    let raw_mat = match vfd.format {
+        _ => unsafe {
+            Mat::new_rows_cols_with_data_unsafe(
+                height as i32,
+                width as i32,
+                cv_type,
+                data.as_ptr() as *mut std::ffi::c_void,
+                stride as usize, // step (bytes per row)
+            )
+            .unwrap()
+        },
     };
 
-    let mat = raw_mat.try_clone().unwrap();
+    // For multi-plane formats, we may need additional processing
+    let bgr_mat = unsafe {
+        match vfd.format {
+            PixelFormat::YUYV | PixelFormat::UYVY | PixelFormat::YVYU | PixelFormat::VYUY => {
+                // For YUV formats, convert to BGR for easier processing if needed
+                let mut bgr_mat = Mat::new_rows_cols(height as i32, width as i32, CV_8UC3).unwrap();
+                let code = match vfd.format {
+                    PixelFormat::YUYV => COLOR_YUV2BGR_YUY2,
+                    PixelFormat::YVYU => COLOR_YUV2BGR_YVYU,
+                    PixelFormat::UYVY => COLOR_YUV2BGR_UYVY,
+                    PixelFormat::VYUY => COLOR_YUV2BGR_YUY2,
+                    _ => unreachable!(),
+                };
+                imgproc::cvt_color(
+                    &raw_mat,
+                    &mut bgr_mat,
+                    code,
+                    0,
+                    AlgorithmHint::ALGO_HINT_DEFAULT,
+                )
+                .unwrap();
+                bgr_mat
+            }
+            _ => raw_mat.try_clone().unwrap(),
+        }
+    };
 
-    f(mat);
+    f(bgr_mat);
 }
 
 fn detect_faces(
@@ -224,7 +271,7 @@ fn detect_faces(
     imgproc::cvt_color(
         mat,
         &mut gray,
-        imgproc::COLOR_YUV2GRAY_YUYV,
+        imgproc::COLOR_BGR2GRAY,
         0,
         AlgorithmHint::ALGO_HINT_DEFAULT,
     )?;
@@ -253,27 +300,16 @@ fn detect_faces(
     Ok(faces)
 }
 
-fn mat_to_color_image(mat: &Mat) -> ColorImage {
-    // Convert YUYV to RGB
-    let mut rgb = Mat::default();
-    imgproc::cvt_color(
-        mat,
-        &mut rgb,
-        imgproc::COLOR_YUV2RGB_YUYV,
-        0,
-        opencv::core::AlgorithmHint::ALGO_HINT_DEFAULT,
-    )
-    .unwrap();
-
-    let (width, height) = (rgb.cols() as usize, rgb.rows() as usize);
-    let data = rgb.data_bytes().unwrap();
+fn bgr_mat_to_color_image(bgr_mat: &Mat) -> ColorImage {
+    let (width, height) = (bgr_mat.cols() as usize, bgr_mat.rows() as usize);
+    let data = bgr_mat.data_bytes().unwrap();
 
     // Convert to RGBA for egui
     let mut rgba = Vec::with_capacity(width * height * 4);
     for chunk in data.chunks_exact(3) {
-        rgba.push(chunk[0]); // R
+        rgba.push(chunk[2]); // R
         rgba.push(chunk[1]); // G
-        rgba.push(chunk[2]); // B
+        rgba.push(chunk[0]); // B
         rgba.push(255); // A
     }
 
