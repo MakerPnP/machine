@@ -35,6 +35,7 @@ use video_capture::{
     device::{Device, OutputDevice},
     variant::Variant,
 };
+use x_media::video::VideoFormat;
 
 fn main() -> eframe::Result {
     env_logger::init();
@@ -66,6 +67,35 @@ fn camera_thread_main(app_state: Arc<Mutex<AppState>>) {
             device.name(),
             device.id()
         );
+    }
+
+    for index in 0..devices.len() {
+        info!("Getting formats for device: {}", index);
+        let Some(device) = cam_mgr.index_mut(index) else {
+            continue;
+        };
+
+        let _ = device.set_output_handler(|_| Ok(()));
+
+        if device.start().is_ok() {
+            // Get supported formats
+            let formats = device.formats();
+            if let Ok(formats) = formats {
+                if let Some(iter) = formats.array_iter() {
+                    for format in iter {
+                        if let Variant::UInt32(code) = format["format"] {
+                            info!("format code: {:?}", code);
+                            info!("format: {:?}", VideoFormat::try_from(code).unwrap());
+                        }
+                        info!("color-range: {:?}", format["color-range"]);
+                        info!("width: {:?}", format["width"]);
+                        info!("height: {:?}", format["height"]);
+                        info!("frame-rates: {:?}", format["frame-rates"]);
+                    }
+                }
+            }
+            let _ = device.stop();
+        }
     }
 
     // Get the first camera
@@ -158,20 +188,6 @@ fn camera_thread_main(app_state: Arc<Mutex<AppState>>) {
     // Start the camera
     if let Err(e) = device.start() {
         error!("{:?}", e.to_string());
-    }
-
-    // Get supported formats
-    let formats = device.formats();
-    if let Ok(formats) = formats {
-        if let Some(iter) = formats.array_iter() {
-            for format in iter {
-                info!("format: {:?}", format["format"]);
-                info!("color-range: {:?}", format["color-range"]);
-                info!("width: {:?}", format["width"]);
-                info!("height: {:?}", format["height"]);
-                info!("frame-rates: {:?}", format["frame-rates"]);
-            }
-        }
     }
 
     loop {
