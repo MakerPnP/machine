@@ -913,6 +913,9 @@ impl eframe::App for CameraApp {
                     }
                 });
         });
+
+        let mut camera_to_close = vec![];
+
         egui::CentralPanel::default().show(ctx, |ui| {
             let ui_state = self.ui_state.as_mut().unwrap();
 
@@ -929,6 +932,7 @@ impl eframe::App for CameraApp {
                 let constrain_rect =
                     Rect::from_min_size(ui.max_rect().min, Vec2::splat(f32::INFINITY));
 
+                let mut open = true;
                 egui::Window::new(format!(
                     "{} [{} * {}] @ {}FPS",
                     camera_enumeration_result.name.clone(),
@@ -938,6 +942,7 @@ impl eframe::App for CameraApp {
                 ))
                 .id(ui.id().with(camera_id))
                 .movable(true)
+                .open(&mut open)
                 .resizable(true)
                 .scroll(true)
                 .default_size(size)
@@ -1033,8 +1038,17 @@ impl eframe::App for CameraApp {
                         });
                     }
                 });
+
+                // handling window closing
+                if !open {
+                    camera_to_close.push(camera_id.clone());
+                }
             }
         });
+
+        for camera_id in camera_to_close {
+            self.stop_capture(&camera_id);
+        }
 
         let ui_state = self.ui_state.as_mut().unwrap();
         if let Some(handle) = ui_state.enumeration_handle.as_mut() {
