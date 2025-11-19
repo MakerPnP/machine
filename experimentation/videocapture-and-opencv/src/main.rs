@@ -153,12 +153,13 @@ fn camera_enumeration_thread_main() -> Result<Vec<CameraEnumerationResult>, Devi
 #[derive(Debug, Clone)]
 struct ModeSelection {
     camera_index: usize,
+    id: String,
     resolution: Resolution,
     video_format: VideoFormat,
     frame_rate: f32,
 }
 
-fn camera_thread_main(app_state: Arc<Mutex<AppState>>, mode_selection: ModeSelection) {
+fn camera_thread_main(shared_state: Arc<Mutex<CameraSharedState>>, mode_selection: ModeSelection) {
     // Create a default instance of camera manager
     let mut cam_mgr = match CameraManager::default() {
         Ok(cam_mgr) => cam_mgr,
@@ -179,7 +180,7 @@ fn camera_thread_main(app_state: Arc<Mutex<AppState>>, mode_selection: ModeSelec
 
     // Set the output handler for the camera
     if let Err(e) = device.set_output_handler({
-        let app_state = app_state.clone();
+        let app_state = shared_state.clone();
         move |frame| {
             let capture_timestamp = chrono::Utc::now();
 
@@ -267,7 +268,7 @@ fn camera_thread_main(app_state: Arc<Mutex<AppState>>, mode_selection: ModeSelec
         thread::sleep(std::time::Duration::from_millis(100));
 
         {
-            let mut app_state = app_state.lock().unwrap();
+            let mut app_state = shared_state.lock().unwrap();
             if app_state.shutdown_flag {
                 app_state.shutdown_flag = false;
                 break;
@@ -599,14 +600,14 @@ fn bgr_mat_to_color_image(bgr_mat: &Mat) -> ColorImage {
     ColorImage::from_rgba_unmultiplied([width, height], &rgba)
 }
 
-struct AppState {
+struct CameraSharedState {
     context: egui::Context,
     frame_sender: Sender<ProcessingResult>,
     shutdown_flag: bool,
     face_classifier: Option<CascadeClassifier>,
 }
 
-impl AppState {
+impl CameraSharedState {
     fn new(frame_sender: Sender<ProcessingResult>, context: Context) -> Self {
         Self {
             frame_sender,
@@ -627,12 +628,16 @@ struct CameraApp {
 }
 
 struct UiState {
-    shared_state: Arc<Mutex<AppState>>,
+    enumeration_handle: Option<JoinHandle<Result<Vec<CameraEnumerationResult>, DeviceError>>>,
+    enumerated_cameras: Vec<CameraEnumerationResult>,
+    cameras: HashMap<String, CameraState>,
+}
+
+struct CameraState {
     latest_result: Option<ProcessingResult>,
     receiver: Receiver<ProcessingResult>,
-    capture_handle: Option<JoinHandle<()>>,
-    enumeration_handle: Option<JoinHandle<Result<Vec<CameraEnumerationResult>, DeviceError>>>,
-    cameras: Vec<CameraEnumerationResult>,
+    capture_handle: JoinHandle<()>,
+    shared_state: Arc<Mutex<CameraSharedState>>,
 }
 
 impl CameraApp {
@@ -645,47 +650,65 @@ impl CameraApp {
         let handle = thread::spawn(camera_enumeration_thread_main);
         ui_state.enumeration_handle = Some(handle);
     }
-    pub(crate) fn start_capture(&mut self, mode_selection: ModeSelection) {
+    pub(crate) fn start_capture(&mut self, mode_selection: ModeSelection, context: Context) {
         let ui_state = self.ui_state.as_mut().unwrap();
 
-        if ui_state.capture_handle.is_some() {
+        if ui_state.cameras.contains_key(&mode_selection.id) {
             return;
         }
 
-        {
-            let mut app_state = ui_state.shared_state.lock().unwrap();
+        let camera_id = mode_selection.id.clone();
+        let (frame_sender, receiver) = std::sync::mpsc::channel::<ProcessingResult>();
 
-            if let Some(path) = self.open_cv_path.as_ref() {
-                let path = std::path::Path::new(&path)
-                    .join("data/haarcascades/haarcascade_frontalface_default.xml");
+        let mut camera_shared_state = CameraSharedState::new(frame_sender, context);
+        if let Some(path) = self.open_cv_path.as_ref() {
+            let path = std::path::Path::new(&path)
+                .join("data/haarcascades/haarcascade_frontalface_default.xml");
 
-                app_state.face_classifier = CascadeClassifier::new(path.to_str().unwrap())
-                    .inspect_err(|e| error!("{}", e.to_string()))
-                    .ok();
-            }
+            camera_shared_state.face_classifier = CascadeClassifier::new(path.to_str().unwrap())
+                .inspect_err(|e| error!("{}", e.to_string()))
+                .ok();
         }
 
-        // Start camera thread here as before, passing app_state.clone()
+        let camera_shared_state = Arc::new(Mutex::new(camera_shared_state));
+
         let handle = thread::spawn({
-            let app_state = ui_state.shared_state.clone();
-            move || camera_thread_main(app_state, mode_selection)
+            let camera_shared_state = camera_shared_state.clone();
+            move || camera_thread_main(camera_shared_state, mode_selection)
         });
 
-        ui_state.capture_handle = Some(handle);
+        let camera_state = CameraState {
+            shared_state: camera_shared_state,
+            latest_result: None,
+            receiver,
+            capture_handle: handle,
+        };
+
+        ui_state.cameras.insert(camera_id, camera_state);
     }
 
-    pub(crate) fn stop_capture(&mut self) {
+    pub(crate) fn stop_capture(&mut self, camera_id: &String) {
         let ui_state = self.ui_state.as_mut().unwrap();
 
-        if !ui_state.capture_handle.is_some() {
+        if !ui_state.cameras.contains_key(camera_id) {
             return;
         }
 
+        let camera_state = ui_state.cameras.remove(camera_id).unwrap();
+
         {
-            let mut app_state = ui_state.shared_state.lock().unwrap();
+            let mut app_state = camera_state.shared_state.lock().unwrap();
             app_state.shutdown_flag = true;
         }
-        ui_state.capture_handle.take().unwrap().join().unwrap();
+        camera_state.capture_handle.join().unwrap();
+    }
+
+    pub(crate) fn stop_all_cameras(&mut self) {
+        let ui_state = self.ui_state.as_mut().unwrap();
+        let ids = ui_state.cameras.keys().cloned().collect::<Vec<_>>();
+        for id in ids {
+            self.stop_capture(&id);
+        }
     }
 }
 
@@ -704,15 +727,9 @@ impl CameraApp {
             Default::default()
         };
 
-        let (frame_sender, receiver) = std::sync::mpsc::channel::<ProcessingResult>();
-
-        let shared_state = Arc::new(Mutex::new(AppState::new(frame_sender, cc.egui_ctx.clone())));
         let ui_state = UiState {
-            shared_state,
-            latest_result: None,
-            receiver,
-            capture_handle: None,
             enumeration_handle: None,
+            enumerated_cameras: Default::default(),
             cameras: Default::default(),
         };
 
@@ -742,13 +759,13 @@ impl eframe::App for CameraApp {
                         ui.set_width(ui.available_width());
                         egui::Grid::new("settings").show(ui, |ui| {
                             let ui_state = self.ui_state.as_mut().unwrap();
-                            let started = ui_state.capture_handle.is_some();
+                            let cameras_running = !ui_state.cameras.is_empty();
                             let enumerating = ui_state.enumeration_handle.is_some();
-                            let have_cameras = !ui_state.cameras.is_empty();
+                            let have_enumerated_cameras = !ui_state.enumerated_cameras.is_empty();
 
-                            let can_start = !(started || enumerating);
+                            let can_start_enumeration = !(cameras_running || enumerating);
 
-                            ui.add_enabled_ui(can_start, |ui| {
+                            ui.add_enabled_ui(can_start_enumeration, |ui| {
                                 if ui.button("Enumerate").clicked() {
                                     self.start_enumerating();
                                 }
@@ -758,12 +775,14 @@ impl eframe::App for CameraApp {
                             }
                             ui.end_row();
 
-                            ui.add_enabled_ui(started, |ui| {
-                                if ui.button("Stop").clicked() {
-                                    self.stop_capture();
+                            ui.add_enabled_ui(cameras_running, |ui| {
+                                if ui.button("Stop all").clicked() {
+                                    self.stop_all_cameras();
                                 }
                             });
-                            if have_cameras {
+                            ui.end_row();
+
+                            if have_enumerated_cameras {
                                 ui.label("Double-click a framerate to start!");
                             }
                             ui.end_row();
@@ -788,7 +807,7 @@ impl eframe::App for CameraApp {
                         let ui_state = self.ui_state.as_mut().unwrap();
                         // FIXME the treeview takes up space after a restart even though the list is empty, so we check
                         //       remove this if statement once a solution is found
-                        if !ui_state.cameras.is_empty() {
+                        if !ui_state.enumerated_cameras.is_empty() {
                             let mut modes: HashMap<i32, ModeSelection> = HashMap::new();
 
                             let (_response, actions) = TreeView::new(ui.make_persistent_id("cameras"))
@@ -796,7 +815,7 @@ impl eframe::App for CameraApp {
                                 .allow_multi_selection(false)
                                 .show(ui, |builder| {
                                 let mut node_id = 0;
-                                for (camera_index, camera) in ui_state.cameras.iter().enumerate() {
+                                for (camera_index, camera) in ui_state.enumerated_cameras.iter().enumerate() {
                                     builder.dir(node_id, format!("{}: {}", camera_index, camera.name.as_str()));
                                     node_id += 1;
 
@@ -814,6 +833,7 @@ impl eframe::App for CameraApp {
 
                                                 modes.insert(node_id, ModeSelection {
                                                     camera_index,
+                                                    id: camera.id.clone(),
                                                     resolution: resolution.clone(),
                                                     video_format: video_format.clone(),
                                                     frame_rate: rate.clone()
@@ -838,12 +858,14 @@ impl eframe::App for CameraApp {
                                                 info!("Selected mode {:?}", mode);
 
                                                 let ui_state = self.ui_state.as_mut().unwrap();
-                                                let started = ui_state.capture_handle.is_some();
                                                 let enumerating = ui_state.enumeration_handle.is_some();
-                                                let can_start = !(started || enumerating);
 
-                                                if can_start {
-                                                    self.start_capture(mode.clone());
+                                                if !enumerating {
+                                                    let started = ui_state.cameras.contains_key(&mode.id);
+                                                    if started {
+                                                        self.stop_capture(&mode.id);
+                                                    }
+                                                    self.start_capture(mode.clone(), ui.ctx().clone());
                                                 }
                                             }
                                         }
@@ -857,72 +879,94 @@ impl eframe::App for CameraApp {
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             let ui_state = self.ui_state.as_mut().unwrap();
-            if let Ok(frame) = ui_state.receiver.try_recv() {
-                ui_state.latest_result = Some(frame);
-            }
 
-            if let Some(processing_result) = &ui_state.latest_result {
-                egui::Frame::NONE.show(ui, |ui| {
-                    let image_response = egui::Image::new(&processing_result.texture)
-                        .max_size(ui.available_size())
-                        .maintain_aspect_ratio(true)
-                        .ui(ui);
+            for (camera_id, camera_state) in ui_state.cameras.iter_mut() {
+                let Some(camera_enumeration_result) = ui_state
+                    .enumerated_cameras
+                    .iter()
+                    .find(|it| it.id == *camera_id)
+                else {
+                    continue;
+                };
 
-                    let painter = ui.painter();
+                // TODO use request_repaint_after() based on the camera frame rate
+                ctx.request_repaint();
 
-                    let image_size = image_response.rect.size();
+                // TODO set the default window size to the selected resolution
+                egui::Window::new(camera_enumeration_result.name.clone())
+                    .id(ui.id().with(camera_id))
+                    .movable(true)
+                    .resizable(true)
+                    .scroll(true)
+                    .constrain_to(ui.max_rect())
+                    .show(&ctx, |ui| {
+                        if let Ok(frame) = camera_state.receiver.try_recv() {
+                            camera_state.latest_result = Some(frame);
+                        }
 
-                    let top_left = image_response.rect.min;
+                        if let Some(processing_result) = &camera_state.latest_result {
+                            egui::Frame::NONE.show(ui, |ui| {
+                                let image_response = egui::Image::new(&processing_result.texture)
+                                    .max_size(ui.available_size())
+                                    .maintain_aspect_ratio(true)
+                                    .ui(ui);
 
-                    let scale = Vec2::new(
-                        image_size.x / processing_result.size.x,
-                        image_size.y / processing_result.size.y,
-                    );
+                                let painter = ui.painter();
 
-                    for face in &processing_result.faces {
-                        // Create rectangles for each face, adjusting the scale image, and offsetting them from the top left of the rendered image.
-                        let rect = egui::Rect::from_min_size(
-                            egui::pos2(face.min.x * scale.x, face.min.y * scale.y)
-                                + top_left.to_vec2(),
-                            egui::vec2(face.width() * scale.x, face.height() * scale.y),
-                        );
-                        painter.rect_stroke(
-                            rect,
-                            0.0,
-                            (2.0, egui::Color32::GREEN),
-                            StrokeKind::Inside,
-                        );
-                    }
+                                let image_size = image_response.rect.size();
 
-                    let overlay_clip_rect = image_response.rect;
+                                let top_left = image_response.rect.min;
 
-                    let mut overlay_ui = ui.new_child(UiBuilder::new().max_rect(overlay_clip_rect));
-                    overlay_ui.set_clip_rect(overlay_clip_rect);
-                    let _ = egui::Frame::default().show(&mut overlay_ui, |ui| {
-                        ui.add(
-                            egui::Label::new(
-                                RichText::new(format!("{}", processing_result.timestamp))
-                                    .monospace()
-                                    .color(egui::Color32::GREEN),
-                            )
-                            .selectable(false),
-                        );
+                                let scale = Vec2::new(
+                                    image_size.x / processing_result.size.x,
+                                    image_size.y / processing_result.size.y,
+                                );
+
+                                for face in &processing_result.faces {
+                                    // Create rectangles for each face, adjusting the scale image, and offsetting them from the top left of the rendered image.
+                                    let rect = egui::Rect::from_min_size(
+                                        egui::pos2(face.min.x * scale.x, face.min.y * scale.y)
+                                            + top_left.to_vec2(),
+                                        egui::vec2(face.width() * scale.x, face.height() * scale.y),
+                                    );
+                                    painter.rect_stroke(
+                                        rect,
+                                        0.0,
+                                        (2.0, egui::Color32::GREEN),
+                                        StrokeKind::Inside,
+                                    );
+                                }
+
+                                let overlay_clip_rect = image_response.rect;
+
+                                let mut overlay_ui =
+                                    ui.new_child(UiBuilder::new().max_rect(overlay_clip_rect));
+                                overlay_ui.set_clip_rect(overlay_clip_rect);
+                                let _ = egui::Frame::default().show(&mut overlay_ui, |ui| {
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(format!(
+                                                "{}",
+                                                processing_result.timestamp
+                                            ))
+                                            .monospace()
+                                            .color(egui::Color32::GREEN),
+                                        )
+                                        .selectable(false),
+                                    );
+                                });
+                            });
+                        }
                     });
-                });
             }
         });
 
         let ui_state = self.ui_state.as_mut().unwrap();
-        if ui_state.capture_handle.is_some() {
-            // TODO use request_repaint_after() based on the camera frame rate
-            ctx.request_repaint();
-        }
-
         if let Some(handle) = ui_state.enumeration_handle.as_mut() {
             if handle.is_finished() {
                 let handle = ui_state.enumeration_handle.take().unwrap();
                 if let Ok(Ok(cameras)) = handle.join() {
-                    ui_state.cameras = cameras;
+                    ui_state.enumerated_cameras = cameras;
                 }
             }
         }
@@ -931,6 +975,10 @@ impl eframe::App for CameraApp {
     /// Called by the framework to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, self);
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.stop_all_cameras();
     }
 }
 
