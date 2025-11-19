@@ -13,7 +13,7 @@
 
 use eframe::epaint::StrokeKind;
 use eframe::{CreationContext, Frame};
-use egui::{ColorImage, Context, Pos2, Rect, RichText, TextureHandle, UiBuilder, Vec2, Widget};
+use egui::{Color32, ColorImage, Context, Pos2, Rect, RichText, TextureHandle, UiBuilder, Vec2, Widget};
 use egui_ltreeview::{Action, TreeView};
 use log::{debug, error, info, trace};
 use opencv::core::{AlgorithmHint, CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
@@ -213,11 +213,16 @@ fn camera_thread_main(shared_state: Arc<Mutex<CameraSharedState>>, mode_selectio
                     process_frame(&frame, |mat| {
                         let mut app_state = app_state.lock().unwrap();
 
-                        let faces = app_state
-                            .face_classifier
-                            .as_mut()
-                            .map(|mut classifier| detect_faces(&mat, &mut classifier).ok())
-                            .flatten();
+                        let faces = match app_state.detect_faces {
+                            true => {
+                                app_state
+                                    .face_classifier
+                                    .as_mut()
+                                    .map(|mut classifier| detect_faces(&mat, &mut classifier).ok())
+                                    .flatten()
+                            }
+                            false => Option::<Vector<opencv::core::Rect>>::None,
+                        };
 
                         //
                         // convert into egui specific types and upload texture into the GPU
@@ -616,6 +621,7 @@ struct CameraSharedState {
     frame_sender: Sender<ProcessingResult>,
     shutdown_flag: bool,
     face_classifier: Option<CascadeClassifier>,
+    detect_faces: bool,
 }
 
 impl CameraSharedState {
@@ -625,6 +631,7 @@ impl CameraSharedState {
             context,
             shutdown_flag: false,
             face_classifier: None,
+            detect_faces: true,
         }
     }
 }
@@ -655,6 +662,10 @@ struct CameraState {
     capture_handle: JoinHandle<()>,
     shared_state: Arc<Mutex<CameraSharedState>>,
     mode: ModeSelection,
+
+    /// duplicate of the same value in CameraSharedState, to avoid holding the shared state lock while rendering the UI.
+    detect_faces: bool,
+    can_detect_faces: bool,
 }
 
 impl CameraApp {
@@ -679,6 +690,8 @@ impl CameraApp {
         let camera_id = mode_selection.id.clone();
         let (frame_sender, receiver) = std::sync::mpsc::channel::<ProcessingResult>();
 
+        let mut detect_faces = false;
+
         let mut camera_shared_state = CameraSharedState::new(frame_sender, context);
         if let Some(path) = self.open_cv_path.as_ref() {
             let path = std::path::Path::new(&path)
@@ -687,7 +700,13 @@ impl CameraApp {
             camera_shared_state.face_classifier = CascadeClassifier::new(path.to_str().unwrap())
                 .inspect_err(|e| error!("{}", e.to_string()))
                 .ok();
+
+            detect_faces = true;
+            // propagate the setting to the shared state
+            camera_shared_state.detect_faces = detect_faces;
         }
+
+        let can_detect_faces = camera_shared_state.face_classifier.is_some();
 
         let camera_shared_state = Arc::new(Mutex::new(camera_shared_state));
 
@@ -703,6 +722,9 @@ impl CameraApp {
             receiver,
             capture_handle: handle,
             mode: mode_selection,
+
+            can_detect_faces,
+            detect_faces,
         };
 
         ui_state.cameras.insert(camera_id, camera_state);
@@ -949,12 +971,22 @@ impl eframe::App for CameraApp {
                 .max_size(size)
                 .constrain_to(constrain_rect)
                 .show(&ctx, |ui| {
-                    if let Ok(processing_result) = camera_state.receiver.try_recv() {
+                    // drain the receiver so we don't render old frames that we didn't have time to display
+                    let mut received_frames_counter = 0;
+                    loop {
+                        let processing_result = camera_state.receiver.try_recv();
+                        if processing_result.is_err() {
+                            break
+                        }
+                        received_frames_counter += 1;
+                        camera_state.latest_result = Some(processing_result.unwrap());
+                    }
+
+                    if received_frames_counter > 0 {
                         trace!(
-                            "Received frame. Camera: {}, instant: {:?}",
-                            camera_state.mode.camera_index, processing_result.instant
+                            "Received frame(s). Camera: {}, frames: {:?}, instant: {:?}",
+                            camera_state.mode.camera_index, received_frames_counter, camera_state.latest_result.as_ref().unwrap().instant
                         );
-                        camera_state.latest_result = Some(processing_result);
                     }
 
                     // recalculate the refresh_at
@@ -1026,14 +1058,39 @@ impl eframe::App for CameraApp {
                                 ui.new_child(UiBuilder::new().max_rect(overlay_clip_rect));
                             overlay_ui.set_clip_rect(overlay_clip_rect);
                             let _ = egui::Frame::default().show(&mut overlay_ui, |ui| {
-                                ui.add(
-                                    egui::Label::new(
-                                        RichText::new(format!("{}", processing_result.timestamp))
-                                            .monospace()
-                                            .color(egui::Color32::GREEN),
-                                    )
-                                    .selectable(false),
-                                );
+                                egui::Sides::new().show(
+                                    ui,
+                                    |ui|{
+                                        egui::Label::new(
+                                            RichText::new(format!("{}", processing_result.timestamp))
+                                                .monospace()
+                                                .color(egui::Color32::GREEN),
+                                        )
+                                            .selectable(false)
+                                            .ui(ui);
+                                    },
+                                    |ui|{
+                                        ui.add_enabled_ui(camera_state.can_detect_faces, |ui|{
+                                            if egui::Button::selectable(camera_state.detect_faces,"☺")
+                                                .ui(ui)
+                                                .clicked() {
+                                                camera_state.detect_faces = !camera_state.detect_faces;
+
+                                                // propagate the change the shared state.
+                                                camera_state.shared_state.lock().unwrap().detect_faces = camera_state.detect_faces;
+                                            }
+                                        });
+
+                                        let color = match received_frames_counter {
+                                            0 => Color32::GREEN,
+                                            1 => Color32::LIGHT_GREEN,
+                                            _ => Color32::RED,
+                                        };
+                                        ui.add(
+                                            egui::Label::new(RichText::new("*").monospace().color(color))
+                                                .selectable(false),
+                                        );
+                                    });
                             });
                         });
                     }
@@ -1070,6 +1127,7 @@ impl eframe::App for CameraApp {
 
             ctx.request_repaint_after(remaining_time);
         }
+        ctx.request_repaint();
     }
 
     /// Called by the framework to save state before shutdown.
