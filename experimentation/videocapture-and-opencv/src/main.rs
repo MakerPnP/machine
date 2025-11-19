@@ -695,7 +695,7 @@ impl CameraApp {
         let mut camera_shared_state = CameraSharedState::new(frame_sender, context);
         if let Some(path) = self.open_cv_path.as_ref() {
             let path = std::path::Path::new(&path)
-                .join("data/haarcascades/haarcascade_frontalface_default.xml");
+                .join("haarcascades/haarcascade_frontalface_default.xml");
 
             camera_shared_state.face_classifier = CascadeClassifier::new(path.to_str().unwrap())
                 .inspect_err(|e| error!("{}", e.to_string()))
@@ -858,7 +858,7 @@ impl eframe::App for CameraApp {
                         };
 
                         ui.label("For face detection, specify the OpenCV path above.");
-                        ui.label("This program uses the `data/haarcascades/haarcascade_frontalface_default.xml` classifier from the OpenCV data directory.");
+                        ui.label("This program uses the `haarcascades/haarcascade_frontalface_default.xml` classifier from the OpenCV data directory.");
                     });
                     ui.separator();
                     {
