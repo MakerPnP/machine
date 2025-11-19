@@ -13,9 +13,9 @@
 
 use eframe::epaint::StrokeKind;
 use eframe::{CreationContext, Frame};
-use egui::{ColorImage, Context, Pos2, RichText, TextureHandle, UiBuilder, Vec2, Widget};
+use egui::{ColorImage, Context, Pos2, Rect, RichText, TextureHandle, UiBuilder, Vec2, Widget};
 use egui_ltreeview::{Action, TreeView};
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use opencv::core::{AlgorithmHint, CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
 use opencv::imgproc;
 use opencv::imgproc::{
@@ -30,6 +30,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 use video_capture::error::DeviceError;
 use video_capture::media::media_frame::MediaFrameDescription;
 use video_capture::media::video::PixelFormat;
@@ -55,6 +56,12 @@ fn main() -> eframe::Result {
 struct Resolution {
     width: u32,
     height: u32,
+}
+
+impl Into<Vec2> for Resolution {
+    fn into(self) -> Vec2 {
+        Vec2::new(self.width as f32, self.height as f32)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -95,7 +102,8 @@ fn camera_enumeration_thread_main() -> Result<Vec<CameraEnumerationResult>, Devi
 
                     for format in iter {
                         if let Variant::UInt32(video_format_code) = format["format"] {
-                            let Ok(video_format) = VideoFormat::try_from(video_format_code) else {
+                            let Ok(_video_format) = VideoFormat::try_from(video_format_code) else {
+                                // ensure we can use it.
                                 continue;
                             };
 
@@ -182,11 +190,13 @@ fn camera_thread_main(shared_state: Arc<Mutex<CameraSharedState>>, mode_selectio
     if let Err(e) = device.set_output_handler({
         let app_state = shared_state.clone();
         move |frame| {
-            let capture_timestamp = chrono::Utc::now();
-
             debug!("frame source: {:?}", frame.source);
             debug!("frame desc: {:?}", frame.description());
             debug!("frame timestamp: {:?}", frame.timestamp);
+
+            let capture_timestamp = chrono::Utc::now();
+            let capture_instant = Instant::now();
+            // TODO using the timestamp from the frame would be better, but need to convert to chrono::DateTime somehow
 
             // Map the video frame for memory access
             if let Ok(mapped_guard) = frame.map() {
@@ -224,6 +234,7 @@ fn camera_thread_main(shared_state: Arc<Mutex<CameraSharedState>>, mode_selectio
                             texture: texture_handle,
                             size: Vec2::new(mat.cols() as f32, mat.rows() as f32),
                             timestamp: capture_timestamp,
+                            instant: capture_instant,
                             faces: faces
                                 .unwrap_or_default()
                                 .iter()
@@ -631,6 +642,11 @@ struct UiState {
     enumeration_handle: Option<JoinHandle<Result<Vec<CameraEnumerationResult>, DeviceError>>>,
     enumerated_cameras: Vec<CameraEnumerationResult>,
     cameras: HashMap<String, CameraState>,
+
+    /// when the UI should be refreshed
+    ///
+    /// this will be the soonest out of all the cameras next expected frame times.
+    refresh_at: Option<Instant>,
 }
 
 struct CameraState {
@@ -638,6 +654,7 @@ struct CameraState {
     receiver: Receiver<ProcessingResult>,
     capture_handle: JoinHandle<()>,
     shared_state: Arc<Mutex<CameraSharedState>>,
+    mode: ModeSelection,
 }
 
 impl CameraApp {
@@ -657,6 +674,8 @@ impl CameraApp {
             return;
         }
 
+        context.request_repaint_after(Duration::from_millis(100));
+
         let camera_id = mode_selection.id.clone();
         let (frame_sender, receiver) = std::sync::mpsc::channel::<ProcessingResult>();
 
@@ -674,6 +693,7 @@ impl CameraApp {
 
         let handle = thread::spawn({
             let camera_shared_state = camera_shared_state.clone();
+            let mode_selection = mode_selection.clone();
             move || camera_thread_main(camera_shared_state, mode_selection)
         });
 
@@ -682,6 +702,7 @@ impl CameraApp {
             latest_result: None,
             receiver,
             capture_handle: handle,
+            mode: mode_selection,
         };
 
         ui_state.cameras.insert(camera_id, camera_state);
@@ -713,8 +734,12 @@ impl CameraApp {
 }
 
 struct ProcessingResult {
-    texture: TextureHandle,
+    /// The instant when the frame was captured
+    instant: Instant,
+    /// The timestamp of the frame
     timestamp: chrono::DateTime<chrono::Utc>,
+
+    texture: TextureHandle,
     faces: Vec<egui::Rect>,
     size: Vec2,
 }
@@ -731,6 +756,7 @@ impl CameraApp {
             enumeration_handle: None,
             enumerated_cameras: Default::default(),
             cameras: Default::default(),
+            refresh_at: None,
         };
 
         instance.ui_state = Some(ui_state);
@@ -741,6 +767,16 @@ impl CameraApp {
 
 impl eframe::App for CameraApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
+        let redraw_instant = Instant::now();
+        {
+            let ui_state = self.ui_state.as_mut().unwrap();
+            if let Some(refresh_at) = ui_state.refresh_at {
+                if redraw_instant >= refresh_at {
+                    ui_state.refresh_at = None;
+                }
+            }
+        }
+
         egui::SidePanel::left("side_panel")
             .resizable(true)
             .show(ctx, |ui| {
@@ -889,75 +925,114 @@ impl eframe::App for CameraApp {
                     continue;
                 };
 
-                // TODO use request_repaint_after() based on the camera frame rate
-                ctx.request_repaint();
+                let size: Vec2 = camera_state.mode.resolution.clone().into();
+                let constrain_rect =
+                    Rect::from_min_size(ui.max_rect().min, Vec2::splat(f32::INFINITY));
 
-                // TODO set the default window size to the selected resolution
-                egui::Window::new(camera_enumeration_result.name.clone())
-                    .id(ui.id().with(camera_id))
-                    .movable(true)
-                    .resizable(true)
-                    .scroll(true)
-                    .constrain_to(ui.max_rect())
-                    .show(&ctx, |ui| {
-                        if let Ok(frame) = camera_state.receiver.try_recv() {
-                            camera_state.latest_result = Some(frame);
+                egui::Window::new(format!(
+                    "{} [{} * {}] @ {}FPS",
+                    camera_enumeration_result.name.clone(),
+                    camera_state.mode.resolution.width,
+                    camera_state.mode.resolution.height,
+                    camera_state.mode.frame_rate
+                ))
+                .id(ui.id().with(camera_id))
+                .movable(true)
+                .resizable(true)
+                .scroll(true)
+                .default_size(size)
+                .max_size(size)
+                .constrain_to(constrain_rect)
+                .show(&ctx, |ui| {
+                    if let Ok(processing_result) = camera_state.receiver.try_recv() {
+                        trace!(
+                            "Received frame. Camera: {}, instant: {:?}",
+                            camera_state.mode.camera_index, processing_result.instant
+                        );
+                        camera_state.latest_result = Some(processing_result);
+                    }
+
+                    // recalculate the refresh_at
+
+                    let frame_interval =
+                        Duration::from_secs_f32(1.0 / camera_state.mode.frame_rate);
+                    let next_frame_instant = camera_state
+                        .latest_result
+                        .as_ref()
+                        .map_or(redraw_instant + Duration::from_millis(250), |pr| {
+                            pr.instant + frame_interval
+                        });
+
+                    match ui_state.refresh_at {
+                        None => {
+                            trace!(
+                                "Camera: {}, refreshing at {:?}",
+                                camera_state.mode.camera_index, next_frame_instant
+                            );
+                            ui_state.refresh_at = Some(next_frame_instant);
                         }
-
-                        if let Some(processing_result) = &camera_state.latest_result {
-                            egui::Frame::NONE.show(ui, |ui| {
-                                let image_response = egui::Image::new(&processing_result.texture)
-                                    .max_size(ui.available_size())
-                                    .maintain_aspect_ratio(true)
-                                    .ui(ui);
-
-                                let painter = ui.painter();
-
-                                let image_size = image_response.rect.size();
-
-                                let top_left = image_response.rect.min;
-
-                                let scale = Vec2::new(
-                                    image_size.x / processing_result.size.x,
-                                    image_size.y / processing_result.size.y,
+                        Some(scheduled_time) => {
+                            if next_frame_instant < scheduled_time {
+                                trace!(
+                                    "Camera: {}, priority refreshing at {:?}",
+                                    camera_state.mode.camera_index, next_frame_instant
                                 );
+                                ui_state.refresh_at = Some(next_frame_instant);
+                            }
+                        }
+                    }
 
-                                for face in &processing_result.faces {
-                                    // Create rectangles for each face, adjusting the scale image, and offsetting them from the top left of the rendered image.
-                                    let rect = egui::Rect::from_min_size(
-                                        egui::pos2(face.min.x * scale.x, face.min.y * scale.y)
-                                            + top_left.to_vec2(),
-                                        egui::vec2(face.width() * scale.x, face.height() * scale.y),
-                                    );
-                                    painter.rect_stroke(
-                                        rect,
-                                        0.0,
-                                        (2.0, egui::Color32::GREEN),
-                                        StrokeKind::Inside,
-                                    );
-                                }
+                    if let Some(processing_result) = &camera_state.latest_result {
+                        egui::Frame::NONE.show(ui, |ui| {
+                            let image_response = egui::Image::new(&processing_result.texture)
+                                .max_size(ui.available_size())
+                                .maintain_aspect_ratio(true)
+                                .ui(ui);
 
-                                let overlay_clip_rect = image_response.rect;
+                            let painter = ui.painter();
 
-                                let mut overlay_ui =
-                                    ui.new_child(UiBuilder::new().max_rect(overlay_clip_rect));
-                                overlay_ui.set_clip_rect(overlay_clip_rect);
-                                let _ = egui::Frame::default().show(&mut overlay_ui, |ui| {
-                                    ui.add(
-                                        egui::Label::new(
-                                            RichText::new(format!(
-                                                "{}",
-                                                processing_result.timestamp
-                                            ))
+                            let image_size = image_response.rect.size();
+
+                            let top_left = image_response.rect.min;
+
+                            let scale = Vec2::new(
+                                image_size.x / processing_result.size.x,
+                                image_size.y / processing_result.size.y,
+                            );
+
+                            for face in &processing_result.faces {
+                                // Create rectangles for each face, adjusting the scale image, and offsetting them from the top left of the rendered image.
+                                let rect = egui::Rect::from_min_size(
+                                    egui::pos2(face.min.x * scale.x, face.min.y * scale.y)
+                                        + top_left.to_vec2(),
+                                    egui::vec2(face.width() * scale.x, face.height() * scale.y),
+                                );
+                                painter.rect_stroke(
+                                    rect,
+                                    0.0,
+                                    (2.0, egui::Color32::GREEN),
+                                    StrokeKind::Inside,
+                                );
+                            }
+
+                            let overlay_clip_rect = image_response.rect;
+
+                            let mut overlay_ui =
+                                ui.new_child(UiBuilder::new().max_rect(overlay_clip_rect));
+                            overlay_ui.set_clip_rect(overlay_clip_rect);
+                            let _ = egui::Frame::default().show(&mut overlay_ui, |ui| {
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(format!("{}", processing_result.timestamp))
                                             .monospace()
                                             .color(egui::Color32::GREEN),
-                                        )
-                                        .selectable(false),
-                                    );
-                                });
+                                    )
+                                    .selectable(false),
+                                );
                             });
-                        }
-                    });
+                        });
+                    }
+                });
             }
         });
 
@@ -969,6 +1044,17 @@ impl eframe::App for CameraApp {
                     ui_state.enumerated_cameras = cameras;
                 }
             }
+        }
+
+        if let Some(refresh_at) = ui_state.refresh_at {
+            let remaining_time = refresh_at - redraw_instant;
+            trace!(
+                "Remaining time until refresh: {:?}us, now: {:?}",
+                remaining_time.as_micros(),
+                redraw_instant
+            );
+
+            ctx.request_repaint_after(remaining_time);
         }
     }
 
