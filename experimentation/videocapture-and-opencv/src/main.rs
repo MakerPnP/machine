@@ -10,13 +10,22 @@
 //! References:
 //! https://learn.microsoft.com/en-us/windows/win32/medfound/recommended-8-bit-yuv-formats-for-video-rendering
 //! https://www.itu.int/dms_pubrec/itu-r/rec/bt/r-rec-bt.601-7-201103-i!!pdf-e.pdf
+//!
+//! Depending on which version of OpenCV you have you may need to use the corresponding opencv feature.
+//! The default is always the latest tested version, currently OpenCV 4.11
+//!
+//! ```
+//! run --package videocapture-and-opencv --bin videocapture-and-opencv --no-default-features --features "opencv-410"
+//! ```
 
 use eframe::epaint::StrokeKind;
 use eframe::{CreationContext, Frame};
 use egui::{Color32, ColorImage, Context, Pos2, Rect, RichText, TextureHandle, UiBuilder, Vec2, Widget};
 use egui_ltreeview::{Action, TreeView};
 use log::{debug, error, info, trace};
-use opencv::core::{AlgorithmHint, CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
+use opencv::core::{CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
+#[cfg(feature = "opencv-411")]
+use opencv::core::{AlgorithmHint};
 use opencv::imgproc;
 use opencv::imgproc::{
     COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2,
@@ -360,6 +369,15 @@ where
             // Convert UYVY to BGR
             let mut bgr_mat =
                 unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
+            #[cfg(feature = "opencv-410")]
+            imgproc::cvt_color(
+                &raw_mat,
+                &mut bgr_mat,
+                code,
+                0
+        )
+                .unwrap();
+            #[cfg(feature = "opencv-411")]
             imgproc::cvt_color(
                 &raw_mat,
                 &mut bgr_mat,
@@ -391,6 +409,15 @@ where
             if vfd.format == PixelFormat::RGB24 {
                 let mut bgr_mat =
                     unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
+                #[cfg(feature = "opencv-410")]
+                imgproc::cvt_color(
+                    &raw_mat,
+                    &mut bgr_mat,
+                    imgproc::COLOR_RGB2BGR,
+                    0,
+                )
+                .unwrap();
+                #[cfg(feature = "opencv-411")]
                 imgproc::cvt_color(
                     &raw_mat,
                     &mut bgr_mat,
@@ -446,6 +473,15 @@ where
 
             // Method 1: Use OpenCV's cvtColorTwoPlane
             // This function explicitly converts from separate Y and UV planes
+            #[cfg(feature = "opencv-410")]
+            imgproc::cvt_color_two_plane(
+                &y_mat,
+                &uv_mat,
+                &mut bgr_mat,
+                COLOR_YUV2BGR_NV12
+            )
+            .unwrap();
+            #[cfg(feature = "opencv-411")]
             imgproc::cvt_color_two_plane(
                 &y_mat,
                 &uv_mat,
@@ -539,6 +575,15 @@ where
             v_roi.copy_to(&mut yuv_mat).unwrap();
 
             // Convert to BGR
+            #[cfg(feature = "opencv-410")]
+            imgproc::cvt_color(
+                &yuv_mat,
+                &mut bgr_mat,
+                COLOR_YUV2BGR_I420,
+                0,
+            )
+            .unwrap();
+            #[cfg(feature = "opencv-411")]
             imgproc::cvt_color(
                 &yuv_mat,
                 &mut bgr_mat,
@@ -568,6 +613,14 @@ fn detect_faces(
     use opencv::{core, imgproc, prelude::*};
 
     let mut gray = Mat::default();
+    #[cfg(feature = "opencv-410")]
+    imgproc::cvt_color(
+        mat,
+        &mut gray,
+        imgproc::COLOR_BGR2GRAY,
+        0,
+    )?;
+    #[cfg(feature = "opencv-411")]
     imgproc::cvt_color(
         mat,
         &mut gray,
