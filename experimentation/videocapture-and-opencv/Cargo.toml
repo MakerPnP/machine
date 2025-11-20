@@ -7,6 +7,10 @@ edition = "2024"
 opencv-410 = []
 opencv-411 = []
 default = ["opencv-411"]
+linux = [
+    # required to avoid compilation error: "a `libclang` shared library is not loaded on this thread"
+    "opencv/clang-runtime"
+]
 
 [dependencies]
 # Computer Vision and Image Processing
