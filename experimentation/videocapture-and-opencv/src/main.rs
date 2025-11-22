@@ -98,7 +98,11 @@ fn camera_enumeration_thread_main() -> Result<Vec<CameraEnumerationResult>, Devi
         // 'device.formats' can't be called until there's an output handler set and the device is started
         let _ = device.set_output_handler(|_| Ok(()));
 
-        if device.start().is_ok() {
+        if device.start()
+            .inspect_err(|e|{
+                error!("unable to start device. error: {:?}", e);
+            })
+            .is_ok() {
             // Get supported formats
             let formats = device.formats();
             if let Ok(formats) = formats {
