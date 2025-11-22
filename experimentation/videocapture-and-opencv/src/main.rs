@@ -861,7 +861,7 @@ impl eframe::App for CameraApp {
                         ui.label("This demo uses 'video-capture' to enumerate cameras and capture video frames.\n\
                          The 'videoio' module from OpenCV is NOT enabled. Thus there is less 'C' baggage (usb drivers, webcam drivers, etc.).\n\
                          Additionally OpenCV itself does not have a way to enumerate cameras, so making a program that can use the same\
-                         camera regardless of where it's plugged in or the order in which the OS enumarates this is not possible with just OpenCV.");
+                         camera regardless of where it's plugged in or the order in which the OS enumerates this is not possible with just OpenCV.");
                     });
 
                     ui.separator();
