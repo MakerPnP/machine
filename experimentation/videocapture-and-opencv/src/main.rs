@@ -277,14 +277,14 @@ fn camera_thread_main(shared_state: Arc<Mutex<CameraSharedState>>, mode_selectio
     };
 
     // Configure the camera
-    let mut option = Variant::new_dict();
-    option["width"] = mode_selection.resolution.width.into();
-    option["height"] = mode_selection.resolution.height.into();
-    option["frame-rate"] = mode_selection.frame_rate.into();
+    let mut options = Variant::new_dict();
+    options["width"] = mode_selection.resolution.width.into();
+    options["height"] = mode_selection.resolution.height.into();
+    options["frame-rate"] = mode_selection.frame_rate.into();
     let format_code: u32 = mode_selection.video_format.into();
-    option["format"] = format_code.into();
+    options["format"] = format_code.into();
 
-    if let Err(e) = device.configure(option) {
+    if let Err(e) = device.configure(options) {
         error!("{:?}", e.to_string());
     }
 
