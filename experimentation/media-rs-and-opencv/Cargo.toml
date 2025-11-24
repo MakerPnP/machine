@@ -4,9 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-opencv-410 = []
-opencv-411 = []
-default = ["opencv-411"]
+default = []
+
+opencv-410 = [
+    "opencv"
+]
+opencv-411 = [
+    "opencv"
+]
+
 linux = [
     # required to avoid compilation error: "a `libclang` shared library is not loaded on this thread"
     "opencv/clang-runtime"
@@ -14,9 +20,10 @@ linux = [
 
 [dependencies]
 # Computer Vision and Image Processing
-opencv           = { version = "0.97.2", features = ["imgcodecs", "imgproc", "objdetect"], default-features = false }
-video-capture    = { version = "0.1.1" }
-#video-capture    = { path = "../../../video-capture" }
+opencv           = { version = "0.97.2", features = ["imgcodecs", "imgproc", "objdetect"], default-features = false, optional = true }
+# currently need a version of media-rs with linux support (via libcamera)
+media            = { git = "https://github.com/MakerPnP/media-rs", rev = "0db5eb9166edda92f6d6b141e2856c1f6935fd51" }
+#media           = { path = "../../../media-rs" }
 image            = { version = "0.25.8" }
 
 # GUI Framework and User Interface
@@ -33,7 +40,5 @@ log              = { version = "0.4.28", features = ["release_max_level_debug"] 
 
 # Serialization and Deserialization
 serde            = { version = "1.0.228", features = ["derive"] }
-
-x-media          = { version = "0.1.3" }
 
 [dev-dependencies]

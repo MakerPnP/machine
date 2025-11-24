@@ -14,14 +14,14 @@
 
 A cross-platform tool to display video streams concurrently with [OpenCV](https://docs.opencv.org/4.x/index.html) visualizations.
 
-Video capture is done using the [`video-capture`](https://github.com/libark/video-capture) crate.
+Video capture is done using the [`media-rs`](https://github.com/rust-media/media-rs) crate.
 
 Recent screenshot:
-[<img src="assets/screenshots/video-capture-opencv_2025-11-19_170627.png" width="800" alt="VideoCapture + OpenCV">](assets/screenshots/video-capture-opencv_2025-11-19_170627.png)
+[<img src="assets/screenshots/TODO.png" width="800" alt="VideoCapture + OpenCV">](assets/screenshots/TODO.png)
 
 ## Background
 
-This was written as an experiment to see how to use the [`video-capture`](https://github.com/libark/video-capture) crate with a minimal set of `OpenCV` dependencies.
+This was written as an experiment to see how to use the [`media-rs`](https://github.com/libark/video-capture) crate with a minimal set of `OpenCV` dependencies.
 
 As of OpenCV 4.x there is no way to enumerate cameras with OpenCV itself, the API doesn't allow you to specify a camera id,
 device path, serial number or other unique identifier when opening a video capture device.  This makes it unsuitable for
@@ -40,8 +40,9 @@ Since this is an experimentation project, the code is not optimized for performa
 get the camera images into OpenCV that what is shown here, currently the code converts the images into BGR `Mat`s for 
 processing by OpenCV.
 
-There is another related experimentation called 'camera-enumeration-windows' which shows how to get the unique identifiers
-for all cameras on a Windows system which can be used to cross-reference the device id's used by 'video-capture'.
+Other related experiments:
+* `videocapture-and-opencv` (this supercedes it, since `video-capture` is older than `media-rs` and doesn't support capturing compressed video frames)
+* `camera-enumeration-windows`
 
 ## Building
 
