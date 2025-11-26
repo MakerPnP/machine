@@ -22,7 +22,7 @@ use eframe::epaint::StrokeKind;
 use eframe::{CreationContext, Frame};
 use egui::{Color32, ColorImage, Context, Pos2, Rect, RichText, TextureHandle, UiBuilder, Vec2, Widget};
 use egui_ltreeview::{Action, TreeView};
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use opencv::core::{CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
 #[cfg(feature = "opencv-411")]
 use opencv::core::{AlgorithmHint};
@@ -82,7 +82,6 @@ fn camera_enumeration_thread_main() -> Result<Vec<CameraEnumerationResult>, medi
     let mut cameras: Vec<CameraEnumerationResult> = vec![];
 
     let mut cam_mgr = CameraManager::new_default()?;
-
 
     for (index, device) in cam_mgr.iter_mut().enumerate() {
         info!("Getting formats for device: {}", index);
@@ -154,6 +153,8 @@ fn camera_enumeration_thread_main() -> Result<Vec<CameraEnumerationResult>, medi
 
                     cameras.push(enumeration_result);
                 }
+            } else {
+                warn!("camera has no supported formats: {}", device.id())
             }
             let _ = device.stop();
         }
