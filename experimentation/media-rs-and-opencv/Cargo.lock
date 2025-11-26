@@ -2375,7 +2375,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.7.1"
-source = "git+https://github.com/MakerPnP/media-rs?rev=ea3dbfc2e880eecd9e5de473d076eac3d1a845e9#ea3dbfc2e880eecd9e5de473d076eac3d1a845e9"
+source = "git+https://github.com/MakerPnP/media-rs?rev=311e3c35b52657213f42f94bb7e51423c90add5a#311e3c35b52657213f42f94bb7e51423c90add5a"
 dependencies = [
  "media-codec",
  "media-core",
@@ -2385,7 +2385,7 @@ dependencies = [
 [[package]]
 name = "media-codec"
 version = "0.7.1"
-source = "git+https://github.com/MakerPnP/media-rs?rev=ea3dbfc2e880eecd9e5de473d076eac3d1a845e9#ea3dbfc2e880eecd9e5de473d076eac3d1a845e9"
+source = "git+https://github.com/MakerPnP/media-rs?rev=311e3c35b52657213f42f94bb7e51423c90add5a#311e3c35b52657213f42f94bb7e51423c90add5a"
 dependencies = [
  "bitflags 2.10.0",
  "media-core",
@@ -2395,7 +2395,7 @@ dependencies = [
 [[package]]
 name = "media-core"
 version = "0.7.1"
-source = "git+https://github.com/MakerPnP/media-rs?rev=ea3dbfc2e880eecd9e5de473d076eac3d1a845e9#ea3dbfc2e880eecd9e5de473d076eac3d1a845e9"
+source = "git+https://github.com/MakerPnP/media-rs?rev=311e3c35b52657213f42f94bb7e51423c90add5a#311e3c35b52657213f42f94bb7e51423c90add5a"
 dependencies = [
  "aligned-vec",
  "bitflags 2.10.0",
@@ -2421,7 +2421,7 @@ dependencies = [
 [[package]]
 name = "media-device"
 version = "0.7.1"
-source = "git+https://github.com/MakerPnP/media-rs?rev=ea3dbfc2e880eecd9e5de473d076eac3d1a845e9#ea3dbfc2e880eecd9e5de473d076eac3d1a845e9"
+source = "git+https://github.com/MakerPnP/media-rs?rev=311e3c35b52657213f42f94bb7e51423c90add5a#311e3c35b52657213f42f94bb7e51423c90add5a"
 dependencies = [
  "av-foundation",
  "cfg-if",
