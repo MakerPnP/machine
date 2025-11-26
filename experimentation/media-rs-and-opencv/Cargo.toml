@@ -22,7 +22,7 @@ linux = [
 # Computer Vision and Image Processing
 opencv           = { version = "0.97.2", features = ["imgcodecs", "imgproc", "objdetect"], default-features = false, optional = true }
 # currently need a version of media-rs with linux support (via libcamera)
-media            = { git = "https://github.com/MakerPnP/media-rs", rev = "0db5eb9166edda92f6d6b141e2856c1f6935fd51" }
+media            = { git = "https://github.com/MakerPnP/media-rs", rev = "ea3dbfc2e880eecd9e5de473d076eac3d1a845e9" }
 #media           = { path = "../../../media-rs" }
 image            = { version = "0.25.8" }
 
