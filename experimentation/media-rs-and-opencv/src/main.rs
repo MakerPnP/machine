@@ -299,6 +299,7 @@ fn camera_thread_main(shared_state: Arc<Mutex<CameraSharedState>>, mode_selectio
         }
     }
 
+    info!("Stopping camera: {}", device.id());
     // Stop the camera
     if let Err(e) = device.stop() {
         error!("{:?}", e.to_string());
