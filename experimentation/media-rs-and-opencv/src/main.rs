@@ -33,6 +33,8 @@ use opencv::imgproc::{
 };
 use opencv::objdetect::CascadeClassifier;
 use opencv::prelude::*;
+use std::ffi::c_void;
+
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::sync::mpsc::{Receiver, Sender};
@@ -374,7 +376,7 @@ where
                 &mut bgr_mat,
                 code,
                 0
-        )
+            )
                 .unwrap();
             #[cfg(feature = "opencv-411")]
             imgproc::cvt_color(
@@ -492,7 +494,7 @@ where
 
             bgr_mat
         }
-        // Add support for I420 (YUV 4:2:0 planar)
+        // I420 (YUV 4:2:0 planar)
         (PixelFormat::I420, None) => {
             // Get the three planes: Y, U, V
             let mut planes_iter = planes.into_iter();
@@ -508,75 +510,64 @@ where
             let u_stride = u_plane.stride().unwrap();
             let v_stride = v_plane.stride().unwrap();
 
-            // Create mats for all planes
-            let y_mat = unsafe {
+            let height = height as usize;
+            let width = width as usize;
+            let uv_h = height / 2;
+            let uv_w = width / 2;
+
+            info!("y_stride: {}, v_stride: {}, u_stride: {}", y_stride, v_stride, u_stride);
+            info!("width: {}, height: {}, uv_w: {}, uv_h: {}", width, height, uv_w, uv_h);
+
+            // Calculate total size needed for I420 contiguous buffer
+            let y_size = y_stride * height;
+            let u_size = u_stride * uv_h;
+            let v_size = v_stride * uv_h;
+            let total_size = y_size + u_size + v_size;
+
+            // FUTURE avoid allocating and de-allocating the buffer for every frame, re-use it.
+
+            // Create a contiguous buffer (we need to copy for correct layout)
+            let mut i420_data = Vec::with_capacity(total_size);
+
+            // Copy Y plane
+            for row in 0..height {
+                let start = row * y_stride;
+                let end = start + width;
+                i420_data.extend_from_slice(&y_data[start..end]);
+            }
+
+            // Copy U plane
+            for row in 0..uv_h {
+                let start = row * u_stride;
+                let end = start + uv_w;
+                i420_data.extend_from_slice(&u_data[start..end]);
+            }
+
+            // Copy V plane
+            for row in 0..uv_h {
+                let start = row * v_stride;
+                let end = start + uv_w;
+                i420_data.extend_from_slice(&v_data[start..end]);
+            }
+
+            // Create Mat from contiguous I420 data
+            let i420_mat = unsafe {
                 Mat::new_rows_cols_with_data_unsafe(
-                    height as i32,
+                    (height * 3 / 2) as i32, // I420 has 1.5x height for planar data
                     width as i32,
                     CV_8UC1,
-                    y_data.as_ptr() as *mut std::ffi::c_void,
-                    y_stride as usize,
-                )
-                .unwrap()
+                    i420_data.as_ptr() as *mut c_void,
+                    width, // stride is width for contiguous buffer
+                ).unwrap()
             };
 
-            // U and V planes have half the width and height in 4:2:0 subsampling
-            let u_mat = unsafe {
-                Mat::new_rows_cols_with_data_unsafe(
-                    (height / 2) as i32,
-                    (width / 2) as i32,
-                    CV_8UC1,
-                    u_data.as_ptr() as *mut std::ffi::c_void,
-                    u_stride as usize,
-                )
-                .unwrap()
-            };
-
-            let v_mat = unsafe {
-                Mat::new_rows_cols_with_data_unsafe(
-                    (height / 2) as i32,
-                    (width / 2) as i32,
-                    CV_8UC1,
-                    v_data.as_ptr() as *mut std::ffi::c_void,
-                    v_stride as usize,
-                )
-                .unwrap()
-            };
-
-            // Create a BGR mat for output
-            let mut bgr_mat =
-                unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
-
-            // Merge the planes into a single YUV mat
-            let mut yuv_mat =
-                unsafe { Mat::new_rows_cols(height as i32 * 3 / 2, width as i32, CV_8UC1) }
-                    .unwrap();
-
-            // Copy Y plane (full size)
-            let y_roi_rect = opencv::core::Rect::new(0, 0, width as i32, height as i32);
-            let y_roi = y_mat.roi(y_roi_rect).unwrap();
-            y_roi.copy_to(&mut yuv_mat).unwrap();
-
-            // Copy U plane (quarter size) to the correct position
-            let u_roi_rect =
-                opencv::core::Rect::new(0, height as i32, (width / 2) as i32, (height / 2) as i32);
-            let u_roi = u_mat.roi(u_roi_rect).unwrap();
-            u_roi.copy_to(&mut yuv_mat).unwrap();
-
-            // Copy V plane (quarter size) to the correct position
-            let v_roi_rect = opencv::core::Rect::new(
-                (width / 2) as i32,
-                height as i32,
-                (width / 2) as i32,
-                (height / 2) as i32,
-            );
-            let v_roi = v_mat.roi(v_roi_rect).unwrap();
-            v_roi.copy_to(&mut yuv_mat).unwrap();
+            // Convert to BGR
+            let mut bgr_mat = Mat::default();
 
             // Convert to BGR
             #[cfg(feature = "opencv-410")]
             imgproc::cvt_color(
-                &yuv_mat,
+                &i420_mat,
                 &mut bgr_mat,
                 COLOR_YUV2BGR_I420,
                 0,
@@ -584,7 +575,7 @@ where
             .unwrap();
             #[cfg(feature = "opencv-411")]
             imgproc::cvt_color(
-                &yuv_mat,
+                &i420_mat,
                 &mut bgr_mat,
                 COLOR_YUV2BGR_I420,
                 0,
@@ -592,11 +583,14 @@ where
             )
             .unwrap();
 
+            // Keep the vector alive until we're done with the Mat
+            std::mem::forget(i420_data);
+
             bgr_mat
         }
         _ => {
             panic!(
-                "Unsupported pixel format: {:?}. Common formats include YUYV, UYVY, NV12, RGB24, BGR24",
+                "Unsupported pixel format: {:?}. Common formats include YUYV, UYVY, NV12, I420, RGB24, BGR24",
                 vfd.format
             );
         }
