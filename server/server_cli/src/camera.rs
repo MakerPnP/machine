@@ -59,7 +59,10 @@ pub async fn camera_streamer(
                         debug!("lagged, trying to get next frame.  skipped: {}", skipped_frames);
                         continue;
                     }
-                    Err(e) => return Err(anyhow::anyhow!(e)),
+                    Err(broadcast::error::RecvError::Closed) => {
+                        info!("Camera streamer channel closed");
+                        break;
+                    },
                 };
 
                 let CameraFrame { frame_number, jpeg_bytes, frame_timestamp } = &*camera_frame;
