@@ -37,7 +37,6 @@ use std::ffi::c_void;
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
-use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
@@ -47,6 +46,9 @@ use media::device::{Device, OutputDevice};
 use media::FrameDescriptor;
 use media::variant::Variant;
 use media::video::{PixelFormat, VideoFormat};
+
+use crate::watch_channel::{WatchSender as Sender, WatchReceiver as Receiver, WatchChannel};
+pub mod watch_channel;
 
 fn main() -> eframe::Result {
     env_logger::init();
@@ -261,7 +263,7 @@ fn camera_thread_main(shared_state: Arc<Mutex<CameraSharedState>>, mode_selectio
                                 .collect::<Vec<egui::Rect>>(),
                         };
 
-                        app_state.frame_sender.send(result).unwrap();
+                        app_state.frame_sender.send(result);
                     })
                 }
             }
@@ -734,7 +736,7 @@ impl CameraApp {
         context.request_repaint_after(Duration::from_millis(100));
 
         let camera_id = mode_selection.id.clone();
-        let (frame_sender, receiver) = std::sync::mpsc::channel::<ProcessingResult>();
+        let (frame_sender, receiver) = WatchChannel::<ProcessingResult>::new().split();
 
         let mut detect_faces = false;
 
@@ -1017,22 +1019,11 @@ impl eframe::App for CameraApp {
                 .max_size(size)
                 .constrain_to(constrain_rect)
                 .show(&ctx, |ui| {
-                    // drain the receiver so we don't render old frames that we didn't have time to display
-                    let mut received_frames_counter = 0;
-                    loop {
-                        let processing_result = camera_state.receiver.try_recv();
-                        if processing_result.is_err() {
-                            break
-                        }
-                        received_frames_counter += 1;
-                        camera_state.latest_result = Some(processing_result.unwrap());
-                    }
+                    let mut received_frame = false;
 
-                    if received_frames_counter > 0 {
-                        trace!(
-                            "Received frame(s). Camera: {}, frames: {:?}, instant: {:?}",
-                            camera_state.mode.camera_index, received_frames_counter, camera_state.latest_result.as_ref().unwrap().instant
-                        );
+                    if let Some(processing_result) = camera_state.receiver.try_recv() {
+                        received_frame = true;
+                        camera_state.latest_result = Some(processing_result);
                     }
 
                     // recalculate the refresh_at
@@ -1127,10 +1118,9 @@ impl eframe::App for CameraApp {
                                             }
                                         });
 
-                                        let color = match received_frames_counter {
-                                            0 => Color32::GREEN,
-                                            1 => Color32::LIGHT_GREEN,
-                                            _ => Color32::RED,
+                                        let color = match received_frame {
+                                            true => Color32::GREEN,
+                                            false => Color32::RED,
                                         };
                                         ui.add(
                                             egui::Label::new(RichText::new("*").monospace().color(color))
