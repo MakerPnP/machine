@@ -1,21 +1,22 @@
 use std::time::Duration;
+
 use chrono::DateTime;
 use log::{error, info};
 use opencv::core::Mat;
 use opencv::videoio::{VideoCapture, VideoWriter};
 use opencv::{prelude::*, videoio};
+use server_common::camera::{CameraDefinition, CameraSource};
 use tokio::time;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
-use server_common::camera::{CameraDefinition, CameraSource};
+
 use crate::VideoCaptureLoop;
 
 pub fn opencv_camera(
     camera_definition: &CameraDefinition,
     shutdown_flag: CancellationToken,
-) -> anyhow::Result<impl VideoCaptureLoop + use<>> {
+) -> anyhow::Result<OpenCVCameraLoop> {
     let CameraSource::OpenCV(open_cv_camera_config) = &camera_definition.source else {
-        // not an OpenCV camera
         anyhow::bail!("Not an OpenCV camera")
     };
 
@@ -60,8 +61,7 @@ pub fn opencv_camera(
     Ok(OpenCVCameraLoop::new(configured_fps, cam, shutdown_flag))
 }
 
-
-struct OpenCVCameraLoop {
+pub struct OpenCVCameraLoop {
     fps: f32,
     cam: VideoCapture,
     shutdown_flag: CancellationToken,
@@ -80,7 +80,7 @@ impl OpenCVCameraLoop {
 impl VideoCaptureLoop for OpenCVCameraLoop {
     fn run<F>(&mut self, f: F) -> impl Future<Output = anyhow::Result<()>> + Send + '_
     where
-        F: Fn(&Mat, DateTime<chrono::Utc>, Instant, Duration, u64) -> Result<(), ()> + Send + Sync + 'static,
+        F: for<'a> Fn(&'a Mat, DateTime<chrono::Utc>, Instant, Duration, u64) -> Result<(), ()> + Send + Sync + 'static,
     {
         async move {
             let mut frame_number = 0_u64;
@@ -107,7 +107,7 @@ impl VideoCaptureLoop for OpenCVCameraLoop {
 
                 frame_number += 1;
 
-                let frame_duration = (frame_instant - previous_frame_at);
+                let frame_duration = frame_instant - previous_frame_at;
                 previous_frame_at = frame_instant;
 
                 let result = f(&frame_mat, frame_timestamp, frame_instant, frame_duration, frame_number);

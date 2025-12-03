@@ -2,18 +2,16 @@ use std::sync::Arc;
 
 use chrono::DateTime;
 use log::{debug, error, info};
-use opencv::videoio::{VideoCapture, VideoWriter};
-use opencv::{imgcodecs, prelude::*, videoio};
+use opencv::{imgcodecs, prelude::*};
 use server_common::camera::{CameraDefinition, CameraSource};
 use tokio::sync::broadcast;
-use tokio::sync::broadcast::Sender;
-use tokio::time::{self, Duration, Instant};
+use tokio::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
-#[cfg(feature ="opencv-capture")]
-pub mod opencv_capture;
-#[cfg(feature ="mediars-capture")]
+#[cfg(feature = "mediars-capture")]
 pub mod mediars_capture;
+#[cfg(feature = "opencv-capture")]
+pub mod opencv_capture;
 
 pub struct CameraFrame {
     pub frame_number: u64,
@@ -26,13 +24,12 @@ pub async fn capture_loop(
     camera_definition: CameraDefinition,
     shutdown_flag: CancellationToken,
 ) -> anyhow::Result<()> {
+    let capture_loop = make_capture_loop(&camera_definition, shutdown_flag)?;
 
-    let mut capture_loop = make_capture_loop(&camera_definition, shutdown_flag)?;
-
-    let result = capture_loop.run({
+    let callback = {
         let camera_definition = camera_definition.clone();
 
-        move |frame, frame_timestamp, frame_instant, frame_duration, frame_number| {
+        move |frame: &'_ Mat, frame_timestamp, frame_instant, frame_duration: Duration, frame_number| {
             if tx.receiver_count() > 0 {
                 // Encode to JPEG (quality default). You can set params to reduce quality/size.
                 let encode_start = Instant::now();
@@ -74,7 +71,12 @@ pub async fn capture_loop(
 
             Ok(())
         }
-    }).await;
+    };
+
+    let result = match capture_loop {
+        VideoCaptureImpl::OpenCV(mut loop_impl) => loop_impl.run(callback).await,
+        VideoCaptureImpl::MediaRS(mut loop_impl) => loop_impl.run(callback).await,
+    };
 
     if let Err(e) = result {
         error!("Error in camera capture loop: {:?}", e);
@@ -85,30 +87,46 @@ pub async fn capture_loop(
     Ok(())
 }
 
-fn make_capture_loop(camera_definition: &CameraDefinition, shutdown_flag: CancellationToken) -> anyhow::Result<impl VideoCaptureLoop> {
+fn make_capture_loop(
+    camera_definition: &CameraDefinition,
+    shutdown_flag: CancellationToken,
+) -> anyhow::Result<VideoCaptureImpl> {
     match &camera_definition.source {
-        #[cfg(feature ="opencv-capture")]
+        #[cfg(feature = "opencv-capture")]
         CameraSource::OpenCV(_) => {
             let capture = opencv_capture::opencv_camera(&camera_definition, shutdown_flag)?;
 
-            Ok(capture)
+            Ok(VideoCaptureImpl::OpenCV(capture))
         }
-        #[cfg(feature ="mediars-capture")]
+        #[cfg(feature = "mediars-capture")]
         CameraSource::MediaRS(_) => {
             let capture = mediars_capture::mediars_camera(&camera_definition, shutdown_flag)?;
 
-            Ok(capture)
+            Ok(VideoCaptureImpl::MediaRS(capture))
         }
         _ => unimplemented!("Unsupported camera source: {:?}", camera_definition.source),
     }
 }
 
+/// Notes:
+/// * not object-safe because it:
+///   a) returns an `impl Future<...>` not a `Pin<Box<dyn Future<...>>>
+///   b) has a generic parameter `F`.
+/// * not being object-safe makes actually using this trait awkward when dealing with multiple implementations.
+/// * adding the HRTB (Higher-rank trait bounds, `for<'a>` was required to get things compiling when using multiple implementations.
 pub trait VideoCaptureLoop {
+    // TODO make using this trait more ergonomic
+
     // TODO add a proper error type
     /// capture frames until canceled, calling the closure for each frame.
     ///
     /// caller can return an error, which may be logged, and allows the use of the `?` in the closure
     fn run<F>(&mut self, f: F) -> impl Future<Output = anyhow::Result<()>> + Send + '_
     where
-        F: Fn(&Mat, DateTime<chrono::Utc>, Instant, Duration, u64) -> Result<(), ()> + Send + Sync + 'static;
+        F: for<'a> Fn(&'a Mat, DateTime<chrono::Utc>, Instant, Duration, u64) -> Result<(), ()> + Send + Sync + 'static;
+}
+
+enum VideoCaptureImpl {
+    OpenCV(opencv_capture::OpenCVCameraLoop),
+    MediaRS(mediars_capture::MediaRSCameraLoop),
 }
