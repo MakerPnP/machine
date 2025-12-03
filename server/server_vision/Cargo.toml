@@ -3,6 +3,16 @@ name = "server_vision"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["opencv-capture"]
+
+opencv-capture = [
+    "opencv/videoio"
+]
+mediars-capture = [
+    "dep:media"
+]
+
 [dependencies]
 server_common      = { path = "../server_common"}
 
@@ -15,8 +25,12 @@ anyhow             = { workspace = true }
 # time
 chrono             = { workspace = true}
 
-# vision
-opencv             = { workspace = true, features = ["videoio", "imgcodecs"] }
+# video
+media            = { git = "https://github.com/MakerPnP/media-rs", rev = "3a0529d23475f230445b3091ab7b52f401c774dd", optional = true }
+
+# machine-vision
+opencv             = { workspace = true, features = ["imgcodecs", "imgproc", "objdetect"], default-features = false}
+
 
 # tasks
 tokio              = { workspace = true }
