@@ -6,11 +6,14 @@ use opencv::videoio::{VideoCapture, VideoWriter};
 use opencv::{imgcodecs, prelude::*, videoio};
 use server_common::camera::{CameraDefinition, CameraSource};
 use tokio::sync::broadcast;
+use tokio::sync::broadcast::Sender;
 use tokio::time::{self, Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
 #[cfg(feature ="opencv-capture")]
 pub mod opencv_capture;
+#[cfg(feature ="mediars-capture")]
+pub mod mediars_capture;
 
 pub struct CameraFrame {
     pub frame_number: u64,
@@ -23,10 +26,8 @@ pub async fn capture_loop(
     camera_definition: CameraDefinition,
     shutdown_flag: CancellationToken,
 ) -> anyhow::Result<()> {
-    #[cfg(feature ="opencv-capture")]
-    let mut capture_loop = opencv_capture::opencv_camera(&camera_definition, shutdown_flag)?;
-    #[cfg(not(feature ="opencv-capture"))]
-    unimplemented!("OpenCV capture not enabled, currently only OpenCV is supported.");
+
+    let mut capture_loop = make_capture_loop(&camera_definition, shutdown_flag)?;
 
     let result = capture_loop.run({
         let camera_definition = camera_definition.clone();
@@ -82,6 +83,24 @@ pub async fn capture_loop(
     info!("Shutting down camera capture. Camera: {:?}", camera_definition.source);
 
     Ok(())
+}
+
+fn make_capture_loop(camera_definition: &CameraDefinition, shutdown_flag: CancellationToken) -> anyhow::Result<impl VideoCaptureLoop> {
+    match &camera_definition.source {
+        #[cfg(feature ="opencv-capture")]
+        CameraSource::OpenCV(_) => {
+            let capture = opencv_capture::opencv_camera(&camera_definition, shutdown_flag)?;
+
+            Ok(capture)
+        }
+        #[cfg(feature ="mediars-capture")]
+        CameraSource::MediaRS(_) => {
+            let capture = mediars_capture::mediars_camera(&camera_definition, shutdown_flag)?;
+
+            Ok(capture)
+        }
+        _ => unimplemented!("Unsupported camera source: {:?}", camera_definition.source),
+    }
 }
 
 pub trait VideoCaptureLoop {
