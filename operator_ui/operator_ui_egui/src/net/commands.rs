@@ -23,6 +23,7 @@ pub async fn heartbeat_sender(stack: EdgeStack, address: Address, app_event_rx: 
     let command_client = stack
         .endpoints()
         .client::<OperatorCommandEndpoint>(address, None);
+    let command_client = ergot_util::ClientWrapper::new(Duration::from_secs(1), command_client);
 
     let mut index = 0;
     tokio::time::sleep(Duration::from_secs(1)).await;
