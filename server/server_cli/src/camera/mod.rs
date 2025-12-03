@@ -6,6 +6,7 @@ use ergot::interface_manager::InterfaceSendError;
 use ergot::interface_manager::interface_impls::tokio_udp::TokioUdpInterface;
 use ergot::interface_manager::profiles::direct_router::DirectRouter;
 use ergot::net_stack::ArcNetStack;
+use ergot::toolkits::tokio_udp::RouterStack;
 use ergot::{Address, NetStackSendError, topic};
 use log::{debug, error, info, trace};
 use mutex::raw_impls::cs::CriticalSectionRawMutex;
@@ -13,10 +14,12 @@ use operator_shared::camera::{
     CameraFrameChunk, CameraFrameChunkKind, CameraFrameImageChunk, CameraFrameMeta, CameraIdentifier,
 };
 use server_common::camera::CameraDefinition;
-use server_vision::CameraFrame;
-use tokio::sync::broadcast;
+use server_vision::{CameraFrame, capture_loop};
+use tokio::sync::{Mutex, broadcast};
 use tokio::{select, time};
 use tokio_util::sync::CancellationToken;
+
+use crate::AppState;
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
@@ -168,4 +171,97 @@ pub fn camera_definition_for_identifier<'a>(
     // for now, just using the identifier as an index
     let index: u8 = **identifier;
     definitions.get(index as usize)
+}
+
+// must be less than the MTU of the network interface + ip + udp + ergot + chunking overhead
+const CAMERA_CHUNK_SIZE: usize = 1024;
+
+pub struct CameraHandle {
+    capture_handle: tokio::task::JoinHandle<()>,
+    streamer_handle: tokio::task::JoinHandle<()>,
+    address: Address,
+    shutdown_flag: CancellationToken,
+}
+
+pub async fn camera_manager(
+    identifier: CameraIdentifier,
+    camera_definition: CameraDefinition,
+    address: Address,
+    app_state: Arc<Mutex<AppState>>,
+    target_fps: f32,
+    shutdown_flag: CancellationToken,
+    stack: RouterStack,
+) {
+    let constrained_fps = target_fps.min(camera_definition.fps);
+
+    // TODO document the '* 2' magic number, try reducing it too.
+    let broadcast_cap = (camera_definition.fps * 2_f32).round() as usize;
+
+    // Create broadcast channel for frames (Arc<Bytes> so we cheaply clone for each client)
+    let (tx, rx) = broadcast::channel::<Arc<CameraFrame>>(broadcast_cap);
+
+    let capture_handle = tokio::task::Builder::new()
+        .name(&format!("camera-{}/capture", identifier))
+        .spawn({
+            let camera_definition = camera_definition.clone();
+            let shutdown_flag = shutdown_flag.clone();
+            async move {
+                if let Err(e) = capture_loop(tx, camera_definition, shutdown_flag.clone()).await {
+                    error!("capture loop error: {e:?}");
+                    shutdown_flag.cancel();
+                }
+            }
+        })
+        .unwrap();
+    let streamer_handle = tokio::task::Builder::new()
+        .name(&format!("camera-{}/streamer", identifier))
+        .spawn({
+            let camera_definition = camera_definition.clone();
+            let stack = stack.clone();
+            let shutdown_flag = shutdown_flag.clone();
+            async move {
+                if let Err(e) = camera_streamer(
+                    stack,
+                    rx,
+                    camera_definition,
+                    CAMERA_CHUNK_SIZE,
+                    address,
+                    shutdown_flag.clone(),
+                    constrained_fps,
+                )
+                .await
+                {
+                    error!("streamer loop error: {e:?}");
+                    shutdown_flag.cancel();
+                }
+            }
+        })
+        .unwrap();
+
+    {
+        let app_state = app_state.lock().await;
+        let mut camera_clients = app_state.camera_clients.lock().await;
+        camera_clients.insert(identifier.clone(), CameraHandle {
+            capture_handle,
+            streamer_handle,
+            address,
+            shutdown_flag: shutdown_flag.clone(),
+        });
+    }
+
+    info!("Streaming started. identifier: {}, address: {}", identifier, address);
+
+    shutdown_flag.cancelled().await;
+
+    info!("Camera manager stopping. identifier: {}", identifier);
+
+    let app_state = app_state.lock().await;
+    let mut camera_clients = app_state.camera_clients.lock().await;
+
+    if let Some(client) = camera_clients.remove(&identifier) {
+        // wait for the capture first, then the streamer
+        let _ = client.capture_handle.await;
+        let _ = client.streamer_handle.await;
+    }
+    info!("Camera manager stopped. identifier: {}", identifier);
 }
