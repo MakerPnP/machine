@@ -22,6 +22,7 @@ default = ["console_logging"]
 
 [dependencies]
 operator_shared      = { workspace = true }
+ergot_util           = { workspace = true }
 i18n                 = { git = "https://github.com/MakerPnP/makerpnp.git" }
 
 # gui (egui)

@@ -33,26 +33,15 @@ pub async fn camera_frame_listener(
     let command_client = stack
         .endpoints()
         .client::<OperatorCommandEndpoint>(remote_address, None);
+    let command_client = ergot_util::ClientWrapper::new(Duration::from_secs(1), command_client);
 
+    // FIXME magic number 320
     let subber = stack
         .topics()
         .bounded_receiver::<CameraFrameChunkTopic, 320>(None);
     let subber = pin!(subber);
     let mut hdl = subber.subscribe_unicast();
     let port_id = hdl.port();
-
-    let result = command_client
-        .request(&OperatorCommandRequest::CameraCommand(
-            camera_identifier,
-            CameraCommand::StartStreaming {
-                port_id,
-                fps: target_fps,
-            },
-        ))
-        .await;
-    if let Err(e) = result {
-        return Err(anyhow::anyhow!("Error sending start request: {:?}", e));
-    }
 
     struct InProgressFrame {
         total_chunks: u32,
@@ -68,6 +57,9 @@ pub async fn camera_frame_listener(
 
     let mut target_fps = target_fps;
     let mut frame_timestamps = std::collections::VecDeque::with_capacity(60);
+    let mut latest_msg_at = None;
+
+    let mut ticker = tokio::time::interval(Duration::from_millis(250));
 
     loop {
         select! {
@@ -75,7 +67,34 @@ pub async fn camera_frame_listener(
                 info!("Frame listener shutdown requested. identifier: {}", camera_identifier);
                 break
             }
+            _ = ticker.tick() => {
+
+                let now = Instant::now();
+
+                let should_send_start = latest_msg_at
+                    .map(|t| now.duration_since(t) > Duration::from_secs(1))
+                    .unwrap_or(true);
+
+                if should_send_start {
+                    let result = command_client
+                    .request(&OperatorCommandRequest::CameraCommand(
+                        camera_identifier,
+                        CameraCommand::StartStreaming {
+                            port_id,
+                            fps: target_fps,
+                        },
+                    ))
+                    .await;
+                    if let Err(e) = result {
+                        error!("Error sending start request: {:?}, identifier: {}", e, camera_identifier);
+                    }
+                }
+            }
             msg = hdl.recv() => {
+                let now = Instant::now();
+
+                latest_msg_at = Some(now);
+
                 let chunk = &msg.t;
 
                 let entry_and_image_chunk = match &chunk.kind {
@@ -211,7 +230,6 @@ pub async fn camera_frame_listener(
                     in_progress.remove(&chunk.frame_number);
                 }
                 // drop old frames (stuck/incomplete)
-                let now = Instant::now();
                 in_progress.retain(|frame_num, f| {
                     if now.duration_since(f.start_time) > Duration::from_secs(1) {
                         warn!(
@@ -229,6 +247,8 @@ pub async fn camera_frame_listener(
         }
     }
 
+    info!("Sending stop request. identifier: {}", camera_identifier);
+
     let result = command_client
         .request(&OperatorCommandRequest::CameraCommand(
             camera_identifier,
@@ -238,9 +258,13 @@ pub async fn camera_frame_listener(
         ))
         .await;
     if let Err(e) = result {
-        return Err(anyhow::anyhow!("Error sending stop request: {:?}", e));
+        return Err(anyhow::anyhow!(
+            "Error sending stop request: {:?}, identifier: {}",
+            e,
+            camera_identifier
+        ));
     }
-    info!("camera frame listener stopped, address: {}", remote_address);
+    info!("Camera frame listener stopped, identifier: {}", camera_identifier);
 
     Ok(())
 }

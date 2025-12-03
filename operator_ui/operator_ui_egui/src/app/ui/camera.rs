@@ -9,7 +9,7 @@ use egui_tool_windows::ToolWindows;
 use tokio::sync::watch::Receiver;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::trace;
+use tracing::{error, trace};
 
 use crate::fps_stats::egui::show_frame_durations;
 use crate::fps_stats::{FpsSnapshot, FpsStats};
@@ -56,7 +56,12 @@ impl CameraUi {
 
     pub async fn shutdown(self) {
         self.shutdown_token.cancel();
-        let _ = self.camera_frame_listener_handle.await;
+        let _ = self
+            .camera_frame_listener_handle
+            .await
+            .inspect_err(|e| error!("Error shutting down camera frame listener: {:?}", e))
+            .map(|r| r.inspect_err(|e| error!("Camera frame listener error: {:?}", e)))
+            .ok();
     }
 }
 

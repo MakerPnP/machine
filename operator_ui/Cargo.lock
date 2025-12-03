@@ -1545,6 +1545,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ergot_util"
+version = "0.1.0"
+dependencies = [
+ "ergot",
+ "serde",
+ "thiserror 2.0.17",
+ "tokio",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3190,6 +3200,7 @@ dependencies = [
  "egui_vertical_stack",
  "env_logger",
  "ergot",
+ "ergot_util",
  "futures",
  "i18n",
  "image",

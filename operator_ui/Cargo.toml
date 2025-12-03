@@ -7,6 +7,7 @@ members = [
 
 [workspace.dependencies]
 operator_shared      = { path = "../common/operator_shared" }
+ergot_util           = { path = "../common/ergot_util" }
 
 # tracing
 tracing              = { version = "0.1.41"}
