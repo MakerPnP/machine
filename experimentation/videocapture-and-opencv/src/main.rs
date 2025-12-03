@@ -20,12 +20,14 @@
 
 use eframe::epaint::StrokeKind;
 use eframe::{CreationContext, Frame};
-use egui::{Color32, ColorImage, Context, Pos2, Rect, RichText, TextureHandle, UiBuilder, Vec2, Widget};
+use egui::{
+    Color32, ColorImage, Context, Pos2, Rect, RichText, TextureHandle, UiBuilder, Vec2, Widget,
+};
 use egui_ltreeview::{Action, TreeView};
 use log::{debug, error, info, trace};
-use opencv::core::{CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
 #[cfg(feature = "opencv-411")]
-use opencv::core::{AlgorithmHint};
+use opencv::core::AlgorithmHint;
+use opencv::core::{CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
 use opencv::imgproc;
 use opencv::imgproc::{
     COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2,
@@ -98,11 +100,13 @@ fn camera_enumeration_thread_main() -> Result<Vec<CameraEnumerationResult>, Devi
         // 'device.formats' can't be called until there's an output handler set and the device is started
         let _ = device.set_output_handler(|_| Ok(()));
 
-        if device.start()
-            .inspect_err(|e|{
+        if device
+            .start()
+            .inspect_err(|e| {
                 error!("unable to start device. error: {:?}", e);
             })
-            .is_ok() {
+            .is_ok()
+        {
             // Get supported formats
             let formats = device.formats();
             if let Ok(formats) = formats {
@@ -227,13 +231,11 @@ fn camera_thread_main(shared_state: Arc<Mutex<CameraSharedState>>, mode_selectio
                         let mut app_state = app_state.lock().unwrap();
 
                         let faces = match app_state.detect_faces {
-                            true => {
-                                app_state
-                                    .face_classifier
-                                    .as_mut()
-                                    .map(|mut classifier| detect_faces(&mat, &mut classifier).ok())
-                                    .flatten()
-                            }
+                            true => app_state
+                                .face_classifier
+                                .as_mut()
+                                .map(|mut classifier| detect_faces(&mat, &mut classifier).ok())
+                                .flatten(),
                             false => Option::<Vector<opencv::core::Rect>>::None,
                         };
 
@@ -374,13 +376,7 @@ where
             let mut bgr_mat =
                 unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
             #[cfg(feature = "opencv-410")]
-            imgproc::cvt_color(
-                &raw_mat,
-                &mut bgr_mat,
-                code,
-                0
-        )
-                .unwrap();
+            imgproc::cvt_color(&raw_mat, &mut bgr_mat, code, 0).unwrap();
             #[cfg(feature = "opencv-411")]
             imgproc::cvt_color(
                 &raw_mat,
@@ -414,13 +410,7 @@ where
                 let mut bgr_mat =
                     unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
                 #[cfg(feature = "opencv-410")]
-                imgproc::cvt_color(
-                    &raw_mat,
-                    &mut bgr_mat,
-                    imgproc::COLOR_RGB2BGR,
-                    0,
-                )
-                .unwrap();
+                imgproc::cvt_color(&raw_mat, &mut bgr_mat, imgproc::COLOR_RGB2BGR, 0).unwrap();
                 #[cfg(feature = "opencv-411")]
                 imgproc::cvt_color(
                     &raw_mat,
@@ -478,13 +468,8 @@ where
             // Method 1: Use OpenCV's cvtColorTwoPlane
             // This function explicitly converts from separate Y and UV planes
             #[cfg(feature = "opencv-410")]
-            imgproc::cvt_color_two_plane(
-                &y_mat,
-                &uv_mat,
-                &mut bgr_mat,
-                COLOR_YUV2BGR_NV12
-            )
-            .unwrap();
+            imgproc::cvt_color_two_plane(&y_mat, &uv_mat, &mut bgr_mat, COLOR_YUV2BGR_NV12)
+                .unwrap();
             #[cfg(feature = "opencv-411")]
             imgproc::cvt_color_two_plane(
                 &y_mat,
@@ -580,13 +565,7 @@ where
 
             // Convert to BGR
             #[cfg(feature = "opencv-410")]
-            imgproc::cvt_color(
-                &yuv_mat,
-                &mut bgr_mat,
-                COLOR_YUV2BGR_I420,
-                0,
-            )
-            .unwrap();
+            imgproc::cvt_color(&yuv_mat, &mut bgr_mat, COLOR_YUV2BGR_I420, 0).unwrap();
             #[cfg(feature = "opencv-411")]
             imgproc::cvt_color(
                 &yuv_mat,
@@ -618,12 +597,7 @@ fn detect_faces(
 
     let mut gray = Mat::default();
     #[cfg(feature = "opencv-410")]
-    imgproc::cvt_color(
-        mat,
-        &mut gray,
-        imgproc::COLOR_BGR2GRAY,
-        0,
-    )?;
+    imgproc::cvt_color(mat, &mut gray, imgproc::COLOR_BGR2GRAY, 0)?;
     #[cfg(feature = "opencv-411")]
     imgproc::cvt_color(
         mat,
@@ -1033,7 +1007,7 @@ impl eframe::App for CameraApp {
                     loop {
                         let processing_result = camera_state.receiver.try_recv();
                         if processing_result.is_err() {
-                            break
+                            break;
                         }
                         received_frames_counter += 1;
                         camera_state.latest_result = Some(processing_result.unwrap());
@@ -1042,7 +1016,9 @@ impl eframe::App for CameraApp {
                     if received_frames_counter > 0 {
                         trace!(
                             "Received frame(s). Camera: {}, frames: {:?}, instant: {:?}",
-                            camera_state.mode.camera_index, received_frames_counter, camera_state.latest_result.as_ref().unwrap().instant
+                            camera_state.mode.camera_index,
+                            received_frames_counter,
+                            camera_state.latest_result.as_ref().unwrap().instant
                         );
                     }
 
@@ -1117,24 +1093,36 @@ impl eframe::App for CameraApp {
                             let _ = egui::Frame::default().show(&mut overlay_ui, |ui| {
                                 egui::Sides::new().show(
                                     ui,
-                                    |ui|{
+                                    |ui| {
                                         egui::Label::new(
-                                            RichText::new(format!("{}", processing_result.timestamp))
-                                                .monospace()
-                                                .color(egui::Color32::GREEN),
+                                            RichText::new(format!(
+                                                "{}",
+                                                processing_result.timestamp
+                                            ))
+                                            .monospace()
+                                            .color(egui::Color32::GREEN),
                                         )
-                                            .selectable(false)
-                                            .ui(ui);
+                                        .selectable(false)
+                                        .ui(ui);
                                     },
-                                    |ui|{
-                                        ui.add_enabled_ui(camera_state.can_detect_faces, |ui|{
-                                            if egui::Button::selectable(camera_state.detect_faces,"☺")
-                                                .ui(ui)
-                                                .clicked() {
-                                                camera_state.detect_faces = !camera_state.detect_faces;
+                                    |ui| {
+                                        ui.add_enabled_ui(camera_state.can_detect_faces, |ui| {
+                                            if egui::Button::selectable(
+                                                camera_state.detect_faces,
+                                                "☺",
+                                            )
+                                            .ui(ui)
+                                            .clicked()
+                                            {
+                                                camera_state.detect_faces =
+                                                    !camera_state.detect_faces;
 
                                                 // propagate the change the shared state.
-                                                camera_state.shared_state.lock().unwrap().detect_faces = camera_state.detect_faces;
+                                                camera_state
+                                                    .shared_state
+                                                    .lock()
+                                                    .unwrap()
+                                                    .detect_faces = camera_state.detect_faces;
                                             }
                                         });
 
@@ -1144,10 +1132,13 @@ impl eframe::App for CameraApp {
                                             _ => Color32::RED,
                                         };
                                         ui.add(
-                                            egui::Label::new(RichText::new("*").monospace().color(color))
-                                                .selectable(false),
+                                            egui::Label::new(
+                                                RichText::new("*").monospace().color(color),
+                                            )
+                                            .selectable(false),
                                         );
-                                    });
+                                    },
+                                );
                             });
                         });
                     }
