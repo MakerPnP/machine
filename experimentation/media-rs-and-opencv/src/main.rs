@@ -57,7 +57,7 @@ fn main() -> eframe::Result {
 
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
-        "VideoCapture + OpenCV",
+        "Video Capture (via media-rs) + OpenCV",
         native_options,
         Box::new(|cc| Ok(Box::new(CameraApp::new(cc)))),
     )

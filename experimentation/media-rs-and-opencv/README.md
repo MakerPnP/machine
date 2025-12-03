@@ -17,7 +17,17 @@ A cross-platform tool to display video streams concurrently with [OpenCV](https:
 Video capture is done using the [`media-rs`](https://github.com/rust-media/media-rs) crate.
 
 Recent screenshot:
-[<img src="assets/screenshots/TODO.png" width="800" alt="VideoCapture + OpenCV">](assets/screenshots/TODO.png)
+[<img src="assets/screenshots/media-rs-opencv__2025-12-03_150933.png" width="800" alt="VideoCapture + OpenCV">](assets/screenshots/media-rs-opencv__2025-12-03_150933.png)
+
+## Compatibility
+
+Camera support is provided by media-rs:
+
+* Windows 11: used the [Media foundation](https://learn.microsoft.com/en-gb/windows/win32/medfound/microsoft-media-foundation-sdk) backend, USB webcameras, etc.
+* Linux: uses a [libcamera](https://libcamera.org/) backend.  MIPI CSI-2 cameras (Raspberry Pi 5), V4L2 cameras, etc.
+* macOS: uses the [AVFoundation](https://developer.apple.com/av-foundation/) backend, for USB webcameras, etc.
+
+The version of Media-RS with linux support is used, provided by this PR: https://github.com/rust-media/media-rs/pull/10
 
 ## Background
 
