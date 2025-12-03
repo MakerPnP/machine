@@ -4,22 +4,30 @@ resolver = "3"
 members = [
     "ioboard_shared",
     "operator_shared",
+    "ergot_util",
 ]
 
 [workspace.dependencies]
-operator_shared    = { path = "operator_shared" }
-ioboard_shared     = { path = "ioboard_shared" }
+operator_shared      = { path = "operator_shared" }
+ioboard_shared       = { path = "ioboard_shared" }
+ergot_util           = { path = "ergot_util" }
 
 # logging
-log                = "0.4.27"
-defmt              = "1.0.1"
+log                  = "0.4.27"
+defmt                = "1.0.1"
 
 # comms
-ergot              = { path = "../libs/ergot/crates/ergot" }
+ergot                = { path = "../libs/ergot/crates/ergot" }
 
 # serialization
-serde              = { version = "1.0.219", default-features = false }
-postcard-schema    = { version = "0.2.5", features = ["derive"] }
+serde                = { version = "1.0.219", default-features = false }
+postcard-schema      = { version = "0.2.5", features = ["derive"] }
 
 # time
-chrono             = { version = "0.4.42" }
+chrono               = { version = "0.4.42" }
+
+# tasks
+tokio                = { version = "1.45.1", default-features = false }
+
+# errors
+thiserror            = { version = "2.0.17" }
