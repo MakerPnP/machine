@@ -20,12 +20,14 @@
 
 use eframe::epaint::StrokeKind;
 use eframe::{CreationContext, Frame};
-use egui::{Color32, ColorImage, Context, Pos2, Rect, RichText, TextureHandle, UiBuilder, Vec2, Widget};
+use egui::{
+    Color32, ColorImage, Context, Pos2, Rect, RichText, TextureHandle, UiBuilder, Vec2, Widget,
+};
 use egui_ltreeview::{Action, TreeView};
 use log::{debug, error, info, trace, warn};
-use opencv::core::{CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
 #[cfg(feature = "opencv-411")]
-use opencv::core::{AlgorithmHint};
+use opencv::core::AlgorithmHint;
+use opencv::core::{CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
 use opencv::imgproc;
 use opencv::imgproc::{
     COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2,
@@ -35,19 +37,19 @@ use opencv::objdetect::CascadeClassifier;
 use opencv::prelude::*;
 use std::ffi::c_void;
 
+use media::FrameDescriptor;
+use media::device::camera::CameraManager;
+use media::device::{Device, OutputDevice};
+use media::variant::Variant;
+use media::video::{PixelFormat, VideoFormat};
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use media::device::camera::CameraManager;
-use media::device::{Device, OutputDevice};
-use media::FrameDescriptor;
-use media::variant::Variant;
-use media::video::{PixelFormat, VideoFormat};
 
-use crate::watch_channel::{WatchSender as Sender, WatchReceiver as Receiver, WatchChannel};
+use crate::watch_channel::{WatchChannel, WatchReceiver as Receiver, WatchSender as Sender};
 pub mod watch_channel;
 
 fn main() -> eframe::Result {
@@ -93,11 +95,13 @@ fn camera_enumeration_thread_main() -> Result<Vec<CameraEnumerationResult>, medi
         // 'device.formats' can't be called until there's an output handler set and the device is started
         let _ = device.set_output_handler(|_| Ok(()));
 
-        if device.start()
-            .inspect_err(|e|{
+        if device
+            .start()
+            .inspect_err(|e| {
                 error!("unable to start device. error: {:?}", e);
             })
-            .is_ok() {
+            .is_ok()
+        {
             // Get supported formats
             let formats = device.formats();
             if let Ok(formats) = formats {
@@ -225,13 +229,11 @@ fn camera_thread_main(shared_state: Arc<Mutex<CameraSharedState>>, mode_selectio
                         let mut app_state = app_state.lock().unwrap();
 
                         let faces = match app_state.detect_faces {
-                            true => {
-                                app_state
-                                    .face_classifier
-                                    .as_mut()
-                                    .map(|mut classifier| detect_faces(&mat, &mut classifier).ok())
-                                    .flatten()
-                            }
+                            true => app_state
+                                .face_classifier
+                                .as_mut()
+                                .map(|mut classifier| detect_faces(&mat, &mut classifier).ok())
+                                .flatten(),
                             false => Option::<Vector<opencv::core::Rect>>::None,
                         };
 
@@ -373,13 +375,7 @@ where
             let mut bgr_mat =
                 unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
             #[cfg(feature = "opencv-410")]
-            imgproc::cvt_color(
-                &raw_mat,
-                &mut bgr_mat,
-                code,
-                0
-            )
-                .unwrap();
+            imgproc::cvt_color(&raw_mat, &mut bgr_mat, code, 0).unwrap();
             #[cfg(feature = "opencv-411")]
             imgproc::cvt_color(
                 &raw_mat,
@@ -413,13 +409,7 @@ where
                 let mut bgr_mat =
                     unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
                 #[cfg(feature = "opencv-410")]
-                imgproc::cvt_color(
-                    &raw_mat,
-                    &mut bgr_mat,
-                    imgproc::COLOR_RGB2BGR,
-                    0,
-                )
-                .unwrap();
+                imgproc::cvt_color(&raw_mat, &mut bgr_mat, imgproc::COLOR_RGB2BGR, 0).unwrap();
                 #[cfg(feature = "opencv-411")]
                 imgproc::cvt_color(
                     &raw_mat,
@@ -477,13 +467,8 @@ where
             // Method 1: Use OpenCV's cvtColorTwoPlane
             // This function explicitly converts from separate Y and UV planes
             #[cfg(feature = "opencv-410")]
-            imgproc::cvt_color_two_plane(
-                &y_mat,
-                &uv_mat,
-                &mut bgr_mat,
-                COLOR_YUV2BGR_NV12
-            )
-            .unwrap();
+            imgproc::cvt_color_two_plane(&y_mat, &uv_mat, &mut bgr_mat, COLOR_YUV2BGR_NV12)
+                .unwrap();
             #[cfg(feature = "opencv-411")]
             imgproc::cvt_color_two_plane(
                 &y_mat,
@@ -517,8 +502,14 @@ where
             let uv_h = height / 2;
             let uv_w = width / 2;
 
-            info!("y_stride: {}, v_stride: {}, u_stride: {}", y_stride, v_stride, u_stride);
-            info!("width: {}, height: {}, uv_w: {}, uv_h: {}", width, height, uv_w, uv_h);
+            info!(
+                "y_stride: {}, v_stride: {}, u_stride: {}",
+                y_stride, v_stride, u_stride
+            );
+            info!(
+                "width: {}, height: {}, uv_w: {}, uv_h: {}",
+                width, height, uv_w, uv_h
+            );
 
             // Calculate total size needed for I420 contiguous buffer
             let y_size = y_stride * height;
@@ -560,7 +551,8 @@ where
                     CV_8UC1,
                     i420_data.as_ptr() as *mut c_void,
                     width, // stride is width for contiguous buffer
-                ).unwrap()
+                )
+                .unwrap()
             };
 
             // Convert to BGR
@@ -568,13 +560,7 @@ where
 
             // Convert to BGR
             #[cfg(feature = "opencv-410")]
-            imgproc::cvt_color(
-                &i420_mat,
-                &mut bgr_mat,
-                COLOR_YUV2BGR_I420,
-                0,
-            )
-            .unwrap();
+            imgproc::cvt_color(&i420_mat, &mut bgr_mat, COLOR_YUV2BGR_I420, 0).unwrap();
             #[cfg(feature = "opencv-411")]
             imgproc::cvt_color(
                 &i420_mat,
@@ -609,12 +595,7 @@ fn detect_faces(
 
     let mut gray = Mat::default();
     #[cfg(feature = "opencv-410")]
-    imgproc::cvt_color(
-        mat,
-        &mut gray,
-        imgproc::COLOR_BGR2GRAY,
-        0,
-    )?;
+    imgproc::cvt_color(mat, &mut gray, imgproc::COLOR_BGR2GRAY, 0)?;
     #[cfg(feature = "opencv-411")]
     imgproc::cvt_color(
         mat,
@@ -694,7 +675,8 @@ struct CameraApp {
 }
 
 struct UiState {
-    enumeration_handle: Option<JoinHandle<Result<Vec<CameraEnumerationResult>, media::error::Error>>>,
+    enumeration_handle:
+        Option<JoinHandle<Result<Vec<CameraEnumerationResult>, media::error::Error>>>,
     enumerated_cameras: Vec<CameraEnumerationResult>,
     cameras: HashMap<String, CameraState>,
 
@@ -1097,24 +1079,36 @@ impl eframe::App for CameraApp {
                             let _ = egui::Frame::default().show(&mut overlay_ui, |ui| {
                                 egui::Sides::new().show(
                                     ui,
-                                    |ui|{
+                                    |ui| {
                                         egui::Label::new(
-                                            RichText::new(format!("{}", processing_result.timestamp))
-                                                .monospace()
-                                                .color(egui::Color32::GREEN),
+                                            RichText::new(format!(
+                                                "{}",
+                                                processing_result.timestamp
+                                            ))
+                                            .monospace()
+                                            .color(egui::Color32::GREEN),
                                         )
-                                            .selectable(false)
-                                            .ui(ui);
+                                        .selectable(false)
+                                        .ui(ui);
                                     },
-                                    |ui|{
-                                        ui.add_enabled_ui(camera_state.can_detect_faces, |ui|{
-                                            if egui::Button::selectable(camera_state.detect_faces,"☺")
-                                                .ui(ui)
-                                                .clicked() {
-                                                camera_state.detect_faces = !camera_state.detect_faces;
+                                    |ui| {
+                                        ui.add_enabled_ui(camera_state.can_detect_faces, |ui| {
+                                            if egui::Button::selectable(
+                                                camera_state.detect_faces,
+                                                "☺",
+                                            )
+                                            .ui(ui)
+                                            .clicked()
+                                            {
+                                                camera_state.detect_faces =
+                                                    !camera_state.detect_faces;
 
                                                 // propagate the change the shared state.
-                                                camera_state.shared_state.lock().unwrap().detect_faces = camera_state.detect_faces;
+                                                camera_state
+                                                    .shared_state
+                                                    .lock()
+                                                    .unwrap()
+                                                    .detect_faces = camera_state.detect_faces;
                                             }
                                         });
 
@@ -1123,10 +1117,13 @@ impl eframe::App for CameraApp {
                                             false => Color32::RED,
                                         };
                                         ui.add(
-                                            egui::Label::new(RichText::new("*").monospace().color(color))
-                                                .selectable(false),
+                                            egui::Label::new(
+                                                RichText::new("*").monospace().color(color),
+                                            )
+                                            .selectable(false),
                                         );
-                                    });
+                                    },
+                                );
                             });
                         });
                     }
@@ -1179,10 +1176,10 @@ impl eframe::App for CameraApp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use opencv::core::Mat;
-    use std::num::NonZeroU32;
     use media::frame::Frame;
     use media::video::VideoFrameDescriptor;
+    use opencv::core::Mat;
+    use std::num::NonZeroU32;
 
     #[test]
     fn test_process_frame_yuyv() {
@@ -1216,10 +1213,15 @@ mod tests {
         };
 
         let frame = if stride != 0 {
-            Frame::video_creator().create_from_aligned_buffer_with_descriptor(desc, NonZeroU32::new(stride).unwrap(), data)
+            Frame::video_creator().create_from_aligned_buffer_with_descriptor(
+                desc,
+                NonZeroU32::new(stride).unwrap(),
+                data,
+            )
         } else {
             Frame::video_creator().create_from_buffer_with_descriptor(desc, data)
-        }.unwrap();
+        }
+        .unwrap();
 
         // This will be the resulting BGR matrix from processing
         let mut processed_mat: Option<Mat> = None;
