@@ -26,6 +26,9 @@ async fn main() -> io::Result<()> {
     env_logger::init();
     console_subscriber::init();
 
+    let _ = server_vision::dump_cameras()
+        .inspect_err(|e| info!("Error dumping cameras: {:?}", e));
+    
     let camera_definitions = config::camera_definitions();
 
     // Create event channel

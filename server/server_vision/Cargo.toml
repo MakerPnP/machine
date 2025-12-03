@@ -4,10 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["opencv-capture"]
+default = ["opencv-capture", "mediars-capture", "opencv-411"]
+
+opencv-410 = [
+    "dep:opencv"
+]
+
+opencv-411 = [
+    "dep:opencv"
+]
 
 opencv-capture = [
-    "opencv/videoio"
+    "opencv/videoio",
+    "dep:opencv",
 ]
 mediars-capture = [
     "dep:media"
@@ -29,7 +38,7 @@ chrono             = { workspace = true}
 media            = { git = "https://github.com/MakerPnP/media-rs", rev = "3a0529d23475f230445b3091ab7b52f401c774dd", optional = true }
 
 # machine-vision
-opencv             = { workspace = true, features = ["imgcodecs", "imgproc", "objdetect"], default-features = false}
+opencv             = { workspace = true, features = ["imgcodecs", "imgproc", "objdetect"], default-features = false, optional = true}
 
 
 # tasks
