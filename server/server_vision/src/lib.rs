@@ -1,17 +1,21 @@
 use std::sync::Arc;
 
-use log::{debug, info};
-use opencv::videoio::VideoWriter;
+use chrono::DateTime;
+use log::{debug, error, info};
+use opencv::videoio::{VideoCapture, VideoWriter};
 use opencv::{imgcodecs, prelude::*, videoio};
 use server_common::camera::{CameraDefinition, CameraSource};
 use tokio::sync::broadcast;
-use tokio::time::{self, Duration};
+use tokio::time::{self, Duration, Instant};
 use tokio_util::sync::CancellationToken;
+
+#[cfg(feature ="opencv-capture")]
+pub mod opencv_capture;
 
 pub struct CameraFrame {
     pub frame_number: u64,
     pub jpeg_bytes: Vec<u8>,
-    pub frame_timestamp: chrono::DateTime<chrono::Utc>,
+    pub frame_timestamp: DateTime<chrono::Utc>,
 }
 
 pub async fn capture_loop(
@@ -19,116 +23,73 @@ pub async fn capture_loop(
     camera_definition: CameraDefinition,
     shutdown_flag: CancellationToken,
 ) -> anyhow::Result<()> {
-    let CameraSource::OpenCV(open_cv_camera_config) = camera_definition.source else {
-        // not an OpenCV camera
-        anyhow::bail!("Not an OpenCV camera")
-    };
+    #[cfg(feature ="opencv-capture")]
+    let mut capture_loop = opencv_capture::opencv_camera(&camera_definition, shutdown_flag)?;
+    #[cfg(not(feature ="opencv-capture"))]
+    unimplemented!("OpenCV capture not enabled, currently only OpenCV is supported.");
 
-    // Open default camera (index 0)
-    let mut cam = videoio::VideoCapture::new(open_cv_camera_config.index, videoio::CAP_ANY)?; // 0 = default device
-    if !videoio::VideoCapture::is_opened(&cam)? {
-        anyhow::bail!(
-            "Unable to open OpenCV camera. OpenCVCamera: {}",
-            open_cv_camera_config.index
-        );
-    }
-    info!(
-        "OpenCVCamera: {}, GUID: {}, HW_DEVICE: {}, Backend: {}",
-        open_cv_camera_config.index,
-        cam.get(videoio::CAP_PROP_GUID)?,
-        cam.get(videoio::CAP_PROP_HW_DEVICE)?,
-        cam.get_backend_name()
-            .unwrap_or("Unknown".to_string())
-    );
-    cam.set(videoio::CAP_PROP_FRAME_WIDTH, f64::from(camera_definition.width))?;
-    cam.set(videoio::CAP_PROP_FRAME_HEIGHT, f64::from(camera_definition.height))?;
-    cam.set(videoio::CAP_PROP_FPS, f64::from(camera_definition.fps))?;
-    cam.set(videoio::CAP_PROP_BUFFERSIZE, f64::from(1))?;
-    cam.set(videoio::CAP_PROP_FORMAT, f64::from(1))?;
+    let result = capture_loop.run({
+        let camera_definition = camera_definition.clone();
 
-    if let Some(four_cc) = camera_definition.four_cc {
-        let four_cc_i32 = VideoWriter::fourcc(four_cc[0], four_cc[1], four_cc[2], four_cc[3])?;
-        info!(
-            "OpenCVCamera: {}, FourCC: {:?} ({} / 0x{:08x})",
-            open_cv_camera_config.index, four_cc, four_cc_i32, four_cc_i32
-        );
+        move |frame, frame_timestamp, frame_instant, frame_duration, frame_number| {
+            if tx.receiver_count() > 0 {
+                // Encode to JPEG (quality default). You can set params to reduce quality/size.
+                let encode_start = Instant::now();
+                let mut buf = opencv::core::Vector::new();
+                let params = opencv::core::Vector::new(); // default
+                imgcodecs::imencode(".jpg", &frame, &mut buf, &params)
+                    .map_err(|e| error!("OpenCV imencode error: {:?}", e))?;
 
-        cam.set(videoio::CAP_PROP_FOURCC, f64::from(four_cc_i32))?;
-    }
+                let encode_end = Instant::now();
+                let encode_duration = (encode_end - encode_start).as_micros() as u32;
 
-    let configured_fps = cam.get(videoio::CAP_PROP_FPS)? as f32;
-    info!(
-        "OpenCVCamera: {}, Configured FPS: {}",
-        open_cv_camera_config.index, configured_fps
-    );
+                let send_start = Instant::now();
 
-    let period = Duration::from_secs_f64(1.0 / configured_fps as f64);
+                // Wrap bytes into Arc so broadcast clones cheap
+                let camera_frame = CameraFrame {
+                    frame_number,
+                    jpeg_bytes: buf.to_vec(),
+                    frame_timestamp,
+                };
 
-    let mut interval = time::interval(period);
-    interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+                let camera_frame_arc = Arc::new(camera_frame);
+                // safe to ignore the error, no subscribers yet, however we're only sending a frame if we
+                // have subscribers, so this should never fail anyway.
+                let _ = tx.send(camera_frame_arc);
 
-    let mut previous_frame_at = time::Instant::now();
-    let mut frame = Mat::default();
+                let send_end = Instant::now();
+                let send_duration = (send_end - send_start).as_micros() as u32;
 
-    let mut frame_number = 0_u64;
-    loop {
-        interval.tick().await;
-
-        if tx.receiver_count() > 0 {
-            let frame_timestamp = chrono::Utc::now();
-            let frame_instant = time::Instant::now();
-
-            cam.read(&mut frame)?;
-            if frame.empty() {
-                // skip or try again
-                continue;
+                debug!(
+                    "Camera: {:?}, frame_timestamp: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us, frame_duration: {}us",
+                    camera_definition.source,
+                    frame_timestamp,
+                    frame_number,
+                    encode_duration,
+                    send_duration,
+                    frame_duration.as_micros()
+                );
             }
-            let frame_duration = (frame_instant - previous_frame_at).as_millis();
-            previous_frame_at = frame_instant;
 
-            // Encode to JPEG (quality default). You can set params to reduce quality/size.
-            let encode_start = time::Instant::now();
-            let mut buf = opencv::core::Vector::new();
-            let params = opencv::core::Vector::new(); // default
-            imgcodecs::imencode(".jpg", &frame, &mut buf, &params)?;
-
-            let encode_end = time::Instant::now();
-            let encode_duration = (encode_end - encode_start).as_micros() as u32;
-
-            let send_start = time::Instant::now();
-
-            // Wrap bytes into Arc so broadcast clones cheap
-            let camera_frame = CameraFrame {
-                frame_number,
-                jpeg_bytes: buf.to_vec(),
-                frame_timestamp,
-            };
-
-            let camera_frame_arc = Arc::new(camera_frame);
-            // safe to ignore the error, no subscribers yet, however we're only sending a frame if we
-            // have subscribers, so this should never fail anyway.
-            let _ = tx.send(camera_frame_arc);
-
-            let send_end = time::Instant::now();
-            let send_duration = (send_end - send_start).as_micros() as u32;
-
-            debug!(
-                "OpenCVCamera: {}, frame_timestamp: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us, frame_duration: {}ms",
-                open_cv_camera_config.index,
-                frame_timestamp,
-                frame_number,
-                encode_duration,
-                send_duration,
-                frame_duration
-            );
-            frame_number += 1;
+            Ok(())
         }
+    }).await;
 
-        if shutdown_flag.is_cancelled() {
-            info!("Shutting down camera capture. Index: {}", open_cv_camera_config.index);
-            break;
-        }
+    if let Err(e) = result {
+        error!("Error in camera capture loop: {:?}", e);
     }
+
+    info!("Shutting down camera capture. Camera: {:?}", camera_definition.source);
 
     Ok(())
+}
+
+pub trait VideoCaptureLoop {
+    // TODO add a proper error type
+    /// capture frames until canceled, calling the closure for each frame.
+    ///
+    /// caller can return an error, which may be logged, and allows the use of the `?` in the closure
+    fn run<F>(&mut self, f: F) -> impl Future<Output = anyhow::Result<()>> + Send + '_
+    where
+        F: Fn(&Mat, DateTime<chrono::Utc>, Instant, Duration, u64) -> Result<(), ()> + Send + Sync + 'static;
 }

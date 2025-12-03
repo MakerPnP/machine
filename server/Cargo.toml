@@ -37,4 +37,4 @@ cordyceps          = "0.3.4"
 chrono          = { version = "0.4.42" }
 
 # vision
-opencv          = { version = "0.96.0" }
+opencv          = { version = "0.96.0", default-features = false }

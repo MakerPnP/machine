@@ -17,13 +17,24 @@ pub struct CameraStreamConfig {
     // TODO maybe support resizing on the server before sending.
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum CameraSource {
+    #[cfg(feature = "opencv-capture")]
     OpenCV(OpenCVCameraConfig),
+    #[cfg(feature = "mediars-capture")]
+    MediaRS(MediaRSCameraConfig),
     // TODO other sources could be a camera on an H7 MCU via Ergot...
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+#[cfg(feature = "opencv-capture")]
 pub struct OpenCVCameraConfig {
     pub index: i32,
+}
+
+#[derive(Debug, Clone)]
+#[cfg(feature = "mediars-capture")]
+pub struct MediaRSCameraConfig {
+    pub device_id: String,
 }
