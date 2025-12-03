@@ -2256,23 +2256,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "media-rs-and-opencv"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "eframe",
- "egui",
- "egui_ltreeview",
- "env_logger",
- "image",
- "log",
- "opencv",
- "serde",
- "video-capture",
- "x-media",
-]
-
-[[package]]
 name = "memchr"
 version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3946,6 +3929,23 @@ dependencies = [
  "x-base",
  "x-media",
  "x-variant",
+]
+
+[[package]]
+name = "videocapture-and-opencv"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "eframe",
+ "egui",
+ "egui_ltreeview",
+ "env_logger",
+ "image",
+ "log",
+ "opencv",
+ "serde",
+ "video-capture",
+ "x-media",
 ]
 
 [[package]]

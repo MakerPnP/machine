@@ -12,6 +12,8 @@
 
 # Video Capture and OpenCV
 
+<strong>DEPRECATED: See the `media-rs-and-opencv` example instead, this example is no longer maintained.</strong>
+
 A cross-platform tool to display video streams concurrently with [OpenCV](https://docs.opencv.org/4.x/index.html) visualizations.
 
 Video capture is done using the [`video-capture`](https://github.com/libark/video-capture) crate.

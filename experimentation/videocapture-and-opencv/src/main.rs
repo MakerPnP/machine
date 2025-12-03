@@ -1,5 +1,7 @@
 //! Demonstrates how to use VideoCapture + OpenCV with egui.
 //!
+//! DEPRECATED: Replaced by the `medias-rs-and-opencv` example. No-longer maintained.
+//!
 //! Does NOT use the OpenCV feature `videoio` to capture video frames.
 //!
 //! This example uses the [video-capture](https://crates.io/crates/video_capture) crate to capture video frames from a camera.
@@ -52,12 +54,16 @@ use video_capture::{
 };
 use x_media::video::VideoFormat;
 
+#[deprecated(
+    since = "0.1.0",
+    note = "See the 'media-rs-and-opencv' example instead."
+)]
 fn main() -> eframe::Result {
     env_logger::init();
 
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
-        "VideoCapture + OpenCV",
+        "Video Capture (via video-capture) + OpenCV",
         native_options,
         Box::new(|cc| Ok(Box::new(CameraApp::new(cc)))),
     )
