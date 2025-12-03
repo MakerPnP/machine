@@ -160,7 +160,7 @@ pub struct ViewportState {
     pub(crate) context: Option<egui::Context>,
     pub(crate) ui_state: Value<UiState>,
 
-    fps_stats: FpsStats,
+    fps_stats: FpsStats<300>,
     fps_snapshot: Option<FpsSnapshot>,
     frame_number: u64,
 }
@@ -191,7 +191,7 @@ impl ViewportState {
             context: None,
             ui_state,
 
-            fps_stats: FpsStats::new(300),
+            fps_stats: FpsStats::new(),
             fps_snapshot: None,
             frame_number: 0,
         }

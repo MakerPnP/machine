@@ -1,16 +1,15 @@
+use std::collections::VecDeque;
 use std::time::Instant;
 
-pub struct FpsStats {
-    history: Vec<f32>,
-    max_len: usize,
+pub struct FpsStats<const MAX_LEN: usize> {
+    history: VecDeque<f32>,
     last_update: Option<Instant>,
 }
 
-impl FpsStats {
-    pub fn new(max_len: usize) -> Self {
+impl<const MAX_LEN: usize> FpsStats<MAX_LEN> {
+    pub fn new() -> Self {
         Self {
-            history: Vec::with_capacity(max_len),
-            max_len,
+            history: VecDeque::from([0_f32; MAX_LEN]),
             last_update: None,
         }
     }
@@ -31,30 +30,22 @@ impl FpsStats {
         };
 
         // store in history
-        if self.history.len() >= self.max_len {
-            self.history.remove(0);
-        }
-        self.history.push(latest_fps);
+        self.history.pop_front();
+        self.history.push_back(latest_fps);
 
         self.last_update = Some(now);
 
-        // compute snapshot
-        let min = self
+        // compute snapshot, ignoring zero fps values
+        let (min, max, sum, count) = self
             .history
             .iter()
             .copied()
-            .fold(f32::INFINITY, f32::min);
-        let max = self
-            .history
-            .iter()
-            .copied()
-            .fold(f32::NEG_INFINITY, f32::max);
-        let avg = self
-            .history
-            .iter()
-            .copied()
-            .sum::<f32>()
-            / self.history.len() as f32;
+            .filter(|&fps| fps > 0.0)
+            .fold(
+                (f32::INFINITY, f32::NEG_INFINITY, 0.0, 0),
+                |(min, max, sum, count), fps| (min.min(fps), max.max(fps), sum + fps, count + 1),
+            );
+        let avg = sum / count as f32;
 
         Some(FpsSnapshot {
             latest: latest_fps,
@@ -86,7 +77,7 @@ pub mod egui {
 
     use crate::fps_stats::FpsStats;
 
-    pub fn show_frame_durations(ui: &mut Ui, fps_stats: &FpsStats) -> Response {
+    pub fn show_frame_durations<const MAX_LEN: usize>(ui: &mut Ui, fps_stats: &FpsStats<MAX_LEN>) -> Response {
         let durations = fps_stats.frame_durations_ms();
 
         // Map history to egui_plot bars

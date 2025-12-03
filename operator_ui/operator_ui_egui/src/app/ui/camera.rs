@@ -25,7 +25,7 @@ pub(crate) struct CameraUi {
     shutdown_token: CancellationToken,
 
     camera_frame_number: u64,
-    camera_fps_stats: Value<FpsStats>,
+    camera_fps_stats: Value<FpsStats<300>>,
     camera_fps_snapshot: Option<FpsSnapshot>,
 
     lag_counter: u64,
@@ -46,7 +46,7 @@ impl CameraUi {
             camera_frame_listener_handle,
             shutdown_token,
 
-            camera_fps_stats: Value::new(FpsStats::new(300)),
+            camera_fps_stats: Value::new(FpsStats::new()),
             camera_fps_snapshot: None,
             camera_frame_number: 0,
 
@@ -155,15 +155,17 @@ impl CameraUi {
                             .id_salt(ui.id().with("tool-window-scroll"))
                             .show(ui, |ui| {
                                 Frame::group(ui.style()).show(ui, |ui| {
-                                    ui.label(format!("Frame: {}", camera_frame_number));
+                                    let frame_text = format!("Frame: {}", camera_frame_number);
                                     if let Some(snapshot) = &camera_fps_snapshot {
                                         ui.label(format!(
-                                            "FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
-                                            snapshot.latest, snapshot.min, snapshot.max, snapshot.avg
+                                            "{}, FPS: {:.1} (min {:.1}, max {:.1}, avg {:.1})",
+                                            frame_text, snapshot.latest, snapshot.min, snapshot.max, snapshot.avg
                                         ));
 
                                         let camera_fps_stats = camera_fps_stats.lock().unwrap();
                                         show_frame_durations(ui, &camera_fps_stats);
+                                    } else {
+                                        ui.label(frame_text);
                                     }
                                 });
                             });
