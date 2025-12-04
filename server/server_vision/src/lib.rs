@@ -1,7 +1,9 @@
 use std::sync::Arc;
-
+use anyhow::anyhow;
 use chrono::DateTime;
 use log::{debug, error, info};
+use media::device::camera::CameraManager;
+use media::device::Device;
 use opencv::{imgcodecs, prelude::*};
 use server_common::camera::{CameraDefinition, CameraSource};
 use tokio::sync::broadcast;
@@ -18,6 +20,35 @@ pub struct CameraFrame {
     pub jpeg_bytes: Vec<u8>,
     pub frame_timestamp: DateTime<chrono::Utc>,
 }
+
+pub fn dump_cameras() -> anyhow::Result<()> {
+    #[cfg(feature = "mediars-capture")]
+    let _ = dump_cameras_mediars()
+        .inspect_err(|e| error!("MediaRS camera error: {:?}", e.to_string()));
+
+    #[cfg(feature = "opencv-capture")]
+    let _ = dump_cameras_opencv()
+        .inspect_err(|e| error!("OpenCV cameras error: {:?}", e.to_string()));
+
+    Ok(())
+}
+#[cfg(feature = "mediars-capture")]
+pub fn dump_cameras_mediars() -> anyhow::Result<()>{
+
+    let mut cam_mgr = CameraManager::new_default()?;
+
+    for (index, device) in cam_mgr.iter_mut().enumerate() {
+        info!("MediaRS camera: {}, id: {:?}, formats: {:?}", index, device.id(), device.formats());
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "opencv-capture")]
+pub fn dump_cameras_opencv() -> anyhow::Result<()>{
+    anyhow::bail!("Unsupported for OpenCV");
+}
+
 
 pub async fn capture_loop(
     tx: broadcast::Sender<Arc<CameraFrame>>,
@@ -94,13 +125,13 @@ fn make_capture_loop(
     match &camera_definition.source {
         #[cfg(feature = "opencv-capture")]
         CameraSource::OpenCV(_) => {
-            let capture = opencv_capture::opencv_camera(&camera_definition, shutdown_flag)?;
+            let capture = opencv_capture::OpenCVCameraLoop::build(&camera_definition, shutdown_flag)?;
 
             Ok(VideoCaptureImpl::OpenCV(capture))
         }
         #[cfg(feature = "mediars-capture")]
         CameraSource::MediaRS(_) => {
-            let capture = mediars_capture::mediars_camera(&camera_definition, shutdown_flag)?;
+            let capture = mediars_capture::MediaRSCameraLoop::build(&camera_definition, shutdown_flag)?;
 
             Ok(VideoCaptureImpl::MediaRS(capture))
         }
