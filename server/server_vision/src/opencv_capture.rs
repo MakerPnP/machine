@@ -120,3 +120,8 @@ impl VideoCaptureLoop for OpenCVCameraLoop {
         }
     }
 }
+
+#[cfg(feature = "opencv-capture")]
+pub fn dump_cameras_opencv() -> anyhow::Result<()>{
+    anyhow::bail!("Unsupported for OpenCV");
+}
