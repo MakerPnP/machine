@@ -95,6 +95,7 @@ pub async fn ergot_task(
     let camera_configs = [
         (CameraIdentifier::new(0), TARGET_FPS),
         (CameraIdentifier::new(1), SCHEDULED_FPS_MAX),
+        //(CameraIdentifier::new(2), SCHEDULED_FPS_MAX),
     ];
 
     info!("Starting cameras. ids: {:?}", camera_configs);

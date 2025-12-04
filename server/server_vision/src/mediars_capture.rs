@@ -9,6 +9,7 @@ use media::device::backend::media_foundation::{MediaFoundationDevice, MediaFound
 use media::device::camera::{CameraManager, DefaultCameraManager};
 use media::device::{Device, DeviceManager, OutputDevice};
 use media::FrameDescriptor;
+use media::variant::Variant;
 use media::video::PixelFormat;
 #[cfg(feature = "opencv-411")]
 use opencv::core::AlgorithmHint;
@@ -30,6 +31,7 @@ pub struct MediaRSCameraLoop {
     shutdown_flag: CancellationToken,
     device: Arc<Mutex<&'static mut <DefaultCameraManager as DeviceManager>::DeviceType>>,
     cam_mgr: CameraManager<DefaultCameraManager>,
+    camera_definition: CameraDefinition
 }
 
 // Safety: the cam_mgr and device are only used by a single thread, right?
@@ -66,6 +68,7 @@ impl MediaRSCameraLoop {
             shutdown_flag,
             cam_mgr,
             device: Arc::new(Mutex::new(device)),
+            camera_definition: camera_definition.clone(),
         })
     }
 }
@@ -118,6 +121,23 @@ impl VideoCaptureLoop for MediaRSCameraLoop {
 
             {
                 let mut device = self.device.lock().unwrap();
+
+                // Configure the camera
+                let mut options = Variant::new_dict();
+                options["width"] = self.camera_definition.width.into();
+                options["height"] = self.camera_definition.height.into();
+                options["frame-rate"] = self.camera_definition.fps.into();
+
+                if let Some(code) = self.camera_definition.four_cc {
+                    let four_bytes = [code[0] as u8, code[1] as u8, code[2] as u8, code[3] as u8];
+                    let format_code = u32::from_le_bytes(four_bytes);
+                    options["format"] = format_code.into();
+                }
+
+                if let Err(e) = device.configure(&options) {
+                    error!("{:?}", e.to_string());
+                }
+
                 // Start the camera
                 if let Err(e) = device.start() {
                     error!("{:?}", e.to_string());

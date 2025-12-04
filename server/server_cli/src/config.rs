@@ -41,7 +41,10 @@ pub fn camera_definitions() -> Vec<CameraDefinition> {
             width: 640,
             height: 480,
             fps: 100.0,
+            #[cfg(feature = "opencv-capture")]
             four_cc: Some(['Y', 'U', 'Y', '2']),
+            #[cfg(feature = "mediars-capture")]
+            four_cc: Some(['Y', 'U', 'Y', 'V']),
         },
         CameraDefinition {
             name: "Microsoft XBox Vision Live".to_string(),
@@ -59,7 +62,10 @@ pub fn camera_definitions() -> Vec<CameraDefinition> {
             width: 640,
             height: 480,
             fps: 30.0,
+            #[cfg(feature = "opencv-capture")]
             four_cc: Some(['Y', 'U', 'Y', '2']),
+            #[cfg(feature = "mediars-capture")]
+            four_cc: Some(['Y', 'U', 'Y', 'V']),
         },
     ]
 }
