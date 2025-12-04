@@ -3,6 +3,18 @@ name = "server_cli"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["mediars-capture"]
+
+opencv-capture = [
+    "server_common/opencv-capture",
+    "server_vision/opencv-capture",
+]
+mediars-capture = [
+    "server_common/mediars-capture",
+    "server_vision/mediars-capture",
+]
+
 [dependencies]
 operator_shared    = { workspace = true }
 ioboard_shared     = { workspace = true }

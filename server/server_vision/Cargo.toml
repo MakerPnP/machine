@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["opencv-capture", "mediars-capture", "opencv-411"]
+default = ["opencv-411"]
 
 opencv-410 = [
     "dep:opencv"

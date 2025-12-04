@@ -2,8 +2,6 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use chrono::DateTime;
 use log::{debug, error, info};
-use media::device::camera::CameraManager;
-use media::device::Device;
 use opencv::{imgcodecs, prelude::*};
 use server_common::camera::{CameraDefinition, CameraSource};
 use tokio::sync::broadcast;
@@ -23,30 +21,14 @@ pub struct CameraFrame {
 
 pub fn dump_cameras() -> anyhow::Result<()> {
     #[cfg(feature = "mediars-capture")]
-    let _ = dump_cameras_mediars()
+    let _ = mediars_capture::dump_cameras_mediars()
         .inspect_err(|e| error!("MediaRS camera error: {:?}", e.to_string()));
 
     #[cfg(feature = "opencv-capture")]
-    let _ = dump_cameras_opencv()
+    let _ = opencv_capture::dump_cameras_opencv()
         .inspect_err(|e| error!("OpenCV cameras error: {:?}", e.to_string()));
 
-    Ok(())
-}
-#[cfg(feature = "mediars-capture")]
-pub fn dump_cameras_mediars() -> anyhow::Result<()>{
-
-    let mut cam_mgr = CameraManager::new_default()?;
-
-    for (index, device) in cam_mgr.iter_mut().enumerate() {
-        info!("MediaRS camera: {}, id: {:?}, formats: {:?}", index, device.id(), device.formats());
-    }
-
-    Ok(())
-}
-
-#[cfg(feature = "opencv-capture")]
-pub fn dump_cameras_opencv() -> anyhow::Result<()>{
-    anyhow::bail!("Unsupported for OpenCV");
+    Ok::<(), anyhow::Error>(())
 }
 
 
@@ -100,13 +82,17 @@ pub async fn capture_loop(
                 );
             }
 
-            Ok(())
+            Ok::<(), ()>(())
         }
     };
 
     let result = match capture_loop {
-        VideoCaptureImpl::OpenCV(mut loop_impl) => loop_impl.run(callback).await,
+        #[cfg(feature = "mediars-capture")]
         VideoCaptureImpl::MediaRS(mut loop_impl) => loop_impl.run(callback).await,
+        #[cfg(feature = "opencv-capture")]
+        VideoCaptureImpl::OpenCV(mut loop_impl) => loop_impl.run(callback).await,
+        #[cfg(not(any(feature = "mediars-capture", feature = "opencv-capture")))]
+        compile_error!("No camera capture implementation available") => { unreachable!() }
     };
 
     if let Err(e) = result {
@@ -158,6 +144,8 @@ pub trait VideoCaptureLoop {
 }
 
 enum VideoCaptureImpl {
-    OpenCV(opencv_capture::OpenCVCameraLoop),
+    #[cfg(feature = "mediars-capture")]
     MediaRS(mediars_capture::MediaRSCameraLoop),
+    #[cfg(feature = "opencv-capture")]
+    OpenCV(opencv_capture::OpenCVCameraLoop),
 }

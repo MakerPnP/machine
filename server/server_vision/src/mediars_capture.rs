@@ -423,3 +423,15 @@ where
 
     f(bgr_mat);
 }
+
+#[cfg(feature = "mediars-capture")]
+pub fn dump_cameras_mediars() -> anyhow::Result<()>{
+
+    let mut cam_mgr = CameraManager::new_default()?;
+
+    for (index, device) in cam_mgr.iter_mut().enumerate() {
+        info!("MediaRS camera: {}, id: {:?}, formats: {:?}", index, device.id(), device.formats());
+    }
+
+    Ok(())
+}
