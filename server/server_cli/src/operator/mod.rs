@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use ergot::toolkits::tokio_udp::RouterStack;
 use ergot::{Address, endpoint};
-use log::{debug, info, warn};
+use log::{error, info, warn};
 use operator_shared::camera::{
     CameraCommand, CameraCommandError, CameraCommandErrorCode, CameraIdentifier, CameraStreamerCommandResult,
 };
@@ -63,7 +63,7 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
                 info!("operator shutdown requested, stopping camera command handler");
                 break
             }
-            _ = hdl.serve_full(async |msg| {
+            r = hdl.serve_full(async |msg| {
                 let request = &msg.t;
                 let source = &msg.hdr.src;
                 match request {
@@ -72,6 +72,7 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
                         OperatorCommandResponse::Acknowledged
                     }
                     OperatorCommandRequest::CameraCommand(identifier, camera_command) => {
+                        info!("camera command received from: {:?}, identifier: {}, command: {:?}", msg.hdr.src, identifier, camera_command);
                         match camera_command {
                             CameraCommand::StartStreaming { port_id, fps } => {
                                 let camera_definition = {
@@ -131,7 +132,12 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
                         }
                     }
                 }
-            }) => {}
+            }) => {
+                match r {
+                    Ok(()) => {}
+                    Err(e) => error!("Error sending operator response. e: {:?}", e),
+                }
+            }
         }
     }
 
