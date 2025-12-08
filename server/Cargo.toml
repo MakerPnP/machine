@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.dependencies]
-operator_shared      = { path = "../common/operator_shared" }
+operator_shared    = { path = "../common/operator_shared" }
 ioboard_shared     = { path = "../common/ioboard_shared" }
 
 # logging
@@ -34,7 +34,10 @@ postcard-schema    = { version = "0.2.5", features = ["derive"] }
 cordyceps          = "0.3.4"
 
 # time
-chrono          = { version = "0.4.42" }
+chrono             = { version = "0.4.42" }
 
 # vision
-opencv          = { version = "0.96.0", default-features = false }
+opencv             = { version = "0.96.0", default-features = false }
+
+# video
+media              = { git = "https://github.com/MakerPnP/media-rs", rev = "91a2d8e9bf2f1d5dd0462f7e5dd78222c95412e8"}
