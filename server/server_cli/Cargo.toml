@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = []
+default = ["development-machine-1"]
 
 opencv-capture = [
     "server_common/opencv-capture",
@@ -14,6 +14,16 @@ mediars-capture = [
     "server_common/mediars-capture",
     "server_vision/mediars-capture",
 ]
+
+#
+# temporary features
+#
+
+# windows desktop
+development-machine-1 = []
+# raspberry pi 5
+development-machine-2 = []
+
 
 [dependencies]
 operator_shared    = { workspace = true }
