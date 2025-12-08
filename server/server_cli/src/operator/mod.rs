@@ -39,9 +39,11 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
 
     let mut app_shutdown_handler = Box::pin(crate::app_shutdown_handler(app_event_rx));
 
+    // we can receive multiple messages from the operator ui, and need to process all of them
+    // if `single_server` is used, then multiple camera start requests will fail.
     let server_socket = stack
         .endpoints()
-        .single_server::<OperatorCommandEndpoint>(None);
+        .bounded_server::<OperatorCommandEndpoint, 3>(None);
     let server_socket = pin!(server_socket);
     let mut hdl = server_socket.attach();
     let command_server_port_id = hdl.port();
