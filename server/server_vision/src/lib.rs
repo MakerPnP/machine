@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use anyhow::anyhow;
 use chrono::DateTime;
 use log::{debug, error, info};
 use opencv::{imgcodecs, prelude::*};
