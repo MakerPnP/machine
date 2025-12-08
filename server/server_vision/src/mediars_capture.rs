@@ -3,12 +3,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use log::{debug, error, info};
+use log::{trace, debug, error, info};
 use media::device::camera::{CameraManager, DefaultCameraManager};
 use media::device::{Device, DeviceManager, OutputDevice};
 use media::FrameDescriptor;
 use media::variant::Variant;
-use media::video::PixelFormat;
+use media::video::{CompressionFormat, PixelFormat, VideoFormat};
 #[cfg(feature = "opencv-411")]
 use opencv::core::AlgorithmHint;
 use opencv::core::{CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4};
@@ -128,8 +128,15 @@ impl VideoCaptureLoop for MediaRSCameraLoop {
 
                 if let Some(code) = self.camera_definition.four_cc {
                     let four_bytes = [code[0] as u8, code[1] as u8, code[2] as u8, code[3] as u8];
-                    let format_code = u32::from_le_bytes(four_bytes);
-                    options["format"] = format_code.into();
+                    let code_u32 = u32::from_le_bytes(four_bytes);
+
+                    let video_format = fourcc_to_video_format(code_u32);
+
+                    if let Some(video_format) = video_format {
+                        options["format"] = (Into::<u32>::into(video_format)).into();
+                    }
+
+                    trace!("fourcc to video format. code: {:?}, code_u32: {:?}, video_format: {:?}", code, code_u32, video_format);
                 }
 
                 if let Err(e) = device.configure(&options) {
@@ -452,4 +459,26 @@ pub fn dump_cameras_mediars() -> anyhow::Result<()>{
     }
 
     Ok(())
+}
+
+// TODO it feels like this should be part of mediars, repeated code, needs to be kept in sync, DRY
+fn fourcc_to_video_format(fourcc: u32) -> Option<VideoFormat> {
+    const FOURCC_NV12: u32 = u32::from_le_bytes([b'N', b'V', b'1', b'2']);
+    const FOURCC_YUYV: u32 = u32::from_le_bytes([b'Y', b'U', b'Y', b'V']);
+    const FOURCC_YU12: u32 = u32::from_le_bytes([b'Y', b'U', b'1', b'2']);
+    const FOURCC_MJPG: u32 = u32::from_le_bytes([b'M', b'J', b'P', b'G']);
+
+    let video_format = match fourcc {
+        FOURCC_YUYV => VideoFormat::Pixel(PixelFormat::YUYV),
+        // libcamera's YU12 == I420
+        FOURCC_YU12 => VideoFormat::Pixel(PixelFormat::I420),
+        FOURCC_NV12 => VideoFormat::Pixel(PixelFormat::NV12),
+        FOURCC_MJPG => VideoFormat::Compression(CompressionFormat::MJPEG),
+        _ => {
+            // TODO support more formats (Contribution/PR's welcomed)
+            return None
+        }
+    };
+
+    Some(video_format)
 }
