@@ -75,8 +75,16 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
                         info!("camera command received from: {:?}, identifier: {}, command: {:?}", msg.hdr.src, identifier, camera_command);
                         match camera_command {
                             CameraCommand::StartStreaming { port_id, fps } => {
+
+                                // It's possible that we have a queue of 'start streaming' requests for the same camera, so we need to
+                                // handle repeated requests to start the same camera, so we lock the app_state during init.
+                                // this can happen if starting the camera takes longer than the timeout for the 'StartStreaming' response to be sent
+                                // or due to tokio scheduling this function again at the `.await`'s below or in the start camera code.
+
+                                let app_state_clone = app_state.clone();
+                                let app_state = app_state.lock().await;
+
                                 let camera_definition = {
-                                    let app_state = app_state.lock().await;
                                     let Some(camera_definition) = camera_definition_for_identifier(&app_state.camera_definitions, identifier) else {
                                         return OperatorCommandResponse::CameraCommandResult(
                                             Err(CameraCommandError::new(CameraCommandErrorCode::InvalidIdentifier))
@@ -99,8 +107,11 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
                                 };
 
                                 let camera_shutdown_flag = CancellationToken::new();
-                                let camera_manager = tokio::spawn(camera_manager(*identifier, camera_definition, address, app_state.clone(), *fps, camera_shutdown_flag.clone(), stack.clone()));
+                                let camera_manager = tokio::spawn(camera_manager(*identifier, camera_definition, address, app_state_clone, *fps, camera_shutdown_flag.clone(), stack.clone()));
                                 camera_managers.insert(*identifier, (camera_manager, camera_shutdown_flag));
+
+                                // explict drop to keep the lock for longer.
+                                drop(app_state);
 
                                 OperatorCommandResponse::CameraCommandResult(
                                     Ok(CameraStreamerCommandResult::Acknowledged)
