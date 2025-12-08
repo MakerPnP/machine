@@ -1,11 +1,9 @@
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
-use media::device::backend::media_foundation::{MediaFoundationDevice, MediaFoundationDeviceManager};
 use media::device::camera::{CameraManager, DefaultCameraManager};
 use media::device::{Device, DeviceManager, OutputDevice};
 use media::FrameDescriptor;
@@ -13,7 +11,7 @@ use media::variant::Variant;
 use media::video::PixelFormat;
 #[cfg(feature = "opencv-411")]
 use opencv::core::AlgorithmHint;
-use opencv::core::{CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, Vector};
+use opencv::core::{CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4};
 use opencv::imgproc;
 use opencv::imgproc::{
     COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2,
