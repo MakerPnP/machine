@@ -2244,8 +2244,8 @@ checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
 
 [[package]]
 name = "libcamera"
-version = "0.4.0"
-source = "git+https://github.com/lit-robotics/libcamera-rs.git?rev=764c498c0eb69f3cca1954dd306408841b7171ad#764c498c0eb69f3cca1954dd306408841b7171ad"
+version = "0.6.0"
+source = "git+https://github.com/lit-robotics/libcamera-rs.git?rev=419e4b142920c23f64d6acb11f88d5dad0a9fc23#419e4b142920c23f64d6acb11f88d5dad0a9fc23"
 dependencies = [
  "bitflags 2.10.0",
  "drm-fourcc",
@@ -2260,8 +2260,8 @@ dependencies = [
 
 [[package]]
 name = "libcamera-sys"
-version = "0.5.0"
-source = "git+https://github.com/lit-robotics/libcamera-rs.git?rev=764c498c0eb69f3cca1954dd306408841b7171ad#764c498c0eb69f3cca1954dd306408841b7171ad"
+version = "0.6.0"
+source = "git+https://github.com/lit-robotics/libcamera-rs.git?rev=419e4b142920c23f64d6acb11f88d5dad0a9fc23#419e4b142920c23f64d6acb11f88d5dad0a9fc23"
 dependencies = [
  "bindgen",
  "cc",
@@ -2375,7 +2375,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.7.1"
-source = "git+https://github.com/MakerPnP/media-rs?rev=3a0529d23475f230445b3091ab7b52f401c774dd#3a0529d23475f230445b3091ab7b52f401c774dd"
+source = "git+https://github.com/MakerPnP/media-rs?rev=91a2d8e9bf2f1d5dd0462f7e5dd78222c95412e8#91a2d8e9bf2f1d5dd0462f7e5dd78222c95412e8"
 dependencies = [
  "media-codec",
  "media-core",
@@ -2385,7 +2385,7 @@ dependencies = [
 [[package]]
 name = "media-codec"
 version = "0.7.1"
-source = "git+https://github.com/MakerPnP/media-rs?rev=3a0529d23475f230445b3091ab7b52f401c774dd#3a0529d23475f230445b3091ab7b52f401c774dd"
+source = "git+https://github.com/MakerPnP/media-rs?rev=91a2d8e9bf2f1d5dd0462f7e5dd78222c95412e8#91a2d8e9bf2f1d5dd0462f7e5dd78222c95412e8"
 dependencies = [
  "bitflags 2.10.0",
  "media-core",
@@ -2395,7 +2395,7 @@ dependencies = [
 [[package]]
 name = "media-core"
 version = "0.7.1"
-source = "git+https://github.com/MakerPnP/media-rs?rev=3a0529d23475f230445b3091ab7b52f401c774dd#3a0529d23475f230445b3091ab7b52f401c774dd"
+source = "git+https://github.com/MakerPnP/media-rs?rev=91a2d8e9bf2f1d5dd0462f7e5dd78222c95412e8#91a2d8e9bf2f1d5dd0462f7e5dd78222c95412e8"
 dependencies = [
  "aligned-vec",
  "bitflags 2.10.0",
@@ -2421,7 +2421,7 @@ dependencies = [
 [[package]]
 name = "media-device"
 version = "0.7.1"
-source = "git+https://github.com/MakerPnP/media-rs?rev=3a0529d23475f230445b3091ab7b52f401c774dd#3a0529d23475f230445b3091ab7b52f401c774dd"
+source = "git+https://github.com/MakerPnP/media-rs?rev=91a2d8e9bf2f1d5dd0462f7e5dd78222c95412e8#91a2d8e9bf2f1d5dd0462f7e5dd78222c95412e8"
 dependencies = [
  "av-foundation",
  "cfg-if",
