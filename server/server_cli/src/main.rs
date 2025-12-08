@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::io;
 use std::sync::Arc;
 
 use camera::CameraHandle;
-use ergot::toolkits::tokio_udp::{RouterStack, register_router_interface};
+use ergot::toolkits::tokio_udp::{register_router_interface, RouterStack};
 use ioboard::IOBOARD_TX_BUFFER_SIZE;
 use log::info;
 use networking::UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX;
@@ -11,8 +10,9 @@ use operator::OPERATOR_TX_BUFFER_SIZE;
 use operator_shared::camera::CameraIdentifier;
 use server_common::camera::CameraDefinition;
 use tokio::sync::broadcast::Receiver;
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::{broadcast, Mutex};
 use tokio::{net::UdpSocket, signal};
+use config::{IO_BOARD_LOCAL_ADDR, IO_BOARD_REMOTE_ADDR, OPERATOR_LOCAL_ADDR, OPERATOR_REMOTE_ADDR};
 
 pub mod camera;
 pub mod ioboard;
@@ -22,7 +22,7 @@ pub mod operator;
 pub mod config;
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
     console_subscriber::init();
 
@@ -37,11 +37,16 @@ async fn main() -> io::Result<()> {
 
     let stack: RouterStack = RouterStack::new();
 
-    let io_board_udp_socket = UdpSocket::bind("192.168.18.41:8000").await?;
-    let io_board_remote_addr = "192.168.18.64:8000";
+    let io_board_udp_socket = UdpSocket::bind(IO_BOARD_LOCAL_ADDR)
+        .await
+        .map_err(|e|anyhow::format_err!("Unable to create local UDP socket for io boards. address: {}, error: {}", IO_BOARD_LOCAL_ADDR, e))
+        ?;
     io_board_udp_socket
-        .connect(io_board_remote_addr)
-        .await?;
+        .connect(IO_BOARD_REMOTE_ADDR)
+        .await
+        .map_err(|e|anyhow::format_err!("Unable to create remote UDP socket for io boards. address: {}, error: {}", IO_BOARD_REMOTE_ADDR, e))
+        ?;
+
     register_router_interface(
         &stack,
         io_board_udp_socket,
@@ -51,11 +56,15 @@ async fn main() -> io::Result<()> {
     .await
     .unwrap();
 
-    let operator_udp_socket = UdpSocket::bind("192.168.18.41:8001").await?;
-    let operator_remote_addr = "192.168.18.41:8002";
+    let operator_udp_socket = UdpSocket::bind(OPERATOR_LOCAL_ADDR)
+        .await
+        .map_err(|e|anyhow::format_err!("Unable to create local UDP socket for operator UI. address: {}, error: {}", IO_BOARD_LOCAL_ADDR, e))
+        ?;
     operator_udp_socket
-        .connect(operator_remote_addr)
-        .await?;
+        .connect(OPERATOR_REMOTE_ADDR)
+        .await
+        .map_err(|e|anyhow::format_err!("Unable to create UDP socket for operator UI. address: {}, error: {}", OPERATOR_REMOTE_ADDR, e))
+        ?;
 
     register_router_interface(
         &stack,
