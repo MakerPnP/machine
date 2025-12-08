@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["opencv-411"]
+linux = [
+    # required to avoid compilation error: "a `libclang` shared library is not loaded on this thread"
+    "opencv/clang-runtime"
+]
 
 opencv-410 = [
     "dep:opencv"
@@ -35,7 +38,7 @@ anyhow             = { workspace = true }
 chrono             = { workspace = true}
 
 # video
-media            = { git = "https://github.com/MakerPnP/media-rs", rev = "3a0529d23475f230445b3091ab7b52f401c774dd", optional = true }
+media              = { workspace = true, optional = true }
 
 # machine-vision
 opencv             = { workspace = true, features = ["imgcodecs", "imgproc", "objdetect"], default-features = false, optional = true}
