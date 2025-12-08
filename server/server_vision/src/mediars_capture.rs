@@ -364,11 +364,11 @@ where
             let uv_h = height / 2;
             let uv_w = width / 2;
 
-            info!(
+            trace!(
                 "y_stride: {}, v_stride: {}, u_stride: {}",
                 y_stride, v_stride, u_stride
             );
-            info!(
+            trace!(
                 "width: {}, height: {}, uv_w: {}, uv_h: {}",
                 width, height, uv_w, uv_h
             );
