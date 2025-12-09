@@ -1,7 +1,10 @@
 use std::sync::Arc;
 use chrono::DateTime;
 use log::{debug, error, info};
-use opencv::{imgcodecs, prelude::*};
+use opencv::{
+    imgcodecs, prelude::*,
+    imgcodecs::ImwriteFlags,
+};
 use server_common::camera::{CameraDefinition, CameraSource};
 use tokio::sync::broadcast;
 use tokio::time::{Duration, Instant};
@@ -46,7 +49,9 @@ pub async fn capture_loop(
                 // Encode to JPEG (quality default). You can set params to reduce quality/size.
                 let encode_start = Instant::now();
                 let mut buf = opencv::core::Vector::new();
-                let params = opencv::core::Vector::new(); // default
+
+                let params = opencv::core::Vector::from_slice(&[imgcodecs::IMWRITE_JPEG_QUALITY, camera_definition.stream_config.jpeg_quality as i32]);
+
                 imgcodecs::imencode(".jpg", &frame, &mut buf, &params)
                     .map_err(|e| error!("OpenCV imencode error: {:?}", e))?;
 
