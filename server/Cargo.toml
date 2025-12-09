@@ -40,4 +40,5 @@ chrono             = { version = "0.4.42" }
 opencv             = { version = "0.96.0", default-features = false }
 
 # video
-media              = { git = "https://github.com/MakerPnP/media-rs", rev = "91a2d8e9bf2f1d5dd0462f7e5dd78222c95412e8"}
+media              = { git = "https://github.com/MakerPnP/media-rs", rev = "e498bbe3c27f323898c8a1cbf265117d955bb3d1"}
+#media              = { path = "../../media-rs/media"}
