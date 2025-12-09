@@ -97,9 +97,12 @@ pub mod egui {
 
         ui.label("Frame durations (ms)");
 
-        Plot::new("FPS stats")
+        // NOTE: 1/7.5 = 133ms, so 150 seems a reasonable cap.
+        Plot::new("frame_duration_stats")
             .width(ui.available_width())
+            .default_y_bounds(0.0, 150.0)
             .height(100.0)
+            .show_axes([false, true])
             .clamp_grid(true)
             .allow_drag(false)
             .allow_zoom(false)
