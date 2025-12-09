@@ -13,7 +13,11 @@ pub struct CameraDefinition {
 
 #[derive(Clone)]
 pub struct CameraStreamConfig {
-    pub jpeg_quality: u32,
+    /// 0 - 100, 100 is highest quality
+    /// Note: lower quality = less data = less network traffic and server/client load = higher fps when server system is IO or CPU bound
+    ///       70 is a good starting point.
+    ///       image quality only affects the stream and NOT the CV pipeline.
+    pub jpeg_quality: u8,
     // TODO maybe support resizing on the server before sending.
 }
 
