@@ -1,0 +1,17 @@
+[package]
+name = "wgpu-cli-1"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wgpu = "27.0"
+pollster = "0.4.0"
+bytemuck = { version = "1.14", features = ["derive"] }
+glam = "0.30"
+image = "0.25"
+log = "0.4.28"
+
+# STEP file support (truck 0.6)
+truck-meshalgo = "0.4"
+truck-polymesh = "0.6"
+truck-stepio = "0.3"
