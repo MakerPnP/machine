@@ -4,6 +4,10 @@ use screen_13::prelude::*;
 use std::sync::Arc;
 use screen_13::prelude::vk::{DeviceSize, Handle};
 
+use std::f32::consts::TAU;
+
+const FRAME_COUNT: usize = 30;
+
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Vertex {
@@ -106,70 +110,92 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Vec3::ZERO,
         Vec3::Y,
     );
-    let model = Mat4::from_rotation_y(30.0_f32.to_radians());
-    let mvp = projection * view * model;
 
-    let push_constants = PushConstants {
-        mvp: mvp.to_cols_array_2d(),
-    };
-
-    // Create render graph
-    let mut render_graph = RenderGraph::new();
-
-    let vertex_node = render_graph.bind_node(&vertex_buf);
-    let index_node = render_graph.bind_node(&index_buf);
-    let image_node = render_graph.bind_node(&color_image);
-    let depth_node = render_graph.bind_node(&depth_image);
-
-    render_graph
-        .begin_pass("Render Cube")
-        .bind_pipeline(&pipeline)
-        .access_node(vertex_node, AccessType::VertexBuffer)
-        .access_node(index_node, AccessType::IndexBuffer)
-        .clear_color(0, image_node)
-        .store_color(0, image_node)
-        .clear_depth_stencil(depth_node)
-        .record_subpass(move |subpass, _| {
-            subpass.push_constants(cast_slice(&[push_constants]));
-            subpass.bind_vertex_buffer(vertex_node);
-            subpass.bind_index_buffer(index_node, vk::IndexType::UINT16);
-            subpass.draw_indexed(36, 1, 0, 0, 0);
-        });
-
-//    let color_image = render_graph.unbind_node(image_node);
-
-    let buffer = Buffer::create(
-        &device,
-        BufferInfo::host_mem(
-            color_image_size,
-            vk::BufferUsageFlags::TRANSFER_DST,
-        ),
-    )?;
-    let readback_buf = render_graph.bind_node(buffer);
-
-    render_graph.copy_image_to_buffer(image_node, readback_buf);
-
-    let readback_buf = render_graph.unbind_node(readback_buf);
-
-    // Submit and wait
-   let mut cmd_buf = render_graph
-        .resolve()
-        .submit(&mut HashPool::new(&device), 0, 0)?;
-
-    cmd_buf.wait_until_executed()?;
+    for frame in 0..FRAME_COUNT {
+        let t = frame as f32 / FRAME_COUNT as f32;
 
 
-    let bytes = Buffer::mapped_slice(&readback_buf);
+        // --- Rotation ---
+        let rotation = t * TAU;
+        let model = Mat4::from_rotation_y(rotation);
 
-    // Save to PNG
-    image::save_buffer(
-        "assets/cube_output.png",
-        &bytes,
-        width,
-        height,
-        image::ColorType::Rgba8,
-    )?;
+        // --- Zoom (smooth in/out) ---
+        let base_distance = 6.0;
+        let zoom_amplitude = 2.0;
+        let zoom = base_distance
+            - zoom_amplitude * (1.0 - (TAU * t).cos()) * 0.5;
 
-    println!("✓ Rendered cube saved to cube_output.png");
+        let view = Mat4::look_at_rh(
+            Vec3::new(zoom, zoom * 0.75, zoom),
+            Vec3::ZERO,
+            Vec3::Y,
+        );
+
+        let mvp = projection * view * model;
+
+        let push_constants = PushConstants {
+            mvp: mvp.to_cols_array_2d(),
+        };
+
+        // Create render graph
+        let mut render_graph = RenderGraph::new();
+
+        let vertex_node = render_graph.bind_node(&vertex_buf);
+        let index_node = render_graph.bind_node(&index_buf);
+        let image_node = render_graph.bind_node(&color_image);
+        let depth_node = render_graph.bind_node(&depth_image);
+
+        render_graph
+            .begin_pass("Render Cube")
+            .bind_pipeline(&pipeline)
+            .access_node(vertex_node, AccessType::VertexBuffer)
+            .access_node(index_node, AccessType::IndexBuffer)
+            .clear_color(0, image_node)
+            .store_color(0, image_node)
+            .clear_depth_stencil(depth_node)
+            .record_subpass(move |subpass, _| {
+                subpass.push_constants(cast_slice(&[push_constants]));
+                subpass.bind_vertex_buffer(vertex_node);
+                subpass.bind_index_buffer(index_node, vk::IndexType::UINT16);
+                subpass.draw_indexed(36, 1, 0, 0, 0);
+            });
+
+    //    let color_image = render_graph.unbind_node(image_node);
+
+        let buffer = Buffer::create(
+            &device,
+            BufferInfo::host_mem(
+                color_image_size,
+                vk::BufferUsageFlags::TRANSFER_DST,
+            ),
+        )?;
+        let readback_buf = render_graph.bind_node(buffer);
+
+        render_graph.copy_image_to_buffer(image_node, readback_buf);
+
+        let readback_buf = render_graph.unbind_node(readback_buf);
+
+        // Submit and wait
+       let mut cmd_buf = render_graph
+            .resolve()
+            .submit(&mut HashPool::new(&device), 0, 0)?;
+
+        cmd_buf.wait_until_executed()?;
+
+
+        let bytes = Buffer::mapped_slice(&readback_buf);
+
+        // Save to PNG
+        image::save_buffer(
+            format!("assets/cube_{:03}.png", frame),
+            &bytes,
+            width,
+            height,
+            image::ColorType::Rgba8,
+        )?;
+
+        println!("✓ Saved frame {}", frame);
+    }
+
     Ok(())
 }
