@@ -1,10 +1,3 @@
-// Cargo.toml:
-// [dependencies]
-// screen-13 = "0.12"
-// bytemuck = "1.14"
-// glam = "0.30"
-// image = "0.25"
-
 use bytemuck::{cast_slice, Pod, Zeroable};
 use glam::{Mat4, Vec3};
 use screen_13::prelude::*;
