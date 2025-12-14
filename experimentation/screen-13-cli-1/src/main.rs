@@ -10,8 +10,15 @@ use truck_meshalgo::prelude::{BoundingBox, MeshedShape, RobustMeshableShape};
 use truck_polymesh::PolygonMesh;
 use truck_stepio::r#in::Table;
 
+const PROJECTION_STYLE: ProjectionStyle = ProjectionStyle::Normal;
 const FRAME_COUNT: usize = 30;
 const QUEUE_CAPACITY: usize = 30;
+
+#[allow(dead_code)]
+enum ProjectionStyle {
+    Normal,
+    Orthographic,
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -159,7 +166,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create transformation matrices using glam
     let aspect = width as f32 / height as f32;
-    let projection = Mat4::perspective_rh(45.0_f32.to_radians(), aspect, 0.1, 100.0);
+    let ortho_size = 10.0;  // How many world units fit in view
+    let projection = match PROJECTION_STYLE {
+        ProjectionStyle::Normal => Mat4::perspective_rh(45.0_f32.to_radians(), aspect, 0.1, 100.0),
+        ProjectionStyle::Orthographic => Mat4::orthographic_rh(
+            -ortho_size * aspect,  // left
+            ortho_size * aspect,   // right
+            -ortho_size,           // bottom
+            ortho_size,            // top
+            0.1,
+            100.0
+        ),
+    };
 
     let mut hash_pool = HashPool::new(&device);
 
