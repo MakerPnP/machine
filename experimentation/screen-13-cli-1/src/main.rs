@@ -2,10 +2,9 @@ use bytemuck::{cast_slice, Pod, Zeroable};
 use glam::{Mat4, Vec3};
 use screen_13::prelude::*;
 use std::sync::Arc;
-use screen_13::prelude::vk::{DeviceSize, Handle};
+use screen_13::prelude::vk::DeviceSize;
 
 use std::f32::consts::TAU;
-use screen_13::graph::Resolver;
 
 const FRAME_COUNT: usize = 30;
 
@@ -66,17 +65,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create render target image
     let width = 800u32;
     let height = 600u32;
-
-    let color_image = Arc::new(Image::create(
-        &device,
-        ImageInfo::image_2d(
-            width,
-            height,
-            vk::Format::R8G8B8A8_UNORM,
-            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
-        ),
-    )?);
-
     let color_image_size = (width * height * 4) as DeviceSize;
 
     let depth_image = Arc::new(Image::create(
@@ -106,25 +94,61 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create transformation matrices using glam
     let aspect = width as f32 / height as f32;
     let projection = Mat4::perspective_rh(45.0_f32.to_radians(), aspect, 0.1, 100.0);
-    let view = Mat4::look_at_rh(
-        Vec3::new(4.0, 3.0, 5.0),
-        Vec3::ZERO,
-        Vec3::Y,
-    );
 
-    let readback_buf = Arc::new(Buffer::create(
-        &device,
-        BufferInfo::host_mem(
-            color_image_size,
-            vk::BufferUsageFlags::TRANSFER_DST,
-        ),
-    )?);
+    const IN_FLIGHT: usize = 3;
+
+    let readbacks: Vec<Arc<Buffer>> = (0..IN_FLIGHT)
+        .map(|_| {
+            Arc::new(Buffer::create(
+                &device,
+                BufferInfo::host_mem(
+                    color_image_size,
+                    vk::BufferUsageFlags::TRANSFER_DST,
+                ),
+            ).unwrap())
+        })
+        .collect();
 
     let mut hash_pool = HashPool::new(&device);
 
-    for frame in 0..FRAME_COUNT {
-        let t = frame as f32 / FRAME_COUNT as f32;
+    let (tx, rx) = std::sync::mpsc::sync_channel::<(usize, Arc<Buffer>, Lease<CommandBuffer>)>(3);
 
+    let handle = std::thread::spawn(move ||{
+        while let Ok((frame_index, readback, mut cmd_lease)) = rx.recv() {
+            println!("Received frame {}", frame_index);
+
+            cmd_lease.wait_until_executed()
+                .map_err(|e| println!("Failed to wait for command buffer execution: {}", e))?;
+
+            println!("Frame read {}", frame_index);
+
+            let bytes = Buffer::mapped_slice(&readback);
+
+            // Save to raw file
+            // std::fs::write(format!("frame_{:03}.raw", frame_index), &bytes)?;
+
+            // Save to PNG
+            image::save_buffer(
+                format!("assets/cube_{:03}.png", frame_index),
+                &bytes,
+                width,
+                height,
+                image::ColorType::Rgba8,
+            )
+                .map_err(|e| {
+                    println!("Failed to save frame {}, e: {}", frame_index, e);
+                })?;
+
+            println!("✓ Saved frame {}", frame_index);
+        }
+
+        Ok::<(), ()>(())
+    });
+
+
+    let mut frame_index = 0;
+    loop {
+        let t = frame_index as f32 / FRAME_COUNT as f32;
 
         // --- Rotation ---
         let rotation = t * TAU;
@@ -148,14 +172,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             mvp: mvp.to_cols_array_2d(),
         };
 
+        let readback = &readbacks[frame_index % IN_FLIGHT];
+
         // Create render graph
         let mut render_graph = RenderGraph::new();
 
         let vertex_node = render_graph.bind_node(&vertex_buf);
         let index_node = render_graph.bind_node(&index_buf);
-        let image_node = render_graph.bind_node(&color_image);
+
+        let color_image_info = ImageInfo::image_2d(
+            width,
+            height,
+            vk::Format::R8G8B8A8_UNORM,
+            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+        );
+
+        let image_node = render_graph.bind_node(hash_pool.lease(color_image_info).unwrap());
         let depth_node = render_graph.bind_node(&depth_image);
-        let readback_buf = render_graph.bind_node(&readback_buf);
+        let readback_buf = render_graph.bind_node(readback);
 
         render_graph
             .begin_pass("Render Cube")
@@ -166,6 +200,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .store_color(0, image_node)
             .clear_depth_stencil(depth_node)
             .record_subpass(move |subpass, _| {
+                subpass.push_constants(cast_slice(&[push_constants]));
                 subpass.bind_vertex_buffer(vertex_node);
                 subpass.bind_index_buffer(index_node, vk::IndexType::UINT16);
                 subpass.draw_indexed(36, 1, 0, 0, 0);
@@ -174,30 +209,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         render_graph.copy_image_to_buffer(image_node, readback_buf);
 
         let readback_buf = render_graph.unbind_node(readback_buf);
+        let image = render_graph.unbind_node(image_node);
 
         // --- Submit ---
-        let mut cmd_buf = render_graph
+        println!("Submitting frame {}", frame_index);
+        let cmd_lease = render_graph
             .resolve()
             .submit(&mut hash_pool, 0, 0)?;
 
-        cmd_buf.wait_until_executed()?;
+        //cmd_buf.wait_until_executed()?;
 
-        let bytes = Buffer::mapped_slice(&readback_buf);
+        println!("Sending frame {}", frame_index);
+        tx.send((frame_index, readback.clone(), cmd_lease))?;
 
-        // Save to raw file
-        // std::fs::write(format!("frame_{:03}.raw", frame), &bytes)?;
-
-        // Save to PNG
-        image::save_buffer(
-            format!("assets/cube_{:03}.png", frame),
-            &bytes,
-            width,
-            height,
-            image::ColorType::Rgba8,
-        )?;
-
-        println!("✓ Saved frame {}", frame);
+        frame_index += 1;
+        if frame_index >= FRAME_COUNT {
+            break;
+        }
     }
+
+    // explictly drop the sender to make sure the receiver is dropped before the thread exits
+    drop(tx);
+
+    let _ = handle.join().unwrap();
 
     Ok(())
 }
