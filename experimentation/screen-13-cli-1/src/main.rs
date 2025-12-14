@@ -24,6 +24,11 @@ struct Vertex {
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct PushConstants {
     mvp: [[f32; 4]; 4],
+    model: [[f32; 4]; 4],
+    light_pos: [f32; 3],
+    light_intensity: f32,
+    light_color: [f32; 3],
+    _padding: f32, // Align to 16 bytes
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -199,6 +204,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let t = frame_index as f32 / FRAME_COUNT as f32;
 
+        // --- Light Animation ---
+        // Orbit the light around the scene
+        let light_orbit_radius = 8.0;
+        let light_height = 5.0;
+        let light_angle = t * TAU;
+        let light_pos = Vec3::new(
+            light_orbit_radius * light_angle.cos(),
+            light_height + 2.0 * (t * TAU * 2.0).sin(), // Also animate height
+            light_orbit_radius * light_angle.sin(),
+        );
+
+        // Animate light intensity (pulse between 0.5 and 2.0)
+        let light_intensity = 1.0 + 0.5 * (t * TAU * 3.0).sin();
+
+        // Animate light color (shift through colors)
+        let light_hue = (t * 0.5) % 1.0;
+        let light_color = hsv_to_rgb(light_hue, 0.8, 1.0);
+
         // --- Rotation ---
         let cube_rotation = t * TAU;
         let cube_model = Mat4::from_rotation_y(cube_rotation);
@@ -229,17 +252,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pyramid_mvp = projection * view * pyramid_model;
         let model_mvp = projection * view * model_model;
 
+        // Create push constants with lighting info
         let cube_push_constants = PushConstants {
             mvp: cube_mvp.to_cols_array_2d(),
+            model: cube_model.to_cols_array_2d(),
+            light_pos: light_pos.to_array(),
+            light_intensity,
+            light_color,
+            _padding: 0.0,
         };
 
         let pyramid_push_constants = PushConstants {
             mvp: pyramid_mvp.to_cols_array_2d(),
+            model: pyramid_model.to_cols_array_2d(),
+            light_pos: light_pos.to_array(),
+            light_intensity,
+            light_color,
+            _padding: 0.0,
         };
 
         let model_push_constants = PushConstants {
             mvp: model_mvp.to_cols_array_2d(),
+            model: model_model.to_cols_array_2d(),
+            light_pos: light_pos.to_array(),
+            light_intensity,
+            light_color,
+            _padding: 0.0,
         };
+
 
         let readback = Arc::new(Buffer::create(
             &device,
