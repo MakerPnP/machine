@@ -147,7 +147,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create graphics pipeline with shaders
     let pipeline = Arc::new(GraphicPipeline::create(
         &device,
-        GraphicPipelineInfo::default(),
+        GraphicPipelineInfoBuilder::default()
+            // CAD models typically use clockwise winding
+            .front_face(vk::FrontFace::CLOCKWISE)
+            .build(),
         [
             Shader::new_vertex(vert_spirv.as_slice()),
             Shader::new_fragment(frag_spirv.as_slice()),
