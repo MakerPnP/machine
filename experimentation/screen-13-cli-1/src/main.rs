@@ -7,7 +7,7 @@ use screen_13::prelude::vk::DeviceSize;
 use std::f32::consts::TAU;
 
 const FRAME_COUNT: usize = 30;
-const QUEUE_CAPACITY: usize = 30;
+const QUEUE_CAPACITY: usize = 10;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -109,15 +109,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("Frame read {}", frame_index);
 
-            let bytes = Buffer::mapped_slice(&readback);
+            let start_at = std::time::Instant::now();
+            let bytes: &[u8] = Buffer::mapped_slice(&readback);
+            let bytes_vec: Vec<u8> = bytes.to_vec();
+            let mapped_duration = start_at.elapsed();
+            println!("Frame length: {}", bytes_vec.len());
 
             // Save to raw file
             // std::fs::write(format!("frame_{:03}.raw", frame_index), &bytes)?;
+            let sum = bytes_vec.iter().fold(0, |acc, &x| acc + x as u32);
+            let total_duration = start_at.elapsed();
+            println!("Sum: {}, mapped_duration: {}, total_duration: {}us", sum, mapped_duration.as_micros(), total_duration.as_micros());
 
             // Save to PNG
             image::save_buffer(
                 format!("assets/cube_{:03}.png", frame_index),
-                &bytes,
+                &bytes_vec.as_slice(),
                 width,
                 height,
                 image::ColorType::Rgba8,
@@ -126,7 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Failed to save frame {}, e: {}", frame_index, e);
                 })?;
 
-            println!("✓ Saved frame {}", frame_index);
+            println!("✓ Saved frame {}, elapsed: {}us", frame_index, start_at.elapsed().as_micros());
         }
 
         Ok::<(), ()>(())
@@ -206,11 +213,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // --- Submit ---
         println!("Submitting frame {}", frame_index);
-        let cmd_lease = render_graph
+        let mut cmd_lease = render_graph
             .resolve()
             .submit(&mut hash_pool, 0, 0)?;
 
-        //cmd_buf.wait_until_executed()?;
+        //cmd_lease.wait_until_executed()?;
 
         println!("Sending frame {}", frame_index);
         tx.send((frame_index, readback, cmd_lease))?;
