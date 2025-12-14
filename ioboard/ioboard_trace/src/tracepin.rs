@@ -102,7 +102,7 @@ mod storage {
             }
         }
 
-        pub(crate) fn init<TRACEPINS: TracePins>(&self, trace_pins: TRACEPINS) {
+        pub(crate) fn init<TRACEPINS: TracePins + 'static>(&self, trace_pins: TRACEPINS) {
             // FUTURE find a no-alloc way to do this in a safe way, avoiding the need for suppressing errors or warnings
 
             // Leak the trace_pins to give it a true 'static lifetime
@@ -124,7 +124,7 @@ mod storage {
     unsafe impl Sync for TracePin {}
 }
 
-pub fn init<TRACEPINS: TracePins>(trace_pins: TRACEPINS) {
+pub fn init<TRACEPINS: TracePins + 'static>(trace_pins: TRACEPINS) {
     #[cfg(feature = "enable")]
     storage::TRACE_PINS.init(trace_pins);
 }
