@@ -7,6 +7,7 @@ use screen_13::prelude::vk::DeviceSize;
 use std::f32::consts::TAU;
 
 const FRAME_COUNT: usize = 30;
+const QUEUE_CAPACITY: usize = 30;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -95,23 +96,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let aspect = width as f32 / height as f32;
     let projection = Mat4::perspective_rh(45.0_f32.to_radians(), aspect, 0.1, 100.0);
 
-    const IN_FLIGHT: usize = 3;
-
-    let readbacks: Vec<Arc<Buffer>> = (0..IN_FLIGHT)
-        .map(|_| {
-            Arc::new(Buffer::create(
-                &device,
-                BufferInfo::host_mem(
-                    color_image_size,
-                    vk::BufferUsageFlags::TRANSFER_DST,
-                ),
-            ).unwrap())
-        })
-        .collect();
-
     let mut hash_pool = HashPool::new(&device);
 
-    let (tx, rx) = std::sync::mpsc::sync_channel::<(usize, Arc<Buffer>, Lease<CommandBuffer>)>(3);
+    let (tx, rx) = std::sync::mpsc::sync_channel::<(usize, Arc<Buffer>, Lease<CommandBuffer>)>(QUEUE_CAPACITY);
 
     let handle = std::thread::spawn(move ||{
         while let Ok((frame_index, readback, mut cmd_lease)) = rx.recv() {
@@ -172,7 +159,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             mvp: mvp.to_cols_array_2d(),
         };
 
-        let readback = &readbacks[frame_index % IN_FLIGHT];
+        let readback = Arc::new(Buffer::create(
+            &device,
+            BufferInfo::host_mem(
+                color_image_size,
+                vk::BufferUsageFlags::TRANSFER_DST,
+            ),
+        ).unwrap());
 
         // Create render graph
         let mut render_graph = RenderGraph::new();
@@ -189,7 +182,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let image_node = render_graph.bind_node(hash_pool.lease(color_image_info).unwrap());
         let depth_node = render_graph.bind_node(&depth_image);
-        let readback_buf = render_graph.bind_node(readback);
+        let readback_buf = render_graph.bind_node(readback.clone());
 
         render_graph
             .begin_pass("Render Cube")
@@ -208,8 +201,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         render_graph.copy_image_to_buffer(image_node, readback_buf);
 
-        let readback_buf = render_graph.unbind_node(readback_buf);
-        let image = render_graph.unbind_node(image_node);
+        // let readback_buf = render_graph.unbind_node(readback_buf);
+        // let image = render_graph.unbind_node(image_node);
 
         // --- Submit ---
         println!("Submitting frame {}", frame_index);
@@ -220,7 +213,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //cmd_buf.wait_until_executed()?;
 
         println!("Sending frame {}", frame_index);
-        tx.send((frame_index, readback.clone(), cmd_lease))?;
+        tx.send((frame_index, readback, cmd_lease))?;
 
         frame_index += 1;
         if frame_index >= FRAME_COUNT {
