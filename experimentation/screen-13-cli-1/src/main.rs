@@ -5,6 +5,7 @@ use std::sync::Arc;
 use screen_13::prelude::vk::{DeviceSize, Handle};
 
 use std::f32::consts::TAU;
+use screen_13::graph::Resolver;
 
 const FRAME_COUNT: usize = 30;
 
@@ -111,6 +112,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Vec3::Y,
     );
 
+    let readback_buf = Arc::new(Buffer::create(
+        &device,
+        BufferInfo::host_mem(
+            color_image_size,
+            vk::BufferUsageFlags::TRANSFER_DST,
+        ),
+    )?);
+
+    let mut hash_pool = HashPool::new(&device);
+
     for frame in 0..FRAME_COUNT {
         let t = frame as f32 / FRAME_COUNT as f32;
 
@@ -144,6 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let index_node = render_graph.bind_node(&index_buf);
         let image_node = render_graph.bind_node(&color_image);
         let depth_node = render_graph.bind_node(&depth_image);
+        let readback_buf = render_graph.bind_node(&readback_buf);
 
         render_graph
             .begin_pass("Render Cube")
@@ -154,36 +166,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .store_color(0, image_node)
             .clear_depth_stencil(depth_node)
             .record_subpass(move |subpass, _| {
-                subpass.push_constants(cast_slice(&[push_constants]));
                 subpass.bind_vertex_buffer(vertex_node);
                 subpass.bind_index_buffer(index_node, vk::IndexType::UINT16);
                 subpass.draw_indexed(36, 1, 0, 0, 0);
             });
 
-    //    let color_image = render_graph.unbind_node(image_node);
-
-        let buffer = Buffer::create(
-            &device,
-            BufferInfo::host_mem(
-                color_image_size,
-                vk::BufferUsageFlags::TRANSFER_DST,
-            ),
-        )?;
-        let readback_buf = render_graph.bind_node(buffer);
-
         render_graph.copy_image_to_buffer(image_node, readback_buf);
 
         let readback_buf = render_graph.unbind_node(readback_buf);
 
-        // Submit and wait
-       let mut cmd_buf = render_graph
+        // --- Submit ---
+        let mut cmd_buf = render_graph
             .resolve()
-            .submit(&mut HashPool::new(&device), 0, 0)?;
+            .submit(&mut hash_pool, 0, 0)?;
 
         cmd_buf.wait_until_executed()?;
 
-
         let bytes = Buffer::mapped_slice(&readback_buf);
+
+        // Save to raw file
+        // std::fs::write(format!("frame_{:03}.raw", frame), &bytes)?;
 
         // Save to PNG
         image::save_buffer(
