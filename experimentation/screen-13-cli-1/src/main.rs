@@ -339,6 +339,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         render_graph
             .begin_pass("Render Cube")
             .bind_pipeline(&pipeline)
+            .set_depth_stencil(
+                DepthStencilMode::DEPTH_WRITE
+            )
             .access_node(cube_vertex_node, AccessType::VertexBuffer)
             .access_node(cube_index_node, AccessType::IndexBuffer)
             .access_node(pyramid_vertex_node, AccessType::VertexBuffer)
