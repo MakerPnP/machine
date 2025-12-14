@@ -6,7 +6,9 @@ edition = "2024"
 [dependencies]
 #screen-13 = "0.12"
 screen-13 = { git = "https://github.com/attackgoat/screen-13.git", rev = "9d9790b"}
-
 image = "0.25"
 bytemuck = { version = "1.14", features = ["derive"] }
 glam = "0.30"
+truck-meshalgo = "0.4"
+truck-polymesh = "0.6"
+truck-stepio = "0.3"

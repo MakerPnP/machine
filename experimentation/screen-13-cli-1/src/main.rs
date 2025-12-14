@@ -5,6 +5,10 @@ use std::sync::Arc;
 use screen_13::prelude::vk::DeviceSize;
 
 use std::f32::consts::TAU;
+use std::ops::Add;
+use truck_meshalgo::prelude::{BoundingBox, MeshedShape, RobustMeshableShape};
+use truck_polymesh::PolygonMesh;
+use truck_stepio::r#in::Table;
 
 const FRAME_COUNT: usize = 30;
 const QUEUE_CAPACITY: usize = 30;
@@ -23,6 +27,10 @@ struct PushConstants {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Load STEP model
+    let step_path = "assets/User Library-LQFP64_Grid_0_5.STEP";
+    let (model_vertices, model_indices) = load_step_model_unfinished(step_path)?;
+
     // Create headless device for offscreen rendering
     let device = Arc::new(Device::create_headless(DeviceInfo::default())?);
 
@@ -97,6 +105,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &device,
         vk::BufferUsageFlags::INDEX_BUFFER,
         cast_slice(&pyramid_indices),
+    )?);
+
+    // Create buffers for mode
+    let model_vertex_buf = Arc::new(Buffer::create_from_slice(
+        &device,
+        vk::BufferUsageFlags::VERTEX_BUFFER,
+        cast_slice(&model_vertices),
+    )?);
+
+    let model_index_buf = Arc::new(Buffer::create_from_slice(
+        &device,
+        vk::BufferUsageFlags::INDEX_BUFFER,
+        cast_slice(&model_indices),
     )?);
 
     // Create render target image
@@ -188,6 +209,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pyramid_model = Mat4::from_translation(Vec3::new(3.0, 0.0, 0.0))
             * Mat4::from_rotation_y(pyramid_rotation);
 
+        // --- Rotation ---
+        let model_rotation = t * TAU;
+        let model_model = Mat4::from_rotation_x(model_rotation);
+
         // --- Zoom (smooth in/out) ---
         let base_distance = 6.0;
         let zoom_amplitude = 2.0;
@@ -202,6 +227,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let cube_mvp = projection * view * cube_model;
         let pyramid_mvp = projection * view * pyramid_model;
+        let model_mvp = projection * view * model_model;
 
         let cube_push_constants = PushConstants {
             mvp: cube_mvp.to_cols_array_2d(),
@@ -209,6 +235,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let pyramid_push_constants = PushConstants {
             mvp: pyramid_mvp.to_cols_array_2d(),
+        };
+
+        let model_push_constants = PushConstants {
+            mvp: model_mvp.to_cols_array_2d(),
         };
 
         let readback = Arc::new(Buffer::create(
@@ -230,6 +260,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pyramid_vertex_node = render_graph.bind_node(&pyramid_vertex_buf);
         let pyramid_index_node = render_graph.bind_node(&pyramid_index_buf);
 
+        // Bind model buffers
+        let model_vertex_node = render_graph.bind_node(&model_vertex_buf);
+        let model_index_node = render_graph.bind_node(&model_index_buf);
+
         let color_image_info = ImageInfo::image_2d(
             width,
             height,
@@ -248,21 +282,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .access_node(cube_index_node, AccessType::IndexBuffer)
             .access_node(pyramid_vertex_node, AccessType::VertexBuffer)
             .access_node(pyramid_index_node, AccessType::IndexBuffer)
+            .access_node(model_vertex_node, AccessType::VertexBuffer)
+            .access_node(model_index_node, AccessType::IndexBuffer)
             .clear_color(0, image_node)
             .store_color(0, image_node)
             .clear_depth_stencil(depth_node)
-            .record_subpass(move |subpass, _| {
-                // Render cube
-                subpass.push_constants(cast_slice(&[cube_push_constants]));
-                subpass.bind_vertex_buffer(cube_vertex_node);
-                subpass.bind_index_buffer(cube_index_node, vk::IndexType::UINT16);
-                subpass.draw_indexed(36, 1, 0, 0, 0);
+            .record_subpass({
+                let cube_indices_count = cube_indices.len() as u32;
+                let pyramid_indices_count = pyramid_indices.len() as u32;
+                let model_indices_count = model_indices.len() as u32;
+                move |subpass, _| {
+                    if true {
+                        // Render cube
+                        subpass.push_constants(cast_slice(&[cube_push_constants]));
+                        subpass.bind_vertex_buffer(cube_vertex_node);
+                        subpass.bind_index_buffer(cube_index_node, vk::IndexType::UINT16);
+                        subpass.draw_indexed(cube_indices_count, 1, 0, 0, 0);
 
-                // Render pyramid
-                subpass.push_constants(cast_slice(&[pyramid_push_constants]));
-                subpass.bind_vertex_buffer(pyramid_vertex_node);
-                subpass.bind_index_buffer(pyramid_index_node, vk::IndexType::UINT16);
-                subpass.draw_indexed(18, 1, 0, 0, 0);
+                        // Render pyramid
+                        subpass.push_constants(cast_slice(&[pyramid_push_constants]));
+                        subpass.bind_vertex_buffer(pyramid_vertex_node);
+                        subpass.bind_index_buffer(pyramid_index_node, vk::IndexType::UINT16);
+                        subpass.draw_indexed(pyramid_indices_count, 1, 0, 0, 0);
+                    }
+                    // Render model
+                    subpass.push_constants(cast_slice(&[model_push_constants]));
+                    subpass.bind_vertex_buffer(model_vertex_node);
+                    subpass.bind_index_buffer(model_index_node, vk::IndexType::UINT16);
+                    subpass.draw_indexed(model_indices_count, 1, 0, 0, 0);
+                }
             });
 
         render_graph.copy_image_to_buffer(image_node, readback_buf);
@@ -293,4 +341,127 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = handle.join().unwrap();
 
     Ok(())
+}
+
+// FIXME this is wrong, we need to return something so we can use GPU instancing of the shells
+fn load_step_model_unfinished(path: &str) -> Result<(Vec<Vertex>, Vec<u16>), Box<dyn std::error::Error>> {
+    println!("Loading STEP file: {}", path);
+
+    // Read STEP file
+    let step_data = std::fs::read_to_string(path)?;
+    let exchange = truck_stepio::r#in::ruststep::parser::parse(&step_data)?;
+
+    println!("Parsing complete, extracting shells...");
+
+    // Extract shells from the STEP model
+    let table: Table = Table::from_data_section(&exchange.data[0]);
+
+    println!("Found {} shells", table.shell.len());
+
+    if table.shell.is_empty() {
+        return Err("No geometry found in STEP file".into());
+    }
+
+    // Collect all vertices and indices
+    let mut all_vertices = Vec::new();
+    let mut all_indices = Vec::new();
+    let mut vertex_offset = 0u16;
+
+    // Mesh parameters - adjust for quality vs performance
+    let tol = 0.01; // Tolerance for meshing
+
+    let mut bounds = BoundingBox::new();
+    for (shell_idx, (shell_id, shell)) in table.shell.iter().enumerate() {
+        println!("Processing shell {}/{}", shell_idx + 1, table.shell.len());
+
+        // Convert shell to polygon mesh
+        let Ok(shell) = table.to_compressed_shell(shell) else {
+            println!("Failed to convert shell {} to polygon mesh", shell_id);
+            continue
+        };
+
+        let mesh: PolygonMesh = shell.robust_triangulation(tol).to_polygon();
+        let mesh_bounds = mesh.bounding_box();
+        bounds = bounds.add(mesh_bounds);
+
+        println!("  Vertices: {}, Faces: {}",
+                 mesh.positions().len(),
+                 mesh.faces().len());
+
+        // Calculate a color based on shell index (for variety)
+        let hue = (shell_idx as f32 * 0.618033988749895) % 1.0; // Golden ratio for distribution
+        let color = hsv_to_rgb(hue, 0.7, 0.9);
+
+        // Add vertices
+        for pos in mesh.positions() {
+            all_vertices.push(Vertex {
+                pos: [pos[0] as f32, pos[1] as f32, pos[2] as f32],
+                color,
+            });
+        }
+
+        // Add indices (triangulated faces)
+        for face_indices in mesh.faces().triangle_iter() {
+            for &idx in &face_indices {
+                all_indices.push(vertex_offset + idx.pos as u16);
+            }
+        }
+
+        vertex_offset += mesh.positions().len() as u16;
+    }
+
+    println!("Total vertices: {}, Total indices: {}",
+             all_vertices.len(), all_indices.len());
+
+    // Calculate bounding box for centering
+    let (min, max) = (bounds.min(), bounds.max());
+    let center = Vec3::new(
+        (min[0] + max[0]) as f32 * 0.5,
+        (min[1] + max[1]) as f32 * 0.5,
+        (min[2] + max[2]) as f32 * 0.5,
+    );
+
+    // Calculate scale to fit in view
+    let size = Vec3::new(
+        (max[0] - min[0]) as f32,
+        (max[1] - min[1]) as f32,
+         (max[2] - min[2]) as f32,
+    );
+    let max_size = size.x.max(size.y).max(size.z);
+    let scale = if max_size > 0.0 { 4.0 / max_size } else { 1.0 };
+
+    println!("Model bounds: min={:?}, max={:?}", min, max);
+    println!("Centering at {:?}, scaling by {}", center, scale);
+
+    // Center and scale vertices
+    for vertex in &mut all_vertices {
+        vertex.pos[0] = (vertex.pos[0] - center.x) * scale;
+        vertex.pos[1] = (vertex.pos[1] - center.y) * scale;
+        vertex.pos[2] = (vertex.pos[2] - center.z) * scale;
+    }
+
+    Ok((all_vertices, all_indices))
+}
+
+
+fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [f32; 3] {
+    let c = v * s;
+    let x = c * (1.0 - ((h * 6.0) % 2.0 - 1.0).abs());
+    let m = v - c;
+
+    let (r, g, b) = if h < 1.0 / 6.0 {
+        (c, x, 0.0)
+    } else if h < 2.0 / 6.0 {
+        (x, c, 0.0)
+    } else if h < 3.0 / 6.0 {
+        (0.0, c, x)
+    } else if h < 4.0 / 6.0 {
+        (0.0, x, c)
+    } else if h < 5.0 / 6.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+
+    [r + m, g + m, b + m]
 }
