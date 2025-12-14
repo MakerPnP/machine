@@ -7,7 +7,7 @@ use screen_13::prelude::vk::DeviceSize;
 use std::f32::consts::TAU;
 
 const FRAME_COUNT: usize = 30;
-const QUEUE_CAPACITY: usize = 10;
+const QUEUE_CAPACITY: usize = 30;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let device = Arc::new(Device::create_headless(DeviceInfo::default())?);
 
     // Define cube vertices with colors
-    let vertices = [
+    let cube_vertices = [
         // Front face (red)
         Vertex { pos: [-1.0, -1.0, 1.0], color: [1.0, 0.0, 0.0] },
         Vertex { pos: [1.0, -1.0, 1.0], color: [1.0, 0.5, 0.0] },
@@ -40,8 +40,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Vertex { pos: [-1.0, 1.0, -1.0], color: [0.5, 0.0, 1.0] },
     ];
 
+    // Define pyramid vertices with colors
+    let pyramid_vertices = [
+        // Base vertices (green)
+        Vertex { pos: [-1.5, -1.0, -1.5], color: [0.0, 1.0, 0.0] }, // 0: back-left
+        Vertex { pos: [1.5, -1.0, -1.5], color: [0.5, 1.0, 0.0] },  // 1: back-right
+        Vertex { pos: [1.5, -1.0, 1.5], color: [0.0, 1.0, 0.5] },   // 2: front-right
+        Vertex { pos: [-1.5, -1.0, 1.5], color: [0.5, 1.0, 0.5] },  // 3: front-left
+        // Apex vertex (yellow)
+        Vertex { pos: [0.0, 2.0, 0.0], color: [1.0, 1.0, 0.0] },    // 4: apex
+    ];
+
     // Define cube indices
-    let indices: [u16; 36] = [
+    let cube_indices: [u16; 36] = [
         0, 1, 2, 2, 3, 0, // Front
         1, 5, 6, 6, 2, 1, // Right
         5, 4, 7, 7, 6, 5, // Back
@@ -50,17 +61,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         4, 5, 1, 1, 0, 4, // Bottom
     ];
 
-    // Create buffers
-    let vertex_buf = Arc::new(Buffer::create_from_slice(
+    // Define pyramid indices
+    let pyramid_indices: [u16; 18] = [
+        // Base (2 triangles)
+        0, 1, 2,
+        0, 2, 3,
+        // Sides (4 triangles)
+        0, 4, 1,  // back face
+        1, 4, 2,  // right face
+        2, 4, 3,  // front face
+        3, 4, 0,  // left face
+    ];
+
+    // Create buffers for cube
+    let cube_vertex_buf = Arc::new(Buffer::create_from_slice(
         &device,
         vk::BufferUsageFlags::VERTEX_BUFFER,
-        cast_slice(&vertices),
+        cast_slice(&cube_vertices),
     )?);
 
-    let index_buf = Arc::new(Buffer::create_from_slice(
+    let cube_index_buf = Arc::new(Buffer::create_from_slice(
         &device,
         vk::BufferUsageFlags::INDEX_BUFFER,
-        cast_slice(&indices),
+        cast_slice(&cube_indices),
+    )?);
+
+    // Create buffers for pyramid
+    let pyramid_vertex_buf = Arc::new(Buffer::create_from_slice(
+        &device,
+        vk::BufferUsageFlags::VERTEX_BUFFER,
+        cast_slice(&pyramid_vertices),
+    )?);
+
+    let pyramid_index_buf = Arc::new(Buffer::create_from_slice(
+        &device,
+        vk::BufferUsageFlags::INDEX_BUFFER,
+        cast_slice(&pyramid_indices),
     )?);
 
     // Create render target image
@@ -145,8 +181,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let t = frame_index as f32 / FRAME_COUNT as f32;
 
         // --- Rotation ---
-        let rotation = t * TAU;
-        let model = Mat4::from_rotation_y(rotation);
+        let cube_rotation = t * TAU;
+        let cube_model = Mat4::from_rotation_y(cube_rotation);
+
+        // Pyramid rotates in opposite direction
+        let pyramid_rotation = -t * TAU;
+        // Position pyramid to the side and rotate it
+        let pyramid_model = Mat4::from_translation(Vec3::new(3.0, 0.0, 0.0))
+            * Mat4::from_rotation_y(pyramid_rotation);
 
         // --- Zoom (smooth in/out) ---
         let base_distance = 6.0;
@@ -160,10 +202,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Vec3::Y,
         );
 
-        let mvp = projection * view * model;
+        let cube_mvp = projection * view * cube_model;
+        let pyramid_mvp = projection * view * pyramid_model;
 
-        let push_constants = PushConstants {
-            mvp: mvp.to_cols_array_2d(),
+        let cube_push_constants = PushConstants {
+            mvp: cube_mvp.to_cols_array_2d(),
+        };
+
+        let pyramid_push_constants = PushConstants {
+            mvp: pyramid_mvp.to_cols_array_2d(),
         };
 
         let readback = Arc::new(Buffer::create(
@@ -177,8 +224,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Create render graph
         let mut render_graph = RenderGraph::new();
 
-        let vertex_node = render_graph.bind_node(&vertex_buf);
-        let index_node = render_graph.bind_node(&index_buf);
+        // Bind cube buffers
+        let cube_vertex_node = render_graph.bind_node(&cube_vertex_buf);
+        let cube_index_node = render_graph.bind_node(&cube_index_buf);
+
+        // Bind pyramid buffers
+        let pyramid_vertex_node = render_graph.bind_node(&pyramid_vertex_buf);
+        let pyramid_index_node = render_graph.bind_node(&pyramid_index_buf);
 
         let color_image_info = ImageInfo::image_2d(
             width,
@@ -194,16 +246,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         render_graph
             .begin_pass("Render Cube")
             .bind_pipeline(&pipeline)
-            .access_node(vertex_node, AccessType::VertexBuffer)
-            .access_node(index_node, AccessType::IndexBuffer)
+            .access_node(cube_vertex_node, AccessType::VertexBuffer)
+            .access_node(cube_index_node, AccessType::IndexBuffer)
+            .access_node(pyramid_vertex_node, AccessType::VertexBuffer)
+            .access_node(pyramid_index_node, AccessType::IndexBuffer)
             .clear_color(0, image_node)
             .store_color(0, image_node)
             .clear_depth_stencil(depth_node)
             .record_subpass(move |subpass, _| {
-                subpass.push_constants(cast_slice(&[push_constants]));
-                subpass.bind_vertex_buffer(vertex_node);
-                subpass.bind_index_buffer(index_node, vk::IndexType::UINT16);
+                // Render cube
+                subpass.push_constants(cast_slice(&[cube_push_constants]));
+                subpass.bind_vertex_buffer(cube_vertex_node);
+                subpass.bind_index_buffer(cube_index_node, vk::IndexType::UINT16);
                 subpass.draw_indexed(36, 1, 0, 0, 0);
+
+                // Render pyramid
+                subpass.push_constants(cast_slice(&[pyramid_push_constants]));
+                subpass.bind_vertex_buffer(pyramid_vertex_node);
+                subpass.bind_index_buffer(pyramid_index_node, vk::IndexType::UINT16);
+                subpass.draw_indexed(18, 1, 0, 0, 0);
             });
 
         render_graph.copy_image_to_buffer(image_node, readback_buf);
