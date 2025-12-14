@@ -149,13 +149,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let bytes: &[u8] = Buffer::mapped_slice(&readback);
             let bytes_vec: Vec<u8> = bytes.to_vec();
             let mapped_duration = start_at.elapsed();
-            println!("Frame length: {}", bytes_vec.len());
+
+            println!("Frame length: {}, mapped_duration: {}", bytes_vec.len(), mapped_duration.as_micros());
 
             // Save to raw file
             // std::fs::write(format!("frame_{:03}.raw", frame_index), &bytes)?;
-            let sum = bytes_vec.iter().fold(0, |acc, &x| acc + x as u32);
-            let total_duration = start_at.elapsed();
-            println!("Sum: {}, mapped_duration: {}, total_duration: {}us", sum, mapped_duration.as_micros(), total_duration.as_micros());
 
             // Save to PNG
             image::save_buffer(
