@@ -4,7 +4,6 @@ struct PushConstants {
     light_pos: vec3<f32>,
     light_intensity: f32,
     light_color: vec3<f32>,
-    _padding: f32,
 }
 
 var<push_constant> pc: PushConstants;

@@ -54,7 +54,6 @@ struct PushConstants {
     light_pos: [f32; 3],
     light_intensity: f32,
     light_color: [f32; 3],
-    _padding: f32,
 }
 
 struct RenderState {
@@ -89,7 +88,12 @@ impl RenderState {
                     label: None,
                     required_features: wgpu::Features::PUSH_CONSTANTS,
                     required_limits: wgpu::Limits {
-                        max_push_constant_size: 256, // Ensure we have enough space for our push constants
+                        // raspberry pi 5 gpu only allows 128 max.
+                        max_push_constant_size: 128,
+                        // raspberry pi 5 gpu only allows 4096 max.
+                        max_texture_dimension_2d: 4096,
+                        // raspberry pi 5 gpu only allows 4096 max.
+                        max_texture_dimension_1d: 4096,
                         ..Default::default()
                     },
                     experimental_features: Default::default(),
@@ -544,7 +548,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             light_pos: light_pos.to_array(),
             light_intensity,
             light_color,
-            _padding: 0.0,
         };
 
         let pyramid_push_constants = PushConstants {
@@ -553,7 +556,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             light_pos: light_pos.to_array(),
             light_intensity,
             light_color,
-            _padding: 0.0,
         };
 
         let model_push_constants = PushConstants {
@@ -562,7 +564,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             light_pos: light_pos.to_array(),
             light_intensity,
             light_color,
-            _padding: 0.0,
         };
 
         println!("Rendering frame {}", frame_index);
