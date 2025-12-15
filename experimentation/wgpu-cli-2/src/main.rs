@@ -172,7 +172,7 @@ impl RenderState {
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: Some(NonZeroU64::new(size_of::<UniformData>() as u64).unwrap()), // Specify size
+                        min_binding_size: Some(NonZeroU64::new(UNIFORM_DATA_SIZE as u64).unwrap()), // Specify size
                     },
                     count: None,
                 },
