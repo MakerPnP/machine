@@ -394,6 +394,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let step_path = "assets/User Library-LQFP64_Grid_0_5.STEP";
     let (model_vertices, model_indices) = load_step_model_unfinished(step_path)?;
 
+    //
+    // For the models here, Y+ = UP
+    //
+
     // Define cube vertices with colors
     let cube_vertices = [
         // Front face (red)
