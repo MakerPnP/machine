@@ -722,7 +722,7 @@ fn load_step_model_unfinished(
 
     let mut bounds = BoundingBox::new();
     for (shell_idx, (shell_id, shell)) in table.shell.iter().enumerate() {
-        println!("Processing shell {}/{}", shell_idx + 1, table.shell.len());
+        println!("Processing shell {}/{}, id: {}", shell_idx + 1, table.shell.len(), shell_id);
 
         let Ok(shell) = table.to_compressed_shell(shell) else {
             println!("Failed to convert shell {} to polygon mesh", shell_id);
@@ -739,7 +739,7 @@ fn load_step_model_unfinished(
             mesh.faces().len()
         );
 
-        let hue = (shell_idx as f32 * 0.618033988749895) % 1.0;
+        let hue = (*shell_id as f32 * 0.618033988749895) % 1.0;
         let color = hsv_to_rgb(hue, 0.7, 0.9);
 
         for pos in mesh.positions() {
