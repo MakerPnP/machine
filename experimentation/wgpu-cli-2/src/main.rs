@@ -1,6 +1,5 @@
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
-use std::borrow::Cow;
 use std::f32::consts::TAU;
 use std::ops::Add;
 use truck_meshalgo::prelude::{BoundingBox, MeshedShape, RobustMeshableShape};
