@@ -398,65 +398,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define cube vertices with colors
     let cube_vertices = [
         // Front face (red)
-        Vertex {
-            pos: [-1.0, -1.0, 1.0],
-            color: [1.0, 0.0, 0.0],
-        },
-        Vertex {
-            pos: [1.0, -1.0, 1.0],
-            color: [1.0, 0.5, 0.0],
-        },
-        Vertex {
-            pos: [1.0, 1.0, 1.0],
-            color: [1.0, 1.0, 0.0],
-        },
-        Vertex {
-            pos: [-1.0, 1.0, 1.0],
-            color: [1.0, 0.5, 0.5],
-        },
+        Vertex { pos: [-1.0, -1.0, 1.0], color: [1.0, 0.0, 0.0] },
+        Vertex { pos: [1.0, -1.0, 1.0], color: [1.0, 0.5, 0.0] },
+        Vertex { pos: [1.0, 1.0, 1.0], color: [1.0, 1.0, 0.0] },
+        Vertex { pos: [-1.0, 1.0, 1.0], color: [1.0, 0.5, 0.5] },
         // Back face (blue)
-        Vertex {
-            pos: [-1.0, -1.0, -1.0],
-            color: [0.0, 0.0, 1.0],
-        },
-        Vertex {
-            pos: [1.0, -1.0, -1.0],
-            color: [0.0, 0.5, 1.0],
-        },
-        Vertex {
-            pos: [1.0, 1.0, -1.0],
-            color: [0.5, 0.5, 1.0],
-        },
-        Vertex {
-            pos: [-1.0, 1.0, -1.0],
-            color: [0.5, 0.0, 1.0],
-        },
+        Vertex { pos: [-1.0, -1.0, -1.0], color: [0.0, 0.0, 1.0] },
+        Vertex { pos: [1.0, -1.0, -1.0], color: [0.0, 0.5, 1.0] },
+        Vertex { pos: [1.0, 1.0, -1.0], color: [0.5, 0.5, 1.0] },
+        Vertex { pos: [-1.0, 1.0, -1.0], color: [0.5, 0.0, 1.0] },
     ];
 
     // Define pyramid vertices with colors
     let pyramid_vertices = [
         // Base vertices (green)
-        Vertex {
-            pos: [-1.5, -1.0, -1.5],
-            color: [0.0, 1.0, 0.0],
-        }, // 0: back-left
-        Vertex {
-            pos: [1.5, -1.0, -1.5],
-            color: [0.5, 1.0, 0.0],
-        }, // 1: back-right
-        Vertex {
-            pos: [1.5, -1.0, 1.5],
-            color: [0.0, 1.0, 0.5],
-        }, // 2: front-right
-        Vertex {
-            pos: [-1.5, -1.0, 1.5],
-            color: [0.5, 1.0, 0.5],
-        }, // 3: front-left
+        Vertex { pos: [-1.5, -1.0, -1.5], color: [0.0, 1.0, 0.0] }, // 0: back-left
+        Vertex { pos: [1.5, -1.0, -1.5], color: [0.5, 1.0, 0.0] }, // 1: back-right
+        Vertex { pos: [1.5, -1.0, 1.5], color: [0.0, 1.0, 0.5] }, // 2: front-right
+        Vertex { pos: [-1.5, -1.0, 1.5], color: [0.5, 1.0, 0.5] }, // 3: front-left
         // Apex vertex (yellow)
-        Vertex {
-            pos: [0.0, 2.0, 0.0],
-            color: [1.0, 1.0, 0.0],
-        }, // 4: apex
+        Vertex { pos: [0.0, 2.0, 0.0], color: [1.0, 1.0, 0.0] }, // 4: apex
     ];
 
     // Define cube indices
@@ -472,14 +433,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define pyramid indices
     let pyramid_indices: [u16; 18] = [
         // Base (2 triangles)
-        0, 1, 2, 0, 2, 3, // Sides (4 triangles)
+        0, 1, 2,
+        0, 2, 3,
+        // Sides (4 triangles)
         0, 4, 1, // back face
         1, 4, 2, // right face
         2, 4, 3, // front face
         3, 4, 0, // left face
     ];
 
-    // Initialize wgpu
+    // Initialize wgpu (these currently must be multiples of 256)
     let width = 1024u32;
     let height = 1024u32;
 
