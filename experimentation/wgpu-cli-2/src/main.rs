@@ -47,16 +47,42 @@ impl Vertex {
     }
 }
 
-/// Using glam types which handle alignment.
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct UniformData {
-    mvp: Mat4,
-    model: Mat4,
-    light_pos: glam::Vec4,  // Use Vec4 instead of Vec3
+    mvp: glam::Mat4,
+    model: glam::Mat4,
+    light_pos: glam::Vec3,
+    _padding1: u32,  // Explicit padding for light_pos
+    light_color: glam::Vec3,
+    _padding2: u32,  // Explicit padding for light_pos
     light_intensity: f32,
-    _padding: [f32; 3],  // Padding to align to 16 bytes
-    light_color: glam::Vec4,  // Use Vec4 instead of Vec3
+    _padding3: u32,
+    _padding4: u32,
+    _padding5: u32,
+}
+
+impl UniformData {
+    pub fn new(
+        mvp: glam::Mat4,
+        model: glam::Mat4,
+        light_pos: glam::Vec3,
+        light_color: glam::Vec3,
+        light_intensity: f32
+    ) -> Self {
+        Self {
+            mvp,
+            model,
+            light_pos,
+            _padding1: 0,
+            light_color,
+            _padding2: 0,
+            light_intensity,
+            _padding3: 0,
+            _padding4: 0,
+            _padding5: 0,
+        }
+    }
 }
 
 const UNIFORM_DATA_SIZE: usize = std::mem::size_of::<UniformData>();
@@ -71,6 +97,16 @@ mod uniform_data_tests {
         assert_eq!(align_of::<UniformData>(), UNIFORM_DATA_ALIGN);
         assert_eq!(size_of::<UniformData>() % UNIFORM_DATA_ALIGN, 0, "Uniform data size must be a multiple of {}", UNIFORM_DATA_ALIGN);
         assert_eq!(align_of::<UniformData>(), 16);
+    }
+
+    #[test]
+    fn uniform_data_alignment() {
+        // Check offsets
+        assert_eq!(memoffset::offset_of!(UniformData, mvp), 0);
+        assert_eq!(memoffset::offset_of!(UniformData, model), 64);
+        assert_eq!(memoffset::offset_of!(UniformData, light_pos), 128);
+        assert_eq!(memoffset::offset_of!(UniformData, light_color), 144);
+        assert_eq!(memoffset::offset_of!(UniformData, light_intensity), 160);
     }
 }
 
@@ -612,32 +648,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pyramid_mvp = projection * view * pyramid_model;
         let model_mvp = projection * view * model_model;
 
-        let cube_uniform_data = UniformData {
-            mvp: cube_mvp,  // Direct Mat4, no conversion needed
-            model: cube_model,  // Direct Mat4
-            light_pos: glam::Vec4::new(light_pos.x, light_pos.y, light_pos.z, 0.0),  // Convert Vec3 to Vec4
+        let cube_uniform_data = UniformData::new(
+            cube_mvp,
+            cube_model,
+            glam::Vec3::new(light_pos.x, light_pos.y, light_pos.z),
+            glam::Vec3::new(light_color[0], light_color[1], light_color[2]),
             light_intensity,
-            _padding: [0.0; 3],  // Padding to align to 16 bytes
-            light_color: glam::Vec4::new(light_color[0], light_color[1], light_color[2], 0.0),  // Convert array to Vec4
-        };
+        );
 
-        let pyramid_uniform_data = UniformData {
-            mvp: pyramid_mvp,  // Direct Mat4, no conversion needed
-            model: pyramid_model,  // Direct Mat4
-            light_pos: glam::Vec4::new(light_pos.x, light_pos.y, light_pos.z, 0.0),  // Convert Vec3 to Vec4
+        let pyramid_uniform_data = UniformData::new(
+            pyramid_mvp,
+            pyramid_model,
+            glam::Vec3::new(light_pos.x, light_pos.y, light_pos.z),
+            glam::Vec3::new(light_color[0], light_color[1], light_color[2]),
             light_intensity,
-            _padding: [0.0; 3],  // Padding to align to 16 bytes
-            light_color: glam::Vec4::new(light_color[0], light_color[1], light_color[2], 0.0),  // Convert array to Vec4
-        };
+        );
 
-        let model_uniform_data = UniformData {
-            mvp: model_mvp,  // Direct Mat4, no conversion needed
-            model: model_model,  // Direct Mat4
-            light_pos: glam::Vec4::new(light_pos.x, light_pos.y, light_pos.z, 0.0),  // Convert Vec3 to Vec4
+        let model_uniform_data = UniformData::new(
+            model_mvp,
+            model_model,
+            glam::Vec3::new(light_pos.x, light_pos.y, light_pos.z),
+            glam::Vec3::new(light_color[0], light_color[1], light_color[2]),
             light_intensity,
-            _padding: [0.0; 3],  // Padding to align to 16 bytes
-            light_color: glam::Vec4::new(light_color[0], light_color[1], light_color[2], 0.0),  // Convert array to Vec4
-        };
+        );
 
         println!("Rendering frame {}", frame_index);
 

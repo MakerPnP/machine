@@ -15,6 +15,9 @@ truck-meshalgo = "0.4"
 truck-polymesh = "0.6"
 truck-stepio = "0.3"
 
+[dev-dependencies]
+memoffset = "0.9.1"
+
 [profile.release]
 # The optimizations below are disabled for now, since the increase compilation times significantly
 #opt-level = 3

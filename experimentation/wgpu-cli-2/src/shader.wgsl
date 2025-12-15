@@ -1,10 +1,16 @@
+// there are specific alignment requirements for WGSL types.
+
 struct Uniforms {
     mvp: mat4x4<f32>,
     model: mat4x4<f32>,
-    light_pos: vec4<f32>,  // Changed from vec3 to vec4
+    light_pos: vec3<f32>,
+    _padding1: u32,
+    light_color: vec3<f32>,
+    _padding2: u32,
     light_intensity: f32,
-    // WGSL will insert padding here automatically
-    light_color: vec4<f32>,  // Changed from vec3 to vec4
+    _padding3: u32,
+    _padding4: u32,
+    _padding5: u32,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
