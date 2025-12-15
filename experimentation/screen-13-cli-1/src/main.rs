@@ -46,6 +46,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create headless device for offscreen rendering
     let device = Arc::new(Device::create_headless(DeviceInfo::default())?);
 
+    //
+    // For the models here, Y+ = UP
+    //
+
     // Define cube vertices with colors
     let cube_vertices = [
         // Front face (red)
@@ -167,7 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create transformation matrices using glam
     let aspect = width as f32 / height as f32;
     let ortho_size = 10.0;  // How many world units fit in view
-    let projection = match PROJECTION_STYLE {
+    let mut projection = match PROJECTION_STYLE {
         ProjectionStyle::Normal => Mat4::perspective_rh(45.0_f32.to_radians(), aspect, 0.1, 100.0),
         ProjectionStyle::Orthographic => Mat4::orthographic_rh(
             -ortho_size * aspect,  // left
@@ -178,6 +182,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             100.0
         ),
     };
+
+    // Vulkan NDC Y-flip (pyramid should point upwards)
+    projection.y_axis.y *= -1.0;
 
     let mut hash_pool = HashPool::new(&device);
 
