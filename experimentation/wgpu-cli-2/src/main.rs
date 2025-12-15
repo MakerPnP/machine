@@ -1,6 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
 use std::f32::consts::TAU;
+use std::num::NonZeroU64;
 use std::ops::Add;
 use truck_meshalgo::prelude::{BoundingBox, MeshedShape, RobustMeshableShape};
 use truck_polymesh::PolygonMesh;
@@ -46,20 +47,38 @@ impl Vertex {
     }
 }
 
+/// Using glam types which handle alignment.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-struct PushConstants {
-    mvp: [[f32; 4]; 4],
-    model: [[f32; 4]; 4],
-    light_pos: [f32; 3],
+struct UniformData {
+    mvp: Mat4,
+    model: Mat4,
+    light_pos: glam::Vec4,  // Use Vec4 instead of Vec3
     light_intensity: f32,
-    light_color: [f32; 3],
+    _padding: [f32; 3],  // Padding to align to 16 bytes
+    light_color: glam::Vec4,  // Use Vec4 instead of Vec3
+}
+
+const UNIFORM_DATA_SIZE: usize = std::mem::size_of::<UniformData>();
+const UNIFORM_DATA_ALIGN: usize = std::mem::align_of::<UniformData>();
+
+#[cfg(test)]
+mod uniform_data_tests {
+    use super::*;
+    #[test]
+    fn uniform_data_size() {
+        assert_eq!(size_of::<UniformData>(), UNIFORM_DATA_SIZE);
+        assert_eq!(align_of::<UniformData>(), UNIFORM_DATA_ALIGN);
+        assert_eq!(size_of::<UniformData>() % UNIFORM_DATA_ALIGN, 0, "Uniform data size must be a multiple of {}", UNIFORM_DATA_ALIGN);
+        assert_eq!(align_of::<UniformData>(), 16);
+    }
 }
 
 struct RenderState {
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::RenderPipeline,
+    bind_group_layout: wgpu::BindGroupLayout,
     width: u32,
     height: u32,
 }
@@ -86,10 +105,8 @@ impl RenderState {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    required_features: wgpu::Features::PUSH_CONSTANTS,
+                    required_features: wgpu::Features::empty(),
                     required_limits: wgpu::Limits {
-                        // raspberry pi 5 gpu only allows 128 max.
-                        max_push_constant_size: 128,
                         // raspberry pi 5 gpu only allows 4096 max.
                         max_texture_dimension_2d: 4096,
                         // raspberry pi 5 gpu only allows 4096 max.
@@ -109,14 +126,28 @@ impl RenderState {
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
+        // Create bind group layout
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Uniform Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(NonZeroU64::new(size_of::<UniformData>() as u64).unwrap()), // Specify size
+                    },
+                    count: None,
+                },
+            ],
+        });
+
         // Create pipeline layout
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[],
-            push_constant_ranges: &[wgpu::PushConstantRange {
-                stages: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                range: 0..std::mem::size_of::<PushConstants>() as u32,
-            }],
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
         });
 
         // Create render pipeline
@@ -164,6 +195,7 @@ impl RenderState {
             device,
             queue,
             pipeline,
+            bind_group_layout,
             width,
             height,
         })
@@ -177,10 +209,15 @@ impl RenderState {
         pyramid_indices: &[u16],
         model_vertices: &[Vertex],
         model_indices: &[u16],
-        cube_push: PushConstants,
-        pyramid_push: PushConstants,
-        model_push: PushConstants,
+        cube_push: UniformData,
+        pyramid_push: UniformData,
+        model_push: UniformData,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let cube_uniform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Cube Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[cube_push]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
         // Create vertex buffers
         let cube_vertex_buffer = self
             .device
@@ -198,6 +235,12 @@ impl RenderState {
                 usage: wgpu::BufferUsages::INDEX,
             });
 
+        let pyramid_uniform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Pyramid Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[pyramid_push]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let pyramid_vertex_buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -214,6 +257,12 @@ impl RenderState {
                 usage: wgpu::BufferUsages::INDEX,
             });
 
+        let model_uniform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Model Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[model_push]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let model_vertex_buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -229,6 +278,40 @@ impl RenderState {
                 contents: bytemuck::cast_slice(model_indices),
                 usage: wgpu::BufferUsages::INDEX,
             });
+
+        // Create bind groups for each object
+        let cube_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Cube Bind Group"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: cube_uniform_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let pyramid_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Pyramid Bind Group"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: pyramid_uniform_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let model_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Model Bind Group"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: model_uniform_buffer.as_entire_binding(),
+                },
+            ],
+        });
 
         // Create render target texture
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
@@ -315,32 +398,20 @@ impl RenderState {
             render_pass.set_pipeline(&self.pipeline);
 
             // Render cube
-            render_pass.set_push_constants(
-                wgpu::ShaderStages::VERTEX_FRAGMENT,
-                0,
-                bytemuck::cast_slice(&[cube_push]),
-            );
+            render_pass.set_bind_group(0, &cube_bind_group, &[]);
             render_pass.set_vertex_buffer(0, cube_vertex_buffer.slice(..));
             render_pass.set_index_buffer(cube_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..cube_indices.len() as u32, 0, 0..1);
 
             // Render pyramid
-            render_pass.set_push_constants(
-                wgpu::ShaderStages::VERTEX_FRAGMENT,
-                0,
-                bytemuck::cast_slice(&[pyramid_push]),
-            );
+            render_pass.set_bind_group(0, &pyramid_bind_group, &[]);
             render_pass.set_vertex_buffer(0, pyramid_vertex_buffer.slice(..));
             render_pass
                 .set_index_buffer(pyramid_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..pyramid_indices.len() as u32, 0, 0..1);
 
             // Render model
-            render_pass.set_push_constants(
-                wgpu::ShaderStages::VERTEX_FRAGMENT,
-                0,
-                bytemuck::cast_slice(&[model_push]),
-            );
+            render_pass.set_bind_group(0, &model_bind_group, &[]);
             render_pass.set_vertex_buffer(0, model_vertex_buffer.slice(..));
             render_pass.set_index_buffer(model_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..model_indices.len() as u32, 0, 0..1);
@@ -541,29 +612,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pyramid_mvp = projection * view * pyramid_model;
         let model_mvp = projection * view * model_model;
 
-        // Create push constants
-        let cube_push_constants = PushConstants {
-            mvp: cube_mvp.to_cols_array_2d(),
-            model: cube_model.to_cols_array_2d(),
-            light_pos: light_pos.to_array(),
+        let cube_uniform_data = UniformData {
+            mvp: cube_mvp,  // Direct Mat4, no conversion needed
+            model: cube_model,  // Direct Mat4
+            light_pos: glam::Vec4::new(light_pos.x, light_pos.y, light_pos.z, 0.0),  // Convert Vec3 to Vec4
             light_intensity,
-            light_color,
+            _padding: [0.0; 3],  // Padding to align to 16 bytes
+            light_color: glam::Vec4::new(light_color[0], light_color[1], light_color[2], 0.0),  // Convert array to Vec4
         };
 
-        let pyramid_push_constants = PushConstants {
-            mvp: pyramid_mvp.to_cols_array_2d(),
-            model: pyramid_model.to_cols_array_2d(),
-            light_pos: light_pos.to_array(),
+        let pyramid_uniform_data = UniformData {
+            mvp: pyramid_mvp,  // Direct Mat4, no conversion needed
+            model: pyramid_model,  // Direct Mat4
+            light_pos: glam::Vec4::new(light_pos.x, light_pos.y, light_pos.z, 0.0),  // Convert Vec3 to Vec4
             light_intensity,
-            light_color,
+            _padding: [0.0; 3],  // Padding to align to 16 bytes
+            light_color: glam::Vec4::new(light_color[0], light_color[1], light_color[2], 0.0),  // Convert array to Vec4
         };
 
-        let model_push_constants = PushConstants {
-            mvp: model_mvp.to_cols_array_2d(),
-            model: model_model.to_cols_array_2d(),
-            light_pos: light_pos.to_array(),
+        let model_uniform_data = UniformData {
+            mvp: model_mvp,  // Direct Mat4, no conversion needed
+            model: model_model,  // Direct Mat4
+            light_pos: glam::Vec4::new(light_pos.x, light_pos.y, light_pos.z, 0.0),  // Convert Vec3 to Vec4
             light_intensity,
-            light_color,
+            _padding: [0.0; 3],  // Padding to align to 16 bytes
+            light_color: glam::Vec4::new(light_color[0], light_color[1], light_color[2], 0.0),  // Convert array to Vec4
         };
 
         println!("Rendering frame {}", frame_index);
@@ -575,9 +648,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &pyramid_indices,
             &model_vertices,
             &model_indices,
-            cube_push_constants,
-            pyramid_push_constants,
-            model_push_constants,
+            cube_uniform_data,
+            pyramid_uniform_data,
+            model_uniform_data,
         )?;
 
         println!("Sending frame {}", frame_index);

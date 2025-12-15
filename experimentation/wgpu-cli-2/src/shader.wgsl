@@ -1,12 +1,13 @@
-struct PushConstants {
+struct Uniforms {
     mvp: mat4x4<f32>,
     model: mat4x4<f32>,
-    light_pos: vec3<f32>,
+    light_pos: vec4<f32>,  // Changed from vec3 to vec4
     light_intensity: f32,
-    light_color: vec3<f32>,
+    // WGSL will insert padding here automatically
+    light_color: vec4<f32>,  // Changed from vec3 to vec4
 }
 
-var<push_constant> pc: PushConstants;
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -23,8 +24,8 @@ struct VertexOutput {
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
-    out.clip_position = pc.mvp * vec4<f32>(in.position, 1.0);
-    out.world_pos = (pc.model * vec4<f32>(in.position, 1.0)).xyz;
+    out.clip_position = uniforms.mvp * vec4<f32>(in.position, 1.0);
+    out.world_pos = (uniforms.model * vec4<f32>(in.position, 1.0)).xyz;
     out.color = in.color;
 
     return out;
@@ -38,15 +39,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let normal = normalize(cross(dpdx, dpdy));
 
     // Calculate light direction
-    let light_dir = normalize(pc.light_pos - in.world_pos);
+    let light_dir = normalize(uniforms.light_pos - in.world_pos);
 
     // Calculate distance for attenuation
-    let distance = length(pc.light_pos - in.world_pos);
+    let distance = length(uniforms.light_pos - in.world_pos);
     let attenuation = 1.0 / (1.0 + 0.09 * distance + 0.032 * distance * distance);
 
     // Diffuse lighting
     let diff = max(dot(normal, light_dir), 0.0);
-    let diffuse = diff * pc.light_color * pc.light_intensity * attenuation;
+    let diffuse = diff * uniforms.light_color * uniforms.light_intensity * attenuation;
 
     // Ambient lighting
     let ambient = 0.2 * in.color;
