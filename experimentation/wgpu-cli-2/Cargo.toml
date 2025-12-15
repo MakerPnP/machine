@@ -16,6 +16,7 @@ truck-polymesh = "0.6"
 truck-stepio = "0.3"
 
 [profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
+# The optimizations below are disabled for now, since the increase compilation times significantly
+#opt-level = 3
+#lto = true
+#codegen-units = 1
