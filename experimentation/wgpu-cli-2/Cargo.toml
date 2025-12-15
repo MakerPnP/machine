@@ -1,0 +1,21 @@
+[package]
+name = "wgpu-cli-2"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wgpu = "27.0.0"
+bytemuck = { version = "1.24", features = ["derive"] }
+glam = { version = "0.30", features = ["bytemuck"] }
+image = "0.25"
+tokio = { version = "1.48", features = ["rt", "rt-multi-thread"] }
+
+# STEP file processing dependencies
+truck-meshalgo = "0.4"
+truck-polymesh = "0.6"
+truck-stepio = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
