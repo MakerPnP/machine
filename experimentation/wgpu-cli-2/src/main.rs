@@ -6,7 +6,7 @@ use std::ops::Add;
 use truck_meshalgo::prelude::{BoundingBox, MeshedShape, RobustMeshableShape};
 use truck_polymesh::PolygonMesh;
 use truck_stepio::r#in::Table;
-use wgpu::{TexelCopyBufferLayout, TexelCopyTextureInfo};
+use wgpu::ImageDataLayout;
 use wgpu::util::DeviceExt;
 
 const PROJECTION_STYLE: ProjectionStyle = ProjectionStyle::Normal;
@@ -123,8 +123,8 @@ struct RenderState {
 impl RenderState {
     async fn new(width: u32, height: u32) -> Result<Self, Box<dyn std::error::Error>> {
         // Create instance
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::from_env().unwrap_or_default(),
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::default(),
             ..Default::default()
         });
 
@@ -461,15 +461,15 @@ impl RenderState {
         let u32_size = size_of::<u32>() as u32;
 
         encoder.copy_texture_to_buffer(
-            TexelCopyTextureInfo {
+            wgpu::ImageCopyTexture {
                 aspect: wgpu::TextureAspect::All,
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
-            wgpu::TexelCopyBufferInfo {
+            wgpu::ImageCopyBuffer {
                 buffer: &output_buffer,
-                layout: TexelCopyBufferLayout {
+                layout: ImageDataLayout {
                     offset: 0,
                     bytes_per_row: Some(u32_size * self.width),
                     rows_per_image: Some(self.height),
