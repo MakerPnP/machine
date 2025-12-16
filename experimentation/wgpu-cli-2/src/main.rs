@@ -6,7 +6,7 @@ use std::ops::Add;
 use truck_meshalgo::prelude::{BoundingBox, MeshedShape, RobustMeshableShape};
 use truck_polymesh::PolygonMesh;
 use truck_stepio::r#in::Table;
-use wgpu::{PollType, TexelCopyBufferLayout, TexelCopyTextureInfo};
+use wgpu::{TexelCopyBufferLayout, TexelCopyTextureInfo};
 use wgpu::util::DeviceExt;
 
 const PROJECTION_STYLE: ProjectionStyle = ProjectionStyle::Normal;
@@ -135,7 +135,8 @@ impl RenderState {
                 compatible_surface: None,
                 force_fallback_adapter: false,
             })
-            .await?;
+            .await
+            .ok_or("whatever")?;
 
         // Request device and queue
         let (device, queue) = adapter
@@ -152,8 +153,9 @@ impl RenderState {
                     },
 //                    experimental_features: Default::default(),
                     memory_hints: wgpu::MemoryHints::default(),
-                    trace: Default::default(),
-                }
+//                    trace: Default::default(),
+                },
+                None,
             )
             .await?;
 
@@ -491,7 +493,8 @@ impl RenderState {
         });
 
 //        let _ = self.device.poll(PollType::Wait { submission_index: None, timeout: None });
-        let _ = self.device.poll(PollType::Wait);
+//         let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(wgpu::Maintain::Wait);
         receiver.recv()??;
 
         let data = buffer_slice.get_mapped_range();
