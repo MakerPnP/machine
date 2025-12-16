@@ -150,7 +150,7 @@ impl RenderState {
                         max_texture_dimension_1d: 4096,
                         ..Default::default()
                     },
-                    experimental_features: Default::default(),
+//                    experimental_features: Default::default(),
                     memory_hints: wgpu::MemoryHints::default(),
                     trace: Default::default(),
                 }
@@ -491,7 +491,8 @@ impl RenderState {
             sender.send(result).unwrap();
         });
 
-        let _ = self.device.poll(PollType::Wait { submission_index: None, timeout: None });
+//        let _ = self.device.poll(PollType::Wait { submission_index: None, timeout: None });
+        let _ = self.device.poll(PollType::Wait);
         receiver.recv()??;
 
         let data = buffer_slice.get_mapped_range();
