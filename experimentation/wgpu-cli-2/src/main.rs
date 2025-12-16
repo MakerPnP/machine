@@ -29,7 +29,7 @@ struct Vertex {
 impl Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            array_stride: size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 wgpu::VertexAttribute {
@@ -38,7 +38,7 @@ impl Vertex {
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    offset: size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x3,
                 },
@@ -85,8 +85,9 @@ impl UniformData {
     }
 }
 
-const UNIFORM_DATA_SIZE: usize = std::mem::size_of::<UniformData>();
-const UNIFORM_DATA_ALIGN: usize = std::mem::align_of::<UniformData>();
+const UNIFORM_DATA_SIZE: usize = size_of::<UniformData>();
+#[cfg(test)]
+const UNIFORM_DATA_ALIGN: usize = align_of::<UniformData>();
 
 #[cfg(test)]
 mod uniform_data_tests {
@@ -529,11 +530,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pyramid_vertices = [
         // Base vertices (green)
         Vertex { pos: [-1.5, -1.0, -1.5], color: [0.0, 1.0, 0.0] }, // 0: back-left
-        Vertex { pos: [1.5, -1.0, -1.5], color: [0.5, 1.0, 0.0] }, // 1: back-right
-        Vertex { pos: [1.5, -1.0, 1.5], color: [0.0, 1.0, 0.5] }, // 2: front-right
-        Vertex { pos: [-1.5, -1.0, 1.5], color: [0.5, 1.0, 0.5] }, // 3: front-left
+        Vertex { pos: [1.5, -1.0, -1.5], color: [0.5, 1.0, 0.0] },  // 1: back-right
+        Vertex { pos: [1.5, -1.0, 1.5], color: [0.0, 1.0, 0.5] },   // 2: front-right
+        Vertex { pos: [-1.5, -1.0, 1.5], color: [0.5, 1.0, 0.5] },  // 3: front-left
         // Apex vertex (yellow)
-        Vertex { pos: [0.0, 2.0, 0.0], color: [1.0, 1.0, 0.0] }, // 4: apex
+        Vertex { pos: [0.0, 2.0, 0.0], color: [1.0, 1.0, 0.0] },    // 4: apex
     ];
 
     // Define cube indices
@@ -552,10 +553,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         0, 1, 2,
         0, 2, 3,
         // Sides (4 triangles)
-        0, 4, 1, // back face
-        1, 4, 2, // right face
-        2, 4, 3, // front face
-        3, 4, 0, // left face
+        0, 4, 1,  // back face
+        1, 4, 2,  // right face
+        2, 4, 3,  // front face
+        3, 4, 0,  // left face
     ];
 
     // Initialize wgpu (these currently must be multiples of 256)
@@ -567,7 +568,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create transformation matrices
     let aspect = width as f32 / height as f32;
-    let ortho_size = 10.0;
+    let ortho_size = 10.0;  // How many world units fit in view
     let projection = match PROJECTION_STYLE {
         ProjectionStyle::Normal => Mat4::perspective_rh(45.0_f32.to_radians(), aspect, 0.1, 100.0),
         ProjectionStyle::Orthographic => Mat4::orthographic_rh(
@@ -611,20 +612,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok::<(), ()>(())
     });
 
-    for frame_index in 0..FRAME_COUNT {
+    let mut frame_index = 0;
+    loop {
         let t = frame_index as f32 / FRAME_COUNT as f32;
 
         // --- Light Animation ---
+        // Orbit the light around the scene
         let light_orbit_radius = 8.0;
         let light_height = 5.0;
         let light_angle = t * TAU;
         let light_pos = Vec3::new(
             light_orbit_radius * light_angle.cos(),
-            light_height + 2.0 * (t * TAU * 2.0).sin(),
+            light_height + 2.0 * (t * TAU * 2.0).sin(), // Also animate height
             light_orbit_radius * light_angle.sin(),
         );
 
+        // Animate light intensity (pulse between 0.5 and 2.0)
         let light_intensity = 1.0 + 0.5 * (t * TAU * 3.0).sin();
+
+        // Animate light color (shift through colors)
         let light_hue = (t * 0.5) % 1.0;
         let light_color = hsv_to_rgb(light_hue, 0.8, 1.0);
 
@@ -632,23 +638,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let cube_rotation = t * TAU;
         let cube_model = Mat4::from_rotation_y(cube_rotation);
 
+        // Pyramid rotates in opposite direction
         let pyramid_rotation = -t * TAU;
+        // Position pyramid to the side and rotate it
         let pyramid_model = Mat4::from_translation(Vec3::new(3.0, 0.0, 0.0))
             * Mat4::from_rotation_y(pyramid_rotation);
 
+        // --- Rotation ---
         let model_rotation = t * TAU;
         let model_model = Mat4::from_rotation_x(model_rotation);
 
-        // --- Zoom ---
+        // --- Zoom (smooth in/out) ---
         let base_distance = 6.0;
         let zoom_amplitude = 2.0;
-        let zoom = base_distance - zoom_amplitude * (1.0 - (TAU * t).cos()) * 0.5;
+        let zoom = base_distance
+            - zoom_amplitude * (1.0 - (TAU * t).cos()) * 0.5;
 
-        let view = Mat4::look_at_rh(Vec3::new(zoom, zoom * 0.75, zoom), Vec3::ZERO, Vec3::Y);
+        let view = Mat4::look_at_rh(
+            Vec3::new(zoom, zoom * 0.75, zoom),
+            Vec3::ZERO,
+            Vec3::Y,
+        );
 
         let cube_mvp = projection * view * cube_model;
         let pyramid_mvp = projection * view * pyramid_model;
         let model_mvp = projection * view * model_model;
+
+        // Create uniform data with lighting info
 
         let cube_uniform_data = UniformData::new(
             cube_mvp,
@@ -690,24 +706,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("Sending frame {}", frame_index);
         tx.send((frame_index, bytes))?;
+
+        frame_index += 1;
+        if frame_index >= FRAME_COUNT {
+            break;
+        }
     }
 
+    // explictly drop the sender to make sure the receiver is dropped before the thread exits
     drop(tx);
+
     let _ = handle.join().unwrap();
 
     Ok(())
 }
 
+// FIXME this is wrong, we need to return something so we can use GPU instancing of the shells
 fn load_step_model_unfinished(
     path: &str,
 ) -> Result<(Vec<Vertex>, Vec<u16>), Box<dyn std::error::Error>> {
     println!("Loading STEP file: {}", path);
 
+    // Read STEP file
     let step_data = std::fs::read_to_string(path)?;
     let exchange = truck_stepio::r#in::ruststep::parser::parse(&step_data)?;
 
     println!("Parsing complete, extracting shells...");
 
+    // Extract shells from the STEP model
     let table: Table = Table::from_data_section(&exchange.data[0]);
 
     println!("Found {} shells", table.shell.len());
@@ -716,11 +742,13 @@ fn load_step_model_unfinished(
         return Err("No geometry found in STEP file".into());
     }
 
+    // Collect all vertices and indices
     let mut all_vertices = Vec::new();
     let mut all_indices = Vec::new();
     let mut vertex_offset = 0u16;
 
-    let tol = 0.01;
+    // Mesh parameters - adjust for quality vs performance
+    let tol = 0.01; // Tolerance for meshing
 
     let mut bounds = BoundingBox::new();
     for (shell_idx, (shell_id, shell)) in table.shell.iter().enumerate() {
@@ -728,7 +756,7 @@ fn load_step_model_unfinished(
 
         let Ok(shell) = table.to_compressed_shell(shell) else {
             println!("Failed to convert shell {} to polygon mesh", shell_id);
-            continue;
+            continue
         };
 
         let mesh: PolygonMesh = shell.robust_triangulation(tol).to_polygon();
@@ -741,9 +769,11 @@ fn load_step_model_unfinished(
             mesh.faces().len()
         );
 
-        let hue = (*shell_id as f32 * 0.618033988749895) % 1.0;
+        // Calculate a color based on shell id
+        let hue = (*shell_id as f32 * 0.618033988749895) % 1.0;  // Golden ratio for distribution
         let color = hsv_to_rgb(hue, 0.7, 0.9);
 
+        // Add vertices
         for pos in mesh.positions() {
             all_vertices.push(Vertex {
                 pos: [pos[0] as f32, pos[1] as f32, pos[2] as f32],
@@ -751,6 +781,7 @@ fn load_step_model_unfinished(
             });
         }
 
+        // Add indices (triangulated faces)
         for face_indices in mesh.faces().triangle_iter() {
             for &idx in &face_indices {
                 all_indices.push(vertex_offset + idx.pos as u16);
@@ -766,6 +797,7 @@ fn load_step_model_unfinished(
         all_indices.len()
     );
 
+    // Calculate bounding box for centering
     let (min, max) = (bounds.min(), bounds.max());
     let center = Vec3::new(
         (min[0] + max[0]) as f32 * 0.5,
@@ -773,6 +805,7 @@ fn load_step_model_unfinished(
         (min[2] + max[2]) as f32 * 0.5,
     );
 
+    // Calculate scale to fit in view
     let size = Vec3::new(
         (max[0] - min[0]) as f32,
         (max[1] - min[1]) as f32,
@@ -784,6 +817,7 @@ fn load_step_model_unfinished(
     println!("Model bounds: min={:?}, max={:?}", min, max);
     println!("Centering at {:?}, scaling by {}", center, scale);
 
+    // Center and scale vertices
     for vertex in &mut all_vertices {
         vertex.pos[0] = (vertex.pos[0] - center.x) * scale;
         vertex.pos[1] = (vertex.pos[1] - center.y) * scale;
