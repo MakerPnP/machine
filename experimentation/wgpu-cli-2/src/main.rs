@@ -124,7 +124,8 @@ impl RenderState {
     async fn new(width: u32, height: u32) -> Result<Self, Box<dyn std::error::Error>> {
         // Create instance
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: wgpu::Backends::from_env()
+                .ok_or("Failed to parse WGPU_BACKENDS env var")?,
             ..Default::default()
         });
 
