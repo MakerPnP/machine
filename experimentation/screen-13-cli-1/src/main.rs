@@ -221,12 +221,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Failed to save frame {}, e: {}", frame_index, e);
                 })?;
 
-            println!("✓ Saved frame {}, elapsed: {}us", frame_index, start_at.elapsed().as_micros());
+            println!(
+                "✓ Saved frame {}, elapsed: {}us",
+                frame_index,
+                start_at.elapsed().as_micros()
+            );
         }
 
         Ok::<(), ()>(())
     });
-
 
     let mut frame_index = 0;
     loop {
@@ -391,7 +394,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // --- Submit ---
         println!("Submitting frame {}", frame_index);
-        let mut cmd_lease = render_graph
+        let cmd_lease = render_graph
             .resolve()
             .submit(&mut hash_pool, 0, 0)?;
 
@@ -443,7 +446,7 @@ fn load_step_model_unfinished(path: &str) -> Result<(Vec<Vertex>, Vec<u16>), Box
 
     let mut bounds = BoundingBox::new();
     for (shell_idx, (shell_id, shell)) in table.shell.iter().enumerate() {
-        println!("Processing shell {}/{}", shell_idx + 1, table.shell.len());
+        println!("Processing shell {}/{}, id: {}", shell_idx + 1, table.shell.len(), shell_id);
 
         // Convert shell to polygon mesh
         let Ok(shell) = table.to_compressed_shell(shell) else {
@@ -455,11 +458,13 @@ fn load_step_model_unfinished(path: &str) -> Result<(Vec<Vertex>, Vec<u16>), Box
         let mesh_bounds = mesh.bounding_box();
         bounds = bounds.add(mesh_bounds);
 
-        println!("  Vertices: {}, Faces: {}",
-                 mesh.positions().len(),
-                 mesh.faces().len());
+        println!(
+            "  Vertices: {}, Faces: {}",
+            mesh.positions().len(),
+            mesh.faces().len()
+        );
 
-        // Calculate a color based on shell index (for variety)
+        // Calculate a color based on shell id
         let hue = (shell_idx as f32 * 0.618033988749895) % 1.0; // Golden ratio for distribution
         let color = hsv_to_rgb(hue, 0.7, 0.9);
 
@@ -481,8 +486,11 @@ fn load_step_model_unfinished(path: &str) -> Result<(Vec<Vertex>, Vec<u16>), Box
         vertex_offset += mesh.positions().len() as u16;
     }
 
-    println!("Total vertices: {}, Total indices: {}",
-             all_vertices.len(), all_indices.len());
+    println!(
+        "Total vertices: {}, Total indices: {}",
+        all_vertices.len(),
+        all_indices.len()
+    );
 
     // Calculate bounding box for centering
     let (min, max) = (bounds.min(), bounds.max());
@@ -496,7 +504,7 @@ fn load_step_model_unfinished(path: &str) -> Result<(Vec<Vertex>, Vec<u16>), Box
     let size = Vec3::new(
         (max[0] - min[0]) as f32,
         (max[1] - min[1]) as f32,
-         (max[2] - min[2]) as f32,
+        (max[2] - min[2]) as f32,
     );
     let max_size = size.x.max(size.y).max(size.z);
     let scale = if max_size > 0.0 { 4.0 / max_size } else { 1.0 };
@@ -513,7 +521,6 @@ fn load_step_model_unfinished(path: &str) -> Result<(Vec<Vertex>, Vec<u16>), Box
 
     Ok((all_vertices, all_indices))
 }
-
 
 fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [f32; 3] {
     let c = v * s;
