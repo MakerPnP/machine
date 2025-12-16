@@ -156,6 +156,8 @@ impl RenderState {
             )
             .await?;
 
+        println!("Adapter: {:?}", adapter.get_info());
+
         // Load shaders
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
