@@ -23,7 +23,15 @@ impl OpenCVCameraLoop {
         camera_definition: &CameraDefinition,
         shutdown_flag: CancellationToken,
     ) -> anyhow::Result<Self> {
-        let CameraSource::OpenCV(open_cv_camera_config) = &camera_definition.source else {
+        let Some((source_index, open_cv_camera_config)) =
+            camera_definition.sources.iter().enumerate().find_map(|(index, source)| {
+                if let CameraSource::OpenCV(config) = source {
+                    Some((index, config))
+                } else {
+                    None
+                }
+            })
+        else {
             anyhow::bail!("Not an OpenCV camera")
         };
 
@@ -49,16 +57,16 @@ impl OpenCVCameraLoop {
         cam.set(videoio::CAP_PROP_BUFFERSIZE, f64::from(1))?;
         cam.set(videoio::CAP_PROP_FORMAT, f64::from(1))?;
 
-        if let Some(four_cc) = camera_definition.four_cc {
+        if let Some(four_cc) = open_cv_camera_config.four_cc {
             let four_cc_i32 = VideoWriter::fourcc(four_cc[0], four_cc[1], four_cc[2], four_cc[3])?;
-                info!(
-                "OpenCVCamera: {}, FourCC: {:?} ({} / 0x{:08x})",
-                open_cv_camera_config.index, four_cc, four_cc_i32, four_cc_i32
-            );
-        
+            info!(
+            "OpenCVCamera: {}, FourCC: {:?} ({} / 0x{:08x})",
+            open_cv_camera_config.index, four_cc, four_cc_i32, four_cc_i32
+        );
+
             cam.set(videoio::CAP_PROP_FOURCC, f64::from(four_cc_i32))?;
         }
-    
+
         let configured_fps = cam.get(videoio::CAP_PROP_FPS)? as f32;
         info!(
             "OpenCVCamera: {}, Configured FPS: {}",

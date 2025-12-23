@@ -85,7 +85,7 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
                                 let app_state = app_state.lock().await;
 
                                 let camera_definition = {
-                                    let Some(camera_definition) = camera_definition_for_identifier(&app_state.camera_definitions, identifier) else {
+                                    let Some(camera_definition) = camera_definition_for_identifier(&app_state.config.cameras, identifier) else {
                                         return OperatorCommandResponse::CameraCommandResult(
                                             Err(CameraCommandError::new(CameraCommandErrorCode::InvalidIdentifier))
                                         )

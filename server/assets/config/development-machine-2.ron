@@ -1,0 +1,64 @@
+Config (
+    cameras: [
+        CameraDefinition(
+            name: "Raspberry Pi Global shutter camera",
+            sources: [
+                OpenCV(OpenCVCameraConfig(
+                    index: 0,
+                    four_cc: Some(('Y', 'U', 'Y', '2')),
+                )),
+                MediaRS(MediaRSCameraConfig(
+                    device_id: "/base/axi/pcie@1000120000/rp1/i2c@88000/imx296@1a",
+                    four_cc: Some(('Y', 'U', 'Y', 'V')),
+                )),
+            ],
+            stream_config: CameraStreamConfig(
+                jpeg_quality: 95,
+            ),
+            width: 800,
+            height: 600,
+            fps: 30.0,
+            four_cc: None,
+        ),
+        CameraDefinition(
+            name: "USB camera 1",
+            sources: [
+                OpenCV(OpenCVCameraConfig(
+                    index: 1,
+                    four_cc: Some(('Y', 'U', 'Y', '2')),
+                )),
+                MediaRS(MediaRSCameraConfig (
+                    device_id: "/base/axi/pcie@1000120000/rp1/usb@300000-1:1.0-2c86:0206",
+                    four_cc: Some(('Y', 'U', 'Y', 'V')),
+                )),
+            ],
+            stream_config: CameraStreamConfig (
+                jpeg_quality: 95,
+            ),
+            width: 640,
+            height: 480,
+            fps: 30.0,
+        ),
+        CameraDefinition (
+            name: "USB camera 2",
+            sources: [
+                OpenCV(OpenCVCameraConfig(
+                    index: 2,
+                    four_cc: Some(('Y', 'U', 'Y', '2')),
+                )),
+                MediaRS(MediaRSCameraConfig (
+                    device_id: "/base/axi/pcie@1000120000/rp1/usb@200000-1.2:1.0-05a3:0144",
+                    four_cc: Some(('Y', 'U', 'Y', 'V')),
+                )),
+            ],
+            stream_config: CameraStreamConfig (
+                jpeg_quality: 95,
+            ),
+            width: 640,
+            height: 480,
+            fps: 30.0,
+        ),
+    ],
+    io_boards: [
+    ],
+)

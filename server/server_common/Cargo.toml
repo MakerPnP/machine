@@ -6,7 +6,5 @@ edition = "2024"
 [features]
 default = []
 
-opencv-capture = []
-mediars-capture = []
-
 [dependencies]
+serde              = { workspace = true }

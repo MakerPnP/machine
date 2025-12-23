@@ -7,11 +7,9 @@ edition = "2024"
 default = ["development-machine-1"]
 
 opencv-capture = [
-    "server_common/opencv-capture",
     "server_vision/opencv-capture",
 ]
 mediars-capture = [
-    "server_common/mediars-capture",
     "server_vision/mediars-capture",
 ]
 
@@ -50,3 +48,10 @@ console-subscriber = { workspace = true }
 
 # time
 chrono             = { workspace = true, features = ["serde"]}
+
+# serialzation / config
+ron                = { workspace = true }
+serde              = { workspace = true }
+
+# cli
+clap               = { workspace = true, features = ["derive"] }

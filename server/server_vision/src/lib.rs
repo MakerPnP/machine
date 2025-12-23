@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use anyhow::anyhow;
 use chrono::DateTime;
 use log::{debug, error, info};
 use opencv::{
@@ -39,7 +40,7 @@ pub async fn capture_loop(
     camera_definition: CameraDefinition,
     shutdown_flag: CancellationToken,
 ) -> anyhow::Result<()> {
-    let capture_loop = make_capture_loop(&camera_definition, shutdown_flag)?;
+    let (source_index, capture_loop) = make_capture_loop(&camera_definition, shutdown_flag)?;
 
     let callback = {
         let camera_definition = camera_definition.clone();
@@ -77,7 +78,7 @@ pub async fn capture_loop(
 
                 debug!(
                     "Camera: {:?}, frame_timestamp: {:?}, frame_number: {}, encode_duration: {}us, send_duration: {}us, frame_duration: {}us",
-                    camera_definition.source,
+                    camera_definition.sources[source_index],
                     frame_timestamp,
                     frame_number,
                     encode_duration,
@@ -103,7 +104,7 @@ pub async fn capture_loop(
         error!("Error in camera capture loop: {:?}", e);
     }
 
-    info!("Shutting down camera capture. Camera: {:?}", camera_definition.source);
+    info!("Shutting down camera capture. Camera: {:?}", camera_definition.sources[source_index]);
 
     Ok(())
 }
@@ -111,22 +112,31 @@ pub async fn capture_loop(
 fn make_capture_loop(
     camera_definition: &CameraDefinition,
     shutdown_flag: CancellationToken,
-) -> anyhow::Result<VideoCaptureImpl> {
-    match &camera_definition.source {
-        #[cfg(feature = "opencv-capture")]
-        CameraSource::OpenCV(_) => {
-            let capture = opencv_capture::OpenCVCameraLoop::build(&camera_definition, shutdown_flag)?;
+) -> anyhow::Result<(usize, VideoCaptureImpl)> {
 
-            Ok(VideoCaptureImpl::OpenCV(capture))
-        }
-        #[cfg(feature = "mediars-capture")]
-        CameraSource::MediaRS(_) => {
-            let capture = mediars_capture::MediaRSCameraLoop::build(&camera_definition, shutdown_flag)?;
+    camera_definition.sources.iter().enumerate().find_map(|(index, source)|{
 
-            Ok(VideoCaptureImpl::MediaRS(capture))
+        match source {
+            #[cfg(feature = "opencv-capture")]
+            CameraSource::OpenCV(_) => {
+                opencv_capture::OpenCVCameraLoop::build(&camera_definition, shutdown_flag.clone())
+                    .map(VideoCaptureImpl::OpenCV)
+                    .inspect_err(|e| error!("OpenCV camera error: {:?}", e.to_string()))
+                    .map(|it|(index, it))
+                    .ok()
+            }
+            #[cfg(feature = "mediars-capture")]
+            CameraSource::MediaRS(_) => {
+                mediars_capture::MediaRSCameraLoop::build(&camera_definition, shutdown_flag.clone())
+                    .map(VideoCaptureImpl::MediaRS)
+                    .inspect_err(|e| error!("MediaRS camera error: {:?}", e.to_string()))
+                    .map(|it|(index, it))
+                    .ok()
+            }
+            _ => None
         }
-        _ => unimplemented!("Unsupported camera source: {:?}", camera_definition.source),
-    }
+    })
+        .ok_or(anyhow!("No usable camera source found in camera definition"))
 }
 
 /// Notes:
