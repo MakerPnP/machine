@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::fs;
 use std::sync::Arc;
-
+use anyhow::bail;
+use clap::Parser;
 use camera::CameraHandle;
 use ergot::toolkits::tokio_udp::{register_router_interface, RouterStack};
 use ioboard::IOBOARD_TX_BUFFER_SIZE;
@@ -8,11 +10,11 @@ use log::info;
 use networking::UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX;
 use operator::OPERATOR_TX_BUFFER_SIZE;
 use operator_shared::camera::CameraIdentifier;
-use server_common::camera::CameraDefinition;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::{broadcast, Mutex};
 use tokio::{net::UdpSocket, signal};
 use config::{IO_BOARD_LOCAL_ADDR, IO_BOARD_REMOTE_ADDR, OPERATOR_LOCAL_ADDR, OPERATOR_REMOTE_ADDR};
+use crate::config::Config;
 
 pub mod camera;
 pub mod ioboard;
@@ -20,16 +22,29 @@ pub mod networking;
 pub mod operator;
 
 pub mod config;
+pub mod cli;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::init();
+    let args = cli::Args::parse();
+
+    init_logging(args.verbosity_level);
+
     console_subscriber::init();
 
     let _ = server_vision::dump_cameras()
         .inspect_err(|e| info!("Error dumping cameras: {:?}", e));
-    
-    let camera_definitions = config::camera_definitions();
+
+
+    let confile_filename = args.config;
+    let Ok(config_content) = fs::read_to_string(&confile_filename) else {
+        bail!("Unable to read config file, make sure it exists and is readable. filename: {:?}", confile_filename)
+    };
+    let Ok(config) = ron::from_str::<Config>(&config_content)
+        .inspect_err(|e| info!("Error parsing config file: {:?}", e))
+    else {
+        bail!("Unable to load config. filename: {:?}", confile_filename)
+    };
 
     // Create event channel
     let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
@@ -87,7 +102,7 @@ async fn main() -> anyhow::Result<()> {
         .spawn(networking::yeet_listener(stack.clone(), app_event_tx.subscribe()))?;
 
     let app_state = Arc::new(Mutex::new(AppState {
-        camera_definitions,
+        config,
         event_tx: app_event_tx.clone(),
         camera_clients: Arc::new(Mutex::new(HashMap::new())),
     }));
@@ -123,7 +138,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 pub struct AppState {
-    camera_definitions: Vec<CameraDefinition>,
+    config: Config,
     event_tx: broadcast::Sender<AppEvent>,
     camera_clients: Arc<Mutex<HashMap<CameraIdentifier, CameraHandle>>>,
 }
@@ -143,4 +158,22 @@ async fn app_shutdown_handler(mut receiver: Receiver<AppEvent>) {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AppEvent {
     Shutdown,
+}
+
+fn init_logging(verbosity_level: u8) {
+    let mut builder = env_logger::Builder::from_default_env();
+
+    // Only override the default filter if RUST_LOG is NOT set
+    if std::env::var_os("RUST_LOG").is_none() {
+        let level = match verbosity_level {
+            0 => log::LevelFilter::Warn,
+            1 => log::LevelFilter::Info,
+            2 => log::LevelFilter::Debug,
+            _ => log::LevelFilter::Trace,
+        };
+
+        builder.filter_level(level);
+    }
+
+    builder.init();
 }

@@ -29,7 +29,8 @@ pub struct MediaRSCameraLoop {
     shutdown_flag: CancellationToken,
     device: Arc<Mutex<&'static mut <DefaultCameraManager as DeviceManager>::DeviceType>>,
     cam_mgr: CameraManager<DefaultCameraManager>,
-    camera_definition: CameraDefinition
+    camera_definition: CameraDefinition,
+    source_index: usize,
 }
 
 // Safety: the cam_mgr and device are only used by a single thread, right?
@@ -40,7 +41,15 @@ impl MediaRSCameraLoop {
         camera_definition: &CameraDefinition,
         shutdown_flag: CancellationToken,
     ) -> anyhow::Result<Self> {
-        let CameraSource::MediaRS(media_rs_camera_config) = &camera_definition.source else {
+        let Some((source_index, media_rs_camera_config)) =
+            camera_definition.sources.iter().enumerate().find_map(|(index, source)| {
+                if let CameraSource::MediaRS(config) = source {
+                    Some((index, config))
+                } else {
+                    None
+                }
+            })
+        else {
             anyhow::bail!("Not a MediaRS camera")
         };
 
@@ -67,6 +76,7 @@ impl MediaRSCameraLoop {
             cam_mgr,
             device: Arc::new(Mutex::new(device)),
             camera_definition: camera_definition.clone(),
+            source_index,
         })
     }
 }
@@ -126,17 +136,19 @@ impl VideoCaptureLoop for MediaRSCameraLoop {
                 options["height"] = self.camera_definition.height.into();
                 options["frame-rate"] = self.camera_definition.fps.into();
 
-                if let Some(code) = self.camera_definition.four_cc {
-                    let four_bytes = [code[0] as u8, code[1] as u8, code[2] as u8, code[3] as u8];
-                    let code_u32 = u32::from_le_bytes(four_bytes);
+                if let CameraSource::MediaRS(source) = &self.camera_definition.sources[self.source_index] {
+                    if let Some(code) = &source.four_cc {
+                        let four_bytes = [code[0] as u8, code[1] as u8, code[2] as u8, code[3] as u8];
+                        let code_u32 = u32::from_le_bytes(four_bytes);
 
-                    let video_format = fourcc_to_video_format(code_u32);
+                        let video_format = fourcc_to_video_format(code_u32);
 
-                    if let Some(video_format) = video_format {
-                        options["format"] = (Into::<u32>::into(video_format)).into();
+                        if let Some(video_format) = video_format {
+                            options["format"] = (Into::<u32>::into(video_format)).into();
+                        }
+
+                        trace!("fourcc to video format. code: {:?}, code_u32: {:?}, video_format: {:?}", code, code_u32, video_format);
                     }
-
-                    trace!("fourcc to video format. code: {:?}, code_u32: {:?}, video_format: {:?}", code, code_u32, video_format);
                 }
 
                 if let Err(e) = device.configure(&options) {
