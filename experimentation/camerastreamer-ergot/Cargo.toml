@@ -17,8 +17,20 @@ ergot           = { path = "../../libs/ergot/crates/ergot", features = ["tokio-s
 chrono          = { version = "0.4.42" }
 tokio-util      = { version = "0.7.17", features = ["rt"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2               = { version = "0.6" }
+objc2-foundation    = { version = "0.3.2" }
+objc2-av-foundation = { version = "0.3.2" }
+block2              = { version = "0.6.2" }
 #[profile.dev.package.opencv]
 #opt-level = 3          # compile fully optimized
 #debug = false          # disable debug info
 #debug-assertions = false
 #overflow-checks = false
+
+[package.metadata.bundle]
+name = "CameraStreamer-Ergot"
+identifier = "com.makerpnp.experimentation.camerastreamer-ergot"
+osx_info_plist_exts = ["src/plistext.txt"]
+#[package.metadata.bundle.macos.plist]
+#NSCameraUsageDescription = "This app needs camera access to use OpenCV"

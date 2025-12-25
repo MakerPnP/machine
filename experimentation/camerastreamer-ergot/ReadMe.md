@@ -116,3 +116,15 @@ OPENCV_LINK_LIBS=static=opencv_world411,static=OpenCL
 OPENCV_LINK_PATHS=D:\Users\Hydra\Documents\dev\projects\makerpnp\opencv\opencv-4.12\build\x64\vc16\lib
 OPENCV_INCLUDE_PATHS=D:\Users\Hydra\Documents\dev\projects\makerpnp\opencv\opencv-4.12\build\include
 ```
+
+### MacOS
+
+```
+cargo install cargo-bundle
+brew install opencv
+export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
+cargo bundle --release
+codesign --force --deep --sign - ./target/release/bundle/osx/CameraStreamer-Ergot.app
+open ./target/release/bundle/osx
+```
+Then double-click the `CameraStreamer-Ergot.app` app, at which point is should request permission to access the camera.

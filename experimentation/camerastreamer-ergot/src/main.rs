@@ -49,11 +49,20 @@ use camerastreamer_ergot_shared::{
 use ergot::interface_manager::InterfaceSendError;
 use ergot::interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind;
 use std::convert::TryInto;
+use std::ffi::CStr;
 use std::pin::pin;
 use tokio::sync::Mutex;
 use tokio::sync::broadcast::Receiver;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
+
+#[cfg(target_os = "macos")]
+use objc2::{
+    runtime::Bool,
+    class, msg_send
+};
+#[cfg(target_os = "macos")]
+use objc2_foundation::NSString;
 
 topic!(
     CameraFrameChunkTopic,
@@ -91,6 +100,9 @@ pub struct CameraFrame {
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
+    if !check_camera_permission() {
+        request_camera_permission();
+    }
 
     let tracker = TaskTracker::new();
     let shutdown_flag = CancellationToken::new();
@@ -160,6 +172,43 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(target_os = "macos")]
+fn request_camera_permission() {
+    info!("Requesting camera permission");
+    unsafe {
+        let av_media_type = NSString::from_str("vide");
+        type CompletionBlock = Option<extern "C" fn(Bool)>;
+        let completion_block: CompletionBlock = None;
+        let _: () = msg_send![
+            class!(AVCaptureDevice),
+            requestAccessForMediaType: &*av_media_type,
+            completionHandler: completion_block
+        ];
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn request_camera_permission() {
+}
+
+#[cfg(target_os = "macos")]
+fn check_camera_permission() -> bool {
+    unsafe {
+        let av_media_type = NSString::from_str("vide");
+        let status: i32 = msg_send![
+            class!(AVCaptureDevice),
+            authorizationStatusForMediaType: &*av_media_type
+        ];
+
+        status == 3
+    }
+}
+#[cfg(not(target_os = "macos"))]
+fn check_camera_permission() {
+    return true
+}
+
 
 struct CameraClient {
     pub handle: tokio::task::JoinHandle<()>,
