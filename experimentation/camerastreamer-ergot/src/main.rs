@@ -57,10 +57,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 #[cfg(target_os = "macos")]
-use objc2::{
-    runtime::Bool,
-    class, msg_send
-};
+use objc2::{class, msg_send, runtime::Bool};
 #[cfg(target_os = "macos")]
 use objc2_foundation::NSString;
 
@@ -189,8 +186,7 @@ fn request_camera_permission() {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn request_camera_permission() {
-}
+fn request_camera_permission() {}
 
 #[cfg(target_os = "macos")]
 fn check_camera_permission() -> bool {
@@ -206,9 +202,8 @@ fn check_camera_permission() -> bool {
 }
 #[cfg(not(target_os = "macos"))]
 fn check_camera_permission() {
-    return true
+    return true;
 }
-
 
 struct CameraClient {
     pub handle: tokio::task::JoinHandle<()>,
