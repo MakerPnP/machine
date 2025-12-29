@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use wgpu::util::DeviceExt;
 use glam::{Mat4, Vec3};
 use truck_meshalgo::tessellation::{MeshedShape, RobustMeshableShape};
 use truck_polymesh::PolygonMesh;
 use truck_stepio::r#in::ruststep::ast::{EntityInstance, Exchange};
-use truck_stepio::r#in::{ruststep, Table};
+use truck_stepio::r#in::{Table, ruststep};
+use wgpu::util::DeviceExt;
 
-use wgpu::{PollType, TexelCopyBufferLayout, TexelCopyTextureInfo};
 use log::trace;
+use wgpu::{PollType, TexelCopyBufferLayout, TexelCopyTextureInfo};
 
 // Vertex structure for our 3D mesh
 #[repr(C)]
@@ -82,16 +82,14 @@ impl Renderer {
 
         // Request device and queue
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    experimental_features: Default::default(),
-                    memory_hints: Default::default(),
-                    trace: Default::default(),
-                }
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                experimental_features: Default::default(),
+                memory_hints: Default::default(),
+                trace: Default::default(),
+            })
             .await
             .expect("Failed to create device");
 
@@ -352,7 +350,10 @@ impl Renderer {
         let (sender, receiver) = std::sync::mpsc::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
 
-        let _ = self.device.poll(PollType::Wait { submission_index: None, timeout: None });
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         if let Ok(Ok(())) = receiver.recv() {
             let data = buffer_slice.get_mapped_range();
@@ -369,17 +370,14 @@ impl Renderer {
 /// WARNING: Some step files currently result in some strange artifacts, this code is probably WRONG
 ///          do not use as a reference.
 fn load_step(path: &Path) -> (Vec<Vertex>, Vec<u32>) {
-
     println!("Parsing STEP file (this may take a moment)...");
 
     // Read STEP file
-    let step_string = std::fs::read_to_string(path)
-        .expect("Failed to read STEP file");
+    let step_string = std::fs::read_to_string(path).expect("Failed to read STEP file");
 
     // Parse STEP into shapes
-    let exchange: Exchange = ruststep::parser::parse(&step_string)
-        .expect("Failed to parse STEP file");
-
+    let exchange: Exchange =
+        ruststep::parser::parse(&step_string).expect("Failed to parse STEP file");
 
     let mut all_vertices = Vec::new();
     let mut all_indices = Vec::new();
@@ -388,15 +386,17 @@ fn load_step(path: &Path) -> (Vec<Vertex>, Vec<u32>) {
     let tolerance = 0.001;
 
     // well we can find some colors, but we don't have any relationship, so, ...
-    let _color_map = exchange.data[0].entities.iter().filter_map(|entity| {
-        match entity {
+    let _color_map = exchange.data[0]
+        .entities
+        .iter()
+        .filter_map(|entity| match entity {
             s @ EntityInstance::Simple { id, record, .. } if record.name == "COLOUR_RGB" => {
                 trace!("id: {}, simple: {:?}", id, s);
                 Some((id, &record.parameter))
             }
-            _ => None
-        }
-    }).collect::<HashMap<_, _>>();
+            _ => None,
+        })
+        .collect::<HashMap<_, _>>();
 
     let table: Table = Table::from_data_section(&exchange.data[0]);
 
@@ -432,7 +432,7 @@ fn load_step(path: &Path) -> (Vec<Vertex>, Vec<u32>) {
         for (p, n) in positions.iter().zip(normals.iter()) {
             all_vertices.push(Vertex {
                 position: [p.x as f32, p.y as f32, p.z as f32],
-                normal:   [n.x as f32, n.y as f32, n.z as f32],
+                normal: [n.x as f32, n.y as f32, n.z as f32],
             });
         }
 
@@ -448,7 +448,8 @@ fn load_step(path: &Path) -> (Vec<Vertex>, Vec<u32>) {
 }
 
 fn load_model(path: &Path) -> (Vec<Vertex>, Vec<u32>) {
-    let extension = path.extension()
+    let extension = path
+        .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase());
 
@@ -476,7 +477,11 @@ fn main() {
 
     println!("Loading 3D model: {:?}", input_path);
     let (vertices, indices) = load_model(input_path);
-    println!("Loaded {} vertices, {} triangles", vertices.len(), indices.len() / 3);
+    println!(
+        "Loaded {} vertices, {} triangles",
+        vertices.len(),
+        indices.len() / 3
+    );
 
     println!("Initializing renderer...");
     let renderer = pollster::block_on(Renderer::new(1024, 1024));
@@ -485,7 +490,7 @@ fn main() {
     let image_data = renderer.render_to_image(
         &vertices,
         &indices,
-        Vec3::new(3.0, 5.0, 25.0),  // Camera position
+        Vec3::new(3.0, 5.0, 25.0), // Camera position
         Vec3::new(0.0, 0.0, 0.0),  // Look at target
         Vec3::new(5.0, 5.0, 5.0),  // Light position
         [0.6, 0.8, 0.9],           // Object color (light blue)
@@ -499,7 +504,7 @@ fn main() {
         1024,
         image::ColorType::Rgba8,
     )
-        .expect("Failed to save image");
+    .expect("Failed to save image");
 
     println!("Done!");
 }
