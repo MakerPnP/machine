@@ -1,8 +1,8 @@
-use bytemuck::{cast_slice, Pod, Zeroable};
+use bytemuck::{Pod, Zeroable, cast_slice};
 use glam::{Mat4, Vec3};
+use screen_13::prelude::vk::DeviceSize;
 use screen_13::prelude::*;
 use std::sync::Arc;
-use screen_13::prelude::vk::DeviceSize;
 
 use std::f32::consts::TAU;
 use std::ops::Add;
@@ -53,26 +53,65 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define cube vertices with colors
     let cube_vertices = [
         // Front face (red)
-        Vertex { pos: [-1.0, -1.0, 1.0], color: [1.0, 0.0, 0.0] },
-        Vertex { pos: [1.0, -1.0, 1.0], color: [1.0, 0.5, 0.0] },
-        Vertex { pos: [1.0, 1.0, 1.0], color: [1.0, 1.0, 0.0] },
-        Vertex { pos: [-1.0, 1.0, 1.0], color: [1.0, 0.5, 0.5] },
+        Vertex {
+            pos: [-1.0, -1.0, 1.0],
+            color: [1.0, 0.0, 0.0],
+        },
+        Vertex {
+            pos: [1.0, -1.0, 1.0],
+            color: [1.0, 0.5, 0.0],
+        },
+        Vertex {
+            pos: [1.0, 1.0, 1.0],
+            color: [1.0, 1.0, 0.0],
+        },
+        Vertex {
+            pos: [-1.0, 1.0, 1.0],
+            color: [1.0, 0.5, 0.5],
+        },
         // Back face (blue)
-        Vertex { pos: [-1.0, -1.0, -1.0], color: [0.0, 0.0, 1.0] },
-        Vertex { pos: [1.0, -1.0, -1.0], color: [0.0, 0.5, 1.0] },
-        Vertex { pos: [1.0, 1.0, -1.0], color: [0.5, 0.5, 1.0] },
-        Vertex { pos: [-1.0, 1.0, -1.0], color: [0.5, 0.0, 1.0] },
+        Vertex {
+            pos: [-1.0, -1.0, -1.0],
+            color: [0.0, 0.0, 1.0],
+        },
+        Vertex {
+            pos: [1.0, -1.0, -1.0],
+            color: [0.0, 0.5, 1.0],
+        },
+        Vertex {
+            pos: [1.0, 1.0, -1.0],
+            color: [0.5, 0.5, 1.0],
+        },
+        Vertex {
+            pos: [-1.0, 1.0, -1.0],
+            color: [0.5, 0.0, 1.0],
+        },
     ];
 
     // Define pyramid vertices with colors
     let pyramid_vertices = [
         // Base vertices (green)
-        Vertex { pos: [-1.5, -1.0, -1.5], color: [0.0, 1.0, 0.0] }, // 0: back-left
-        Vertex { pos: [1.5, -1.0, -1.5], color: [0.5, 1.0, 0.0] },  // 1: back-right
-        Vertex { pos: [1.5, -1.0, 1.5], color: [0.0, 1.0, 0.5] },   // 2: front-right
-        Vertex { pos: [-1.5, -1.0, 1.5], color: [0.5, 1.0, 0.5] },  // 3: front-left
+        Vertex {
+            pos: [-1.5, -1.0, -1.5],
+            color: [0.0, 1.0, 0.0],
+        }, // 0: back-left
+        Vertex {
+            pos: [1.5, -1.0, -1.5],
+            color: [0.5, 1.0, 0.0],
+        }, // 1: back-right
+        Vertex {
+            pos: [1.5, -1.0, 1.5],
+            color: [0.0, 1.0, 0.5],
+        }, // 2: front-right
+        Vertex {
+            pos: [-1.5, -1.0, 1.5],
+            color: [0.5, 1.0, 0.5],
+        }, // 3: front-left
         // Apex vertex (yellow)
-        Vertex { pos: [0.0, 2.0, 0.0], color: [1.0, 1.0, 0.0] },    // 4: apex
+        Vertex {
+            pos: [0.0, 2.0, 0.0],
+            color: [1.0, 1.0, 0.0],
+        }, // 4: apex
     ];
 
     // Define cube indices
@@ -88,13 +127,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define pyramid indices
     let pyramid_indices: [u16; 18] = [
         // Base (2 triangles)
-        0, 1, 2,
-        0, 2, 3,
-        // Sides (4 triangles)
-        0, 4, 1,  // back face
-        1, 4, 2,  // right face
-        2, 4, 3,  // front face
-        3, 4, 0,  // left face
+        0, 1, 2, 0, 2, 3, // Sides (4 triangles)
+        0, 4, 1, // back face
+        1, 4, 2, // right face
+        2, 4, 3, // front face
+        3, 4, 0, // left face
     ];
 
     // Create buffers for cube
@@ -170,16 +207,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create transformation matrices using glam
     let aspect = width as f32 / height as f32;
-    let ortho_size = 10.0;  // How many world units fit in view
+    let ortho_size = 10.0; // How many world units fit in view
     let mut projection = match PROJECTION_STYLE {
         ProjectionStyle::Normal => Mat4::perspective_rh(45.0_f32.to_radians(), aspect, 0.1, 100.0),
         ProjectionStyle::Orthographic => Mat4::orthographic_rh(
-            -ortho_size * aspect,  // left
-            ortho_size * aspect,   // right
-            -ortho_size,           // bottom
-            ortho_size,            // top
+            -ortho_size * aspect, // left
+            ortho_size * aspect,  // right
+            -ortho_size,          // bottom
+            ortho_size,           // top
             0.1,
-            100.0
+            100.0,
         ),
     };
 
@@ -188,13 +225,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut hash_pool = HashPool::new(&device);
 
-    let (tx, rx) = std::sync::mpsc::sync_channel::<(usize, Arc<Buffer>, Lease<CommandBuffer>)>(QUEUE_CAPACITY);
+    let (tx, rx) =
+        std::sync::mpsc::sync_channel::<(usize, Arc<Buffer>, Lease<CommandBuffer>)>(QUEUE_CAPACITY);
 
-    let handle = std::thread::spawn(move ||{
+    let handle = std::thread::spawn(move || {
         while let Ok((frame_index, readback, mut cmd_lease)) = rx.recv() {
             println!("Received frame {}", frame_index);
 
-            cmd_lease.wait_until_executed()
+            cmd_lease
+                .wait_until_executed()
                 .map_err(|e| println!("Failed to wait for command buffer execution: {}", e))?;
 
             println!("Frame read {}", frame_index);
@@ -204,7 +243,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let bytes_vec: Vec<u8> = bytes.to_vec();
             let mapped_duration = start_at.elapsed();
 
-            println!("Frame length: {}, mapped_duration: {}", bytes_vec.len(), mapped_duration.as_micros());
+            println!(
+                "Frame length: {}, mapped_duration: {}",
+                bytes_vec.len(),
+                mapped_duration.as_micros()
+            );
 
             // Save to raw file
             // std::fs::write(format!("frame_{:03}.raw", frame_index), &bytes)?;
@@ -217,9 +260,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 height,
                 image::ColorType::Rgba8,
             )
-                .map_err(|e| {
-                    println!("Failed to save frame {}, e: {}", frame_index, e);
-                })?;
+            .map_err(|e| {
+                println!("Failed to save frame {}, e: {}", frame_index, e);
+            })?;
 
             println!(
                 "✓ Saved frame {}, elapsed: {}us",
@@ -270,14 +313,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // --- Zoom (smooth in/out) ---
         let base_distance = 6.0;
         let zoom_amplitude = 2.0;
-        let zoom = base_distance
-            - zoom_amplitude * (1.0 - (TAU * t).cos()) * 0.5;
+        let zoom = base_distance - zoom_amplitude * (1.0 - (TAU * t).cos()) * 0.5;
 
-        let view = Mat4::look_at_rh(
-            Vec3::new(zoom, zoom * 0.75, zoom),
-            Vec3::ZERO,
-            Vec3::Y,
-        );
+        let view = Mat4::look_at_rh(Vec3::new(zoom, zoom * 0.75, zoom), Vec3::ZERO, Vec3::Y);
 
         let cube_mvp = projection * view * cube_model;
         let pyramid_mvp = projection * view * pyramid_model;
@@ -311,14 +349,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             _padding: 0.0,
         };
 
-
-        let readback = Arc::new(Buffer::create(
-            &device,
-            BufferInfo::host_mem(
-                color_image_size,
-                vk::BufferUsageFlags::TRANSFER_DST,
-            ),
-        ).unwrap());
+        let readback = Arc::new(
+            Buffer::create(
+                &device,
+                BufferInfo::host_mem(color_image_size, vk::BufferUsageFlags::TRANSFER_DST),
+            )
+            .unwrap(),
+        );
 
         // Create render graph
         let mut render_graph = RenderGraph::new();
@@ -349,9 +386,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         render_graph
             .begin_pass("Render Cube")
             .bind_pipeline(&pipeline)
-            .set_depth_stencil(
-                DepthStencilMode::DEPTH_WRITE
-            )
+            .set_depth_stencil(DepthStencilMode::DEPTH_WRITE)
             .access_node(cube_vertex_node, AccessType::VertexBuffer)
             .access_node(cube_index_node, AccessType::IndexBuffer)
             .access_node(pyramid_vertex_node, AccessType::VertexBuffer)
@@ -394,9 +429,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // --- Submit ---
         println!("Submitting frame {}", frame_index);
-        let cmd_lease = render_graph
-            .resolve()
-            .submit(&mut hash_pool, 0, 0)?;
+        let cmd_lease = render_graph.resolve().submit(&mut hash_pool, 0, 0)?;
 
         //cmd_lease.wait_until_executed()?;
 
@@ -418,7 +451,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // FIXME this is wrong, we need to return something so we can use GPU instancing of the shells
-fn load_step_model_unfinished(path: &str) -> Result<(Vec<Vertex>, Vec<u16>), Box<dyn std::error::Error>> {
+fn load_step_model_unfinished(
+    path: &str,
+) -> Result<(Vec<Vertex>, Vec<u16>), Box<dyn std::error::Error>> {
     println!("Loading STEP file: {}", path);
 
     // Read STEP file
@@ -446,12 +481,17 @@ fn load_step_model_unfinished(path: &str) -> Result<(Vec<Vertex>, Vec<u16>), Box
 
     let mut bounds = BoundingBox::new();
     for (shell_idx, (shell_id, shell)) in table.shell.iter().enumerate() {
-        println!("Processing shell {}/{}, id: {}", shell_idx + 1, table.shell.len(), shell_id);
+        println!(
+            "Processing shell {}/{}, id: {}",
+            shell_idx + 1,
+            table.shell.len(),
+            shell_id
+        );
 
         // Convert shell to polygon mesh
         let Ok(shell) = table.to_compressed_shell(shell) else {
             println!("Failed to convert shell {} to polygon mesh", shell_id);
-            continue
+            continue;
         };
 
         let mesh: PolygonMesh = shell.robust_triangulation(tol).to_polygon();
