@@ -19,12 +19,12 @@ pub struct OpenCVCameraLoop {
 }
 
 impl OpenCVCameraLoop {
-    pub fn build(
-        camera_definition: &CameraDefinition,
-        shutdown_flag: CancellationToken,
-    ) -> anyhow::Result<Self> {
-        let Some((source_index, open_cv_camera_config)) =
-            camera_definition.sources.iter().enumerate().find_map(|(index, source)| {
+    pub fn build(camera_definition: &CameraDefinition, shutdown_flag: CancellationToken) -> anyhow::Result<Self> {
+        let Some((source_index, open_cv_camera_config)) = camera_definition
+            .sources
+            .iter()
+            .enumerate()
+            .find_map(|(index, source)| {
                 if let CameraSource::OpenCV(config) = source {
                     Some((index, config))
                 } else {
@@ -60,9 +60,9 @@ impl OpenCVCameraLoop {
         if let Some(four_cc) = open_cv_camera_config.four_cc {
             let four_cc_i32 = VideoWriter::fourcc(four_cc[0], four_cc[1], four_cc[2], four_cc[3])?;
             info!(
-            "OpenCVCamera: {}, FourCC: {:?} ({} / 0x{:08x})",
-            open_cv_camera_config.index, four_cc, four_cc_i32, four_cc_i32
-        );
+                "OpenCVCamera: {}, FourCC: {:?} ({} / 0x{:08x})",
+                open_cv_camera_config.index, four_cc, four_cc_i32, four_cc_i32
+            );
 
             cam.set(videoio::CAP_PROP_FOURCC, f64::from(four_cc_i32))?;
         }
@@ -72,7 +72,7 @@ impl OpenCVCameraLoop {
             "OpenCVCamera: {}, Configured FPS: {}",
             open_cv_camera_config.index, configured_fps
         );
-        
+
         Ok(Self {
             fps: configured_fps,
             cam,
@@ -130,6 +130,6 @@ impl VideoCaptureLoop for OpenCVCameraLoop {
 }
 
 #[cfg(feature = "opencv-capture")]
-pub fn dump_cameras_opencv() -> anyhow::Result<()>{
+pub fn dump_cameras_opencv() -> anyhow::Result<()> {
     anyhow::bail!("Unsupported for OpenCV");
 }
