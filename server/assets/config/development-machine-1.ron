@@ -1,7 +1,7 @@
 Config (
     cameras: [
         CameraDefinition(
-            name: "Microsoft LineCam Studio",
+            name: "Microsoft LifeCam Studio",
             sources: [
                 OpenCV(OpenCVCameraConfig(
                     index: 0,
@@ -15,8 +15,8 @@ Config (
             stream_config: CameraStreamConfig(
                 jpeg_quality: 95,
             ),
-            width: 1920,
-            height: 1280,
+            width: 1024,
+            height: 768,
             fps: 30.0,
         ),
         CameraDefinition(
@@ -27,7 +27,7 @@ Config (
                     four_cc: Some(('Y', 'U', 'Y', '2')),
                 )),
                 MediaRS(MediaRSCameraConfig (
-                    device_id: "\\\\?\\usb#vid_32e6&pid_9211&mi_00#9&351a8e0&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global",
+                    device_id: "\\\\?\\usb#vid_32e6&pid_9211&mi_00#9&16b06be9&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global",
                     four_cc: Some(('Y', 'U', 'Y', 'V')),
                 )),
             ],
@@ -36,7 +36,7 @@ Config (
             ),
             width: 640,
             height: 480,
-            fps: 100.0,
+            fps: 60.0,
         ),
         CameraDefinition (
             name: "Microsoft XBox Vision Live",
