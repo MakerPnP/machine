@@ -6,8 +6,8 @@ use std::ops::Add;
 use truck_meshalgo::prelude::{BoundingBox, MeshedShape, RobustMeshableShape};
 use truck_polymesh::PolygonMesh;
 use truck_stepio::r#in::Table;
-use wgpu::{PollType, TexelCopyBufferLayout, TexelCopyTextureInfo};
 use wgpu::util::DeviceExt;
+use wgpu::{PollType, TexelCopyBufferLayout, TexelCopyTextureInfo};
 
 const PROJECTION_STYLE: ProjectionStyle = ProjectionStyle::Normal;
 const FRAME_COUNT: usize = 30;
@@ -53,9 +53,9 @@ struct UniformData {
     mvp: glam::Mat4,
     model: glam::Mat4,
     light_pos: glam::Vec3,
-    _padding1: u32,  // Explicit padding for light_pos
+    _padding1: u32, // Explicit padding for light_pos
     light_color: glam::Vec3,
-    _padding2: u32,  // Explicit padding for light_pos
+    _padding2: u32, // Explicit padding for light_pos
     light_intensity: f32,
     _padding3: u32,
     _padding4: u32,
@@ -68,7 +68,7 @@ impl UniformData {
         model: glam::Mat4,
         light_pos: glam::Vec3,
         light_color: glam::Vec3,
-        light_intensity: f32
+        light_intensity: f32,
     ) -> Self {
         Self {
             mvp,
@@ -96,7 +96,12 @@ mod uniform_data_tests {
     fn uniform_data_size() {
         assert_eq!(size_of::<UniformData>(), UNIFORM_DATA_SIZE);
         assert_eq!(align_of::<UniformData>(), UNIFORM_DATA_ALIGN);
-        assert_eq!(size_of::<UniformData>() % UNIFORM_DATA_ALIGN, 0, "Uniform data size must be a multiple of {}", UNIFORM_DATA_ALIGN);
+        assert_eq!(
+            size_of::<UniformData>() % UNIFORM_DATA_ALIGN,
+            0,
+            "Uniform data size must be a multiple of {}",
+            UNIFORM_DATA_ALIGN
+        );
         assert_eq!(align_of::<UniformData>(), 16);
     }
 
@@ -139,22 +144,20 @@ impl RenderState {
 
         // Request device and queue
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits {
-                        // raspberry pi 5 gpu only allows 4096 max.
-                        max_texture_dimension_2d: 4096,
-                        // raspberry pi 5 gpu only allows 4096 max.
-                        max_texture_dimension_1d: 4096,
-                        ..Default::default()
-                    },
-                    experimental_features: Default::default(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                    trace: Default::default(),
-                }
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits {
+                    // raspberry pi 5 gpu only allows 4096 max.
+                    max_texture_dimension_2d: 4096,
+                    // raspberry pi 5 gpu only allows 4096 max.
+                    max_texture_dimension_1d: 4096,
+                    ..Default::default()
+                },
+                experimental_features: Default::default(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: Default::default(),
+            })
             .await?;
 
         println!("Adapter: {:?}", adapter.get_info());
@@ -168,18 +171,16 @@ impl RenderState {
         // Create bind group layout
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Uniform Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: Some(NonZeroU64::new(UNIFORM_DATA_SIZE as u64).unwrap()), // Specify size
-                    },
-                    count: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(NonZeroU64::new(UNIFORM_DATA_SIZE as u64).unwrap()), // Specify size
                 },
-            ],
+                count: None,
+            }],
         });
 
         // Create pipeline layout
@@ -252,19 +253,21 @@ impl RenderState {
         pyramid_push: UniformData,
         model_push: UniformData,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let cube_uniform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Cube Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[cube_push]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        let cube_uniform_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Cube Uniform Buffer"),
+                    contents: bytemuck::cast_slice(&[cube_push]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
         // Create vertex buffers
-        let cube_vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Cube Vertex Buffer"),
-                contents: bytemuck::cast_slice(cube_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let cube_vertex_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Cube Vertex Buffer"),
+                    contents: bytemuck::cast_slice(cube_vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
 
         let cube_index_buffer = self
             .device
@@ -274,82 +277,80 @@ impl RenderState {
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-        let pyramid_uniform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Pyramid Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[pyramid_push]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        let pyramid_uniform_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Pyramid Uniform Buffer"),
+                    contents: bytemuck::cast_slice(&[pyramid_push]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
 
-        let pyramid_vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Pyramid Vertex Buffer"),
-                contents: bytemuck::cast_slice(pyramid_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let pyramid_vertex_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Pyramid Vertex Buffer"),
+                    contents: bytemuck::cast_slice(pyramid_vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
 
-        let pyramid_index_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Pyramid Index Buffer"),
-                contents: bytemuck::cast_slice(pyramid_indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let pyramid_index_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Pyramid Index Buffer"),
+                    contents: bytemuck::cast_slice(pyramid_indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
 
-        let model_uniform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Model Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[model_push]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        let model_uniform_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Model Uniform Buffer"),
+                    contents: bytemuck::cast_slice(&[model_push]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
 
-        let model_vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Model Vertex Buffer"),
-                contents: bytemuck::cast_slice(model_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let model_vertex_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Model Vertex Buffer"),
+                    contents: bytemuck::cast_slice(model_vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
 
-        let model_index_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Model Index Buffer"),
-                contents: bytemuck::cast_slice(model_indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let model_index_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Model Index Buffer"),
+                    contents: bytemuck::cast_slice(model_indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
 
         // Create bind groups for each object
         let cube_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Cube Bind Group"),
             layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: cube_uniform_buffer.as_entire_binding(),
-                },
-            ],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: cube_uniform_buffer.as_entire_binding(),
+            }],
         });
 
         let pyramid_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Pyramid Bind Group"),
             layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: pyramid_uniform_buffer.as_entire_binding(),
-                },
-            ],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: pyramid_uniform_buffer.as_entire_binding(),
+            }],
         });
 
         let model_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Model Bind Group"),
             layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: model_uniform_buffer.as_entire_binding(),
-                },
-            ],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: model_uniform_buffer.as_entire_binding(),
+            }],
         });
 
         // Create render target texture
@@ -445,8 +446,7 @@ impl RenderState {
             // Render pyramid
             render_pass.set_bind_group(0, &pyramid_bind_group, &[]);
             render_pass.set_vertex_buffer(0, pyramid_vertex_buffer.slice(..));
-            render_pass
-                .set_index_buffer(pyramid_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_index_buffer(pyramid_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..pyramid_indices.len() as u32, 0, 0..1);
 
             // Render model
@@ -491,7 +491,10 @@ impl RenderState {
             sender.send(result).unwrap();
         });
 
-        let _ = self.device.poll(PollType::Wait { submission_index: None, timeout: None });
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         receiver.recv()??;
 
         let data = buffer_slice.get_mapped_range();
@@ -515,26 +518,65 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define cube vertices with colors
     let cube_vertices = [
         // Front face (red)
-        Vertex { pos: [-1.0, -1.0, 1.0], color: [1.0, 0.0, 0.0] },
-        Vertex { pos: [1.0, -1.0, 1.0], color: [1.0, 0.5, 0.0] },
-        Vertex { pos: [1.0, 1.0, 1.0], color: [1.0, 1.0, 0.0] },
-        Vertex { pos: [-1.0, 1.0, 1.0], color: [1.0, 0.5, 0.5] },
+        Vertex {
+            pos: [-1.0, -1.0, 1.0],
+            color: [1.0, 0.0, 0.0],
+        },
+        Vertex {
+            pos: [1.0, -1.0, 1.0],
+            color: [1.0, 0.5, 0.0],
+        },
+        Vertex {
+            pos: [1.0, 1.0, 1.0],
+            color: [1.0, 1.0, 0.0],
+        },
+        Vertex {
+            pos: [-1.0, 1.0, 1.0],
+            color: [1.0, 0.5, 0.5],
+        },
         // Back face (blue)
-        Vertex { pos: [-1.0, -1.0, -1.0], color: [0.0, 0.0, 1.0] },
-        Vertex { pos: [1.0, -1.0, -1.0], color: [0.0, 0.5, 1.0] },
-        Vertex { pos: [1.0, 1.0, -1.0], color: [0.5, 0.5, 1.0] },
-        Vertex { pos: [-1.0, 1.0, -1.0], color: [0.5, 0.0, 1.0] },
+        Vertex {
+            pos: [-1.0, -1.0, -1.0],
+            color: [0.0, 0.0, 1.0],
+        },
+        Vertex {
+            pos: [1.0, -1.0, -1.0],
+            color: [0.0, 0.5, 1.0],
+        },
+        Vertex {
+            pos: [1.0, 1.0, -1.0],
+            color: [0.5, 0.5, 1.0],
+        },
+        Vertex {
+            pos: [-1.0, 1.0, -1.0],
+            color: [0.5, 0.0, 1.0],
+        },
     ];
 
     // Define pyramid vertices with colors
     let pyramid_vertices = [
         // Base vertices (green)
-        Vertex { pos: [-1.5, -1.0, -1.5], color: [0.0, 1.0, 0.0] }, // 0: back-left
-        Vertex { pos: [1.5, -1.0, -1.5], color: [0.5, 1.0, 0.0] },  // 1: back-right
-        Vertex { pos: [1.5, -1.0, 1.5], color: [0.0, 1.0, 0.5] },   // 2: front-right
-        Vertex { pos: [-1.5, -1.0, 1.5], color: [0.5, 1.0, 0.5] },  // 3: front-left
+        Vertex {
+            pos: [-1.5, -1.0, -1.5],
+            color: [0.0, 1.0, 0.0],
+        }, // 0: back-left
+        Vertex {
+            pos: [1.5, -1.0, -1.5],
+            color: [0.5, 1.0, 0.0],
+        }, // 1: back-right
+        Vertex {
+            pos: [1.5, -1.0, 1.5],
+            color: [0.0, 1.0, 0.5],
+        }, // 2: front-right
+        Vertex {
+            pos: [-1.5, -1.0, 1.5],
+            color: [0.5, 1.0, 0.5],
+        }, // 3: front-left
         // Apex vertex (yellow)
-        Vertex { pos: [0.0, 2.0, 0.0], color: [1.0, 1.0, 0.0] },    // 4: apex
+        Vertex {
+            pos: [0.0, 2.0, 0.0],
+            color: [1.0, 1.0, 0.0],
+        }, // 4: apex
     ];
 
     // Define cube indices
@@ -550,13 +592,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define pyramid indices
     let pyramid_indices: [u16; 18] = [
         // Base (2 triangles)
-        0, 1, 2,
-        0, 2, 3,
-        // Sides (4 triangles)
-        0, 4, 1,  // back face
-        1, 4, 2,  // right face
-        2, 4, 3,  // front face
-        3, 4, 0,  // left face
+        0, 1, 2, 0, 2, 3, // Sides (4 triangles)
+        0, 4, 1, // back face
+        1, 4, 2, // right face
+        2, 4, 3, // front face
+        3, 4, 0, // left face
     ];
 
     // Initialize wgpu (these currently must be multiples of 256)
@@ -568,7 +608,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create transformation matrices
     let aspect = width as f32 / height as f32;
-    let ortho_size = 10.0;  // How many world units fit in view
+    let ortho_size = 10.0; // How many world units fit in view
     let projection = match PROJECTION_STYLE {
         ProjectionStyle::Normal => Mat4::perspective_rh(45.0_f32.to_radians(), aspect, 0.1, 100.0),
         ProjectionStyle::Orthographic => Mat4::orthographic_rh(
@@ -581,8 +621,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     };
 
-    let (tx, rx) =
-        std::sync::mpsc::sync_channel::<(usize, Vec<u8>)>(QUEUE_CAPACITY);
+    let (tx, rx) = std::sync::mpsc::sync_channel::<(usize, Vec<u8>)>(QUEUE_CAPACITY);
 
     let handle = std::thread::spawn(move || {
         while let Ok((frame_index, bytes_vec)) = rx.recv() {
@@ -598,9 +637,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 height,
                 image::ColorType::Rgba8,
             )
-                .map_err(|e| {
-                    println!("Failed to save frame {}, e: {}", frame_index, e);
-                })?;
+            .map_err(|e| {
+                println!("Failed to save frame {}, e: {}", frame_index, e);
+            })?;
 
             println!(
                 "✓ Saved frame {}, elapsed: {}us",
@@ -651,14 +690,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // --- Zoom (smooth in/out) ---
         let base_distance = 6.0;
         let zoom_amplitude = 2.0;
-        let zoom = base_distance
-            - zoom_amplitude * (1.0 - (TAU * t).cos()) * 0.5;
+        let zoom = base_distance - zoom_amplitude * (1.0 - (TAU * t).cos()) * 0.5;
 
-        let view = Mat4::look_at_rh(
-            Vec3::new(zoom, zoom * 0.75, zoom),
-            Vec3::ZERO,
-            Vec3::Y,
-        );
+        let view = Mat4::look_at_rh(Vec3::new(zoom, zoom * 0.75, zoom), Vec3::ZERO, Vec3::Y);
 
         let cube_mvp = projection * view * cube_model;
         let pyramid_mvp = projection * view * pyramid_model;
@@ -752,11 +786,16 @@ fn load_step_model_unfinished(
 
     let mut bounds = BoundingBox::new();
     for (shell_idx, (shell_id, shell)) in table.shell.iter().enumerate() {
-        println!("Processing shell {}/{}, id: {}", shell_idx + 1, table.shell.len(), shell_id);
+        println!(
+            "Processing shell {}/{}, id: {}",
+            shell_idx + 1,
+            table.shell.len(),
+            shell_id
+        );
 
         let Ok(shell) = table.to_compressed_shell(shell) else {
             println!("Failed to convert shell {} to polygon mesh", shell_id);
-            continue
+            continue;
         };
 
         let mesh: PolygonMesh = shell.robust_triangulation(tol).to_polygon();
@@ -770,7 +809,7 @@ fn load_step_model_unfinished(
         );
 
         // Calculate a color based on shell id
-        let hue = (*shell_id as f32 * 0.618033988749895) % 1.0;  // Golden ratio for distribution
+        let hue = (*shell_id as f32 * 0.618033988749895) % 1.0; // Golden ratio for distribution
         let color = hsv_to_rgb(hue, 0.7, 0.9);
 
         // Add vertices
