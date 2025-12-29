@@ -1,11 +1,9 @@
 use std::sync::Arc;
+
 use anyhow::anyhow;
 use chrono::DateTime;
 use log::{debug, error, info};
-use opencv::{
-    imgcodecs, prelude::*,
-    imgcodecs::ImwriteFlags,
-};
+use opencv::{imgcodecs, imgcodecs::ImwriteFlags, prelude::*};
 use server_common::camera::{CameraDefinition, CameraSource};
 use tokio::sync::broadcast;
 use tokio::time::{Duration, Instant};
@@ -24,16 +22,14 @@ pub struct CameraFrame {
 
 pub fn dump_cameras() -> anyhow::Result<()> {
     #[cfg(feature = "mediars-capture")]
-    let _ = mediars_capture::dump_cameras_mediars()
-        .inspect_err(|e| error!("MediaRS camera error: {:?}", e.to_string()));
+    let _ =
+        mediars_capture::dump_cameras_mediars().inspect_err(|e| error!("MediaRS camera error: {:?}", e.to_string()));
 
     #[cfg(feature = "opencv-capture")]
-    let _ = opencv_capture::dump_cameras_opencv()
-        .inspect_err(|e| error!("OpenCV cameras error: {:?}", e.to_string()));
+    let _ = opencv_capture::dump_cameras_opencv().inspect_err(|e| error!("OpenCV cameras error: {:?}", e.to_string()));
 
     Ok::<(), anyhow::Error>(())
 }
-
 
 pub async fn capture_loop(
     tx: broadcast::Sender<Arc<CameraFrame>>,
@@ -51,7 +47,12 @@ pub async fn capture_loop(
                 let encode_start = Instant::now();
                 let mut buf = opencv::core::Vector::new();
 
-                let params = opencv::core::Vector::from_slice(&[imgcodecs::IMWRITE_JPEG_QUALITY, camera_definition.stream_config.jpeg_quality as i32]);
+                let params = opencv::core::Vector::from_slice(&[
+                    imgcodecs::IMWRITE_JPEG_QUALITY,
+                    camera_definition
+                        .stream_config
+                        .jpeg_quality as i32,
+                ]);
 
                 imgcodecs::imencode(".jpg", &frame, &mut buf, &params)
                     .map_err(|e| error!("OpenCV imencode error: {:?}", e))?;
@@ -97,14 +98,19 @@ pub async fn capture_loop(
         #[cfg(feature = "opencv-capture")]
         VideoCaptureImpl::OpenCV(mut loop_impl) => loop_impl.run(callback).await,
         #[cfg(not(any(feature = "mediars-capture", feature = "opencv-capture")))]
-        compile_error!("No camera capture implementation available") => { unreachable!() }
+        compile_error!("No camera capture implementation available") => {
+            unreachable!()
+        }
     };
 
     if let Err(e) = result {
         error!("Error in camera capture loop: {:?}", e);
     }
 
-    info!("Shutting down camera capture. Camera: {:?}", camera_definition.sources[source_index]);
+    info!(
+        "Shutting down camera capture. Camera: {:?}",
+        camera_definition.sources[source_index]
+    );
 
     Ok(())
 }
@@ -113,16 +119,17 @@ fn make_capture_loop(
     camera_definition: &CameraDefinition,
     shutdown_flag: CancellationToken,
 ) -> anyhow::Result<(usize, VideoCaptureImpl)> {
-
-    camera_definition.sources.iter().enumerate().find_map(|(index, source)|{
-
-        match source {
+    camera_definition
+        .sources
+        .iter()
+        .enumerate()
+        .find_map(|(index, source)| match source {
             #[cfg(feature = "opencv-capture")]
             CameraSource::OpenCV(_) => {
                 opencv_capture::OpenCVCameraLoop::build(&camera_definition, shutdown_flag.clone())
                     .map(VideoCaptureImpl::OpenCV)
                     .inspect_err(|e| error!("OpenCV camera error: {:?}", e.to_string()))
-                    .map(|it|(index, it))
+                    .map(|it| (index, it))
                     .ok()
             }
             #[cfg(feature = "mediars-capture")]
@@ -130,12 +137,11 @@ fn make_capture_loop(
                 mediars_capture::MediaRSCameraLoop::build(&camera_definition, shutdown_flag.clone())
                     .map(VideoCaptureImpl::MediaRS)
                     .inspect_err(|e| error!("MediaRS camera error: {:?}", e.to_string()))
-                    .map(|it|(index, it))
+                    .map(|it| (index, it))
                     .ok()
             }
-            _ => None
-        }
-    })
+            _ => None,
+        })
         .ok_or(anyhow!("No usable camera source found in camera definition"))
 }
 

@@ -1,13 +1,10 @@
 use std::path::PathBuf;
+
 use clap::Parser;
 
 /// Example app that requires a config file
 #[derive(Parser, Debug)]
-#[command(
-    name = "server_cli",
-    version,
-    about = "MakerPnP - Server"
-)]
+#[command(name = "server_cli", version, about = "MakerPnP - Server")]
 pub struct Args {
     /// Path to the config file
     #[arg(short = 'c', long = "config", value_name = "PATH", default_value_os = "config.ron")]

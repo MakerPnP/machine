@@ -1,9 +1,10 @@
 use std::net::IpAddr;
-use server_common::camera::{CameraDefinition, CameraStreamConfig, CameraSource};
+
 #[cfg(feature = "mediars-capture")]
 use server_common::camera::MediaRSCameraConfig;
 #[cfg(feature = "opencv-capture")]
 use server_common::camera::OpenCVCameraConfig;
+use server_common::camera::{CameraDefinition, CameraSource, CameraStreamConfig};
 
 // TODO currently hardcoded.  move to config file.
 pub fn camera_definitions() -> Vec<CameraDefinition> {
@@ -157,7 +158,7 @@ pub const OPERATOR_REMOTE_ADDR: &str = "192.168.18.41:8002";
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Config {
     pub cameras: Vec<CameraDefinition>,
-    pub io_boards: Vec<IoBoardDefinition>
+    pub io_boards: Vec<IoBoardDefinition>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]

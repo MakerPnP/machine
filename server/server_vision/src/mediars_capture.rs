@@ -3,10 +3,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use log::{trace, debug, error, info};
+use log::{debug, error, info, trace};
+use media::FrameDescriptor;
 use media::device::camera::{CameraManager, DefaultCameraManager};
 use media::device::{Device, DeviceManager, OutputDevice};
-use media::FrameDescriptor;
 use media::variant::Variant;
 use media::video::{CompressionFormat, PixelFormat, VideoFormat};
 #[cfg(feature = "opencv-411")]
@@ -14,8 +14,7 @@ use opencv::core::AlgorithmHint;
 use opencv::core::{CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4};
 use opencv::imgproc;
 use opencv::imgproc::{
-    COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2,
-    COLOR_YUV2BGR_YVYU,
+    COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2, COLOR_YUV2BGR_YVYU,
 };
 use opencv::prelude::*;
 use server_common::camera::{CameraDefinition, CameraSource};
@@ -37,12 +36,12 @@ pub struct MediaRSCameraLoop {
 unsafe impl Send for MediaRSCameraLoop {}
 
 impl MediaRSCameraLoop {
-    pub fn build(
-        camera_definition: &CameraDefinition,
-        shutdown_flag: CancellationToken,
-    ) -> anyhow::Result<Self> {
-        let Some((source_index, media_rs_camera_config)) =
-            camera_definition.sources.iter().enumerate().find_map(|(index, source)| {
+    pub fn build(camera_definition: &CameraDefinition, shutdown_flag: CancellationToken) -> anyhow::Result<Self> {
+        let Some((source_index, media_rs_camera_config)) = camera_definition
+            .sources
+            .iter()
+            .enumerate()
+            .find_map(|(index, source)| {
                 if let CameraSource::MediaRS(config) = source {
                     Some((index, config))
                 } else {
@@ -68,7 +67,8 @@ impl MediaRSCameraLoop {
             }
         };
         // transmute so we can store the device and the camera camera manager we borrowed it from in Self
-        let device: &'static mut <DefaultCameraManager as DeviceManager>::DeviceType = unsafe { std::mem::transmute(device) };
+        let device: &'static mut <DefaultCameraManager as DeviceManager>::DeviceType =
+            unsafe { std::mem::transmute(device) };
 
         Ok(Self {
             fps: 30.0,
@@ -86,44 +86,47 @@ impl VideoCaptureLoop for MediaRSCameraLoop {
     where
         F: for<'b> Fn(&'b Mat, DateTime<Utc>, Instant, Duration, u64) -> Result<(), ()> + Send + Sync + 'static,
     {
-
         async move {
+            if let Err(e) = self
+                .device
+                .lock()
+                .unwrap()
+                .set_output_handler({
+                    let fps = self.fps;
+                    move |frame| {
+                        debug!("frame source: {:?}", frame.source);
+                        debug!("frame desc: {:?}", frame.descriptor());
+                        debug!("frame duration: {:?}", frame.duration);
 
-            if let Err(e) = self.device.lock().unwrap().set_output_handler({
-                let fps = self.fps;
-                move |frame| {
-                    debug!("frame source: {:?}", frame.source);
-                    debug!("frame desc: {:?}", frame.descriptor());
-                    debug!("frame duration: {:?}", frame.duration);
+                        let capture_timestamp = chrono::Utc::now();
+                        let capture_instant = Instant::now();
 
-                    let capture_timestamp = chrono::Utc::now();
-                    let capture_instant = Instant::now();
+                        // TODO get this from the frame
+                        let frame_duration = Duration::from_secs_f64(1.0 / fps as f64);
+                        // TODO handle this somehow
+                        let frame_number = 0;
 
-                    // TODO get this from the frame
-                    let frame_duration = Duration::from_secs_f64(1.0 / fps as f64);
-                    // TODO handle this somehow
-                    let frame_number = 0;
+                        // Map the video frame for memory access
+                        if let Ok(mapped_guard) = frame.map() {
+                            if let Some(planes) = mapped_guard.planes() {
+                                for (index, plane) in planes.into_iter().enumerate() {
+                                    debug!(
+                                        "plane. index: {}, stride: {:?}, height: {:?}",
+                                        index,
+                                        plane.stride(),
+                                        plane.height()
+                                    );
+                                }
 
-                    // Map the video frame for memory access
-                    if let Ok(mapped_guard) = frame.map() {
-                        if let Some(planes) = mapped_guard.planes() {
-                            for (index, plane) in planes.into_iter().enumerate() {
-                                debug!(
-                                    "plane. index: {}, stride: {:?}, height: {:?}",
-                                    index,
-                                    plane.stride(),
-                                    plane.height()
-                                );
+                                process_frame(&frame, |mat| {
+                                    let _ = f(&mat, capture_timestamp, capture_instant, frame_duration, frame_number);
+                                });
                             }
-
-                            process_frame(&frame, |mat| {
-                                let _ = f(&mat, capture_timestamp, capture_instant, frame_duration, frame_number);
-                            });
                         }
+                        Ok(())
                     }
-                    Ok(())
-                }
-            }) {
+                })
+            {
                 error!("{:?}", e.to_string());
             }
 
@@ -147,7 +150,10 @@ impl VideoCaptureLoop for MediaRSCameraLoop {
                             options["format"] = (Into::<u32>::into(video_format)).into();
                         }
 
-                        trace!("fourcc to video format. code: {:?}, code_u32: {:?}, video_format: {:?}", code, code_u32, video_format);
+                        trace!(
+                            "fourcc to video format. code: {:?}, code_u32: {:?}, video_format: {:?}",
+                            code, code_u32, video_format
+                        );
                     }
                 }
 
@@ -172,7 +178,6 @@ impl VideoCaptureLoop for MediaRSCameraLoop {
             {
                 let mut device = self.device.lock().unwrap();
 
-
                 info!("Stopping camera: {}", device.id());
                 // Stop the camera
                 if let Err(e) = device.stop() {
@@ -184,7 +189,6 @@ impl VideoCaptureLoop for MediaRSCameraLoop {
         }
     }
 }
-
 
 fn process_frame<'a, F>(frame: &'a media::frame::Frame, mut f: F)
 where
@@ -199,17 +203,17 @@ where
 
     // Get format information and create appropriate OpenCV Mat
     let cv_type = match vfd.format {
-        PixelFormat::YUYV => Some(CV_8UC2), // YUY2, YUYV: Y0 Cb Y1 Cr (YUV 4:2:2)
-        PixelFormat::UYVY => Some(CV_8UC2), // UYVY: Cb Y0 Cr Y1 (YUV 4:2:2)
-        PixelFormat::YVYU => Some(CV_8UC2), // YVYU: Y0 Cr Y1 Cb (YUV 4:2:2)
-        PixelFormat::VYUY => Some(CV_8UC2), // VYUY: Cr Y0 Cb Y1 (YUV 4:2:2)
-        PixelFormat::RGB24 => Some(CV_8UC3), // RGB 24-bit (8-bit per channel)
-        PixelFormat::BGR24 => Some(CV_8UC3), // BGR 24-bit (8-bit per channel)
+        PixelFormat::YUYV => Some(CV_8UC2),   // YUY2, YUYV: Y0 Cb Y1 Cr (YUV 4:2:2)
+        PixelFormat::UYVY => Some(CV_8UC2),   // UYVY: Cb Y0 Cr Y1 (YUV 4:2:2)
+        PixelFormat::YVYU => Some(CV_8UC2),   // YVYU: Y0 Cr Y1 Cb (YUV 4:2:2)
+        PixelFormat::VYUY => Some(CV_8UC2),   // VYUY: Cr Y0 Cb Y1 (YUV 4:2:2)
+        PixelFormat::RGB24 => Some(CV_8UC3),  // RGB 24-bit (8-bit per channel)
+        PixelFormat::BGR24 => Some(CV_8UC3),  // BGR 24-bit (8-bit per channel)
         PixelFormat::ARGB32 => Some(CV_8UC4), // ARGB 32-bit
         PixelFormat::BGRA32 => Some(CV_8UC4), // BGRA 32-bit
         PixelFormat::RGBA32 => Some(CV_8UC4), // RGBA 32-bit
         PixelFormat::ABGR32 => Some(CV_8UC4), // ABGR 32-bit
-        PixelFormat::Y8 => Some(CV_8UC1),   // Grayscale 8-bit
+        PixelFormat::Y8 => Some(CV_8UC1),     // Grayscale 8-bit
         _ => None,
     };
 
@@ -218,10 +222,7 @@ where
 
     // Handle different pixel formats appropriately
     let bgr_mat = match (vfd.format, cv_type) {
-        (
-            PixelFormat::YUYV | PixelFormat::UYVY | PixelFormat::YVYU | PixelFormat::VYUY,
-            Some(cv_type),
-        ) => {
+        (PixelFormat::YUYV | PixelFormat::UYVY | PixelFormat::YVYU | PixelFormat::VYUY, Some(cv_type)) => {
             let plane = planes.into_iter().next().unwrap();
             let data = plane.data().unwrap();
             let stride = plane.stride().unwrap();
@@ -242,23 +243,15 @@ where
                     data.as_ptr() as *mut std::ffi::c_void,
                     stride as usize, // step (bytes per row)
                 )
-                    .unwrap()
+                .unwrap()
             };
 
             // Convert UYVY to BGR
-            let mut bgr_mat =
-                unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
+            let mut bgr_mat = unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
             #[cfg(feature = "opencv-410")]
             imgproc::cvt_color(&raw_mat, &mut bgr_mat, code, 0).unwrap();
             #[cfg(feature = "opencv-411")]
-            imgproc::cvt_color(
-                &raw_mat,
-                &mut bgr_mat,
-                code,
-                0,
-                AlgorithmHint::ALGO_HINT_DEFAULT,
-            )
-                .unwrap();
+            imgproc::cvt_color(&raw_mat, &mut bgr_mat, code, 0, AlgorithmHint::ALGO_HINT_DEFAULT).unwrap();
 
             bgr_mat
         }
@@ -275,13 +268,12 @@ where
                     data.as_ptr() as *mut std::ffi::c_void,
                     stride as usize,
                 )
-                    .unwrap()
+                .unwrap()
             };
 
             // For RGB24, convert to BGR if needed for OpenCV processing
             if vfd.format == PixelFormat::RGB24 {
-                let mut bgr_mat =
-                    unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
+                let mut bgr_mat = unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
                 #[cfg(feature = "opencv-410")]
                 imgproc::cvt_color(&raw_mat, &mut bgr_mat, imgproc::COLOR_RGB2BGR, 0).unwrap();
                 #[cfg(feature = "opencv-411")]
@@ -292,7 +284,7 @@ where
                     0,
                     AlgorithmHint::ALGO_HINT_DEFAULT,
                 )
-                    .unwrap();
+                .unwrap();
                 bgr_mat
             } else {
                 raw_mat.try_clone().unwrap()
@@ -319,7 +311,7 @@ where
                     y_data.as_ptr() as *mut std::ffi::c_void,
                     y_stride as usize,
                 )
-                    .unwrap()
+                .unwrap()
             };
 
             // UV plane has half the height and potentially a different stride
@@ -331,18 +323,16 @@ where
                     uv_data.as_ptr() as *mut std::ffi::c_void,
                     uv_stride as usize,
                 )
-                    .unwrap()
+                .unwrap()
             };
 
             // Create a BGR mat for output
-            let mut bgr_mat =
-                unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
+            let mut bgr_mat = unsafe { Mat::new_rows_cols(height as i32, width as i32, CV_8UC3) }.unwrap();
 
             // Method 1: Use OpenCV's cvtColorTwoPlane
             // This function explicitly converts from separate Y and UV planes
             #[cfg(feature = "opencv-410")]
-            imgproc::cvt_color_two_plane(&y_mat, &uv_mat, &mut bgr_mat, COLOR_YUV2BGR_NV12)
-                .unwrap();
+            imgproc::cvt_color_two_plane(&y_mat, &uv_mat, &mut bgr_mat, COLOR_YUV2BGR_NV12).unwrap();
             #[cfg(feature = "opencv-411")]
             imgproc::cvt_color_two_plane(
                 &y_mat,
@@ -351,7 +341,7 @@ where
                 COLOR_YUV2BGR_NV12,
                 AlgorithmHint::ALGO_HINT_DEFAULT,
             )
-                .unwrap();
+            .unwrap();
 
             bgr_mat
         }
@@ -376,14 +366,8 @@ where
             let uv_h = height / 2;
             let uv_w = width / 2;
 
-            trace!(
-                "y_stride: {}, v_stride: {}, u_stride: {}",
-                y_stride, v_stride, u_stride
-            );
-            trace!(
-                "width: {}, height: {}, uv_w: {}, uv_h: {}",
-                width, height, uv_w, uv_h
-            );
+            trace!("y_stride: {}, v_stride: {}, u_stride: {}", y_stride, v_stride, u_stride);
+            trace!("width: {}, height: {}, uv_w: {}, uv_h: {}", width, height, uv_w, uv_h);
 
             // Calculate total size needed for I420 contiguous buffer
             let y_size = y_stride * height;
@@ -426,7 +410,7 @@ where
                     i420_data.as_ptr() as *mut c_void,
                     width, // stride is width for contiguous buffer
                 )
-                    .unwrap()
+                .unwrap()
             };
 
             // Convert to BGR
@@ -443,7 +427,7 @@ where
                 0,
                 AlgorithmHint::ALGO_HINT_DEFAULT,
             )
-                .unwrap();
+            .unwrap();
 
             // Keep the vector alive until we're done with the Mat
             std::mem::forget(i420_data);
@@ -462,12 +446,16 @@ where
 }
 
 #[cfg(feature = "mediars-capture")]
-pub fn dump_cameras_mediars() -> anyhow::Result<()>{
-
+pub fn dump_cameras_mediars() -> anyhow::Result<()> {
     let mut cam_mgr = CameraManager::new_default()?;
 
     for (index, device) in cam_mgr.iter_mut().enumerate() {
-        info!("MediaRS camera: {}, id: {:?}, formats: {:?}", index, device.id(), device.formats());
+        info!(
+            "MediaRS camera: {}, id: {:?}, formats: {:?}",
+            index,
+            device.id(),
+            device.formats()
+        );
     }
 
     Ok(())
@@ -488,7 +476,7 @@ fn fourcc_to_video_format(fourcc: u32) -> Option<VideoFormat> {
         FOURCC_MJPG => VideoFormat::Compression(CompressionFormat::MJPEG),
         _ => {
             // TODO support more formats (Contribution/PR's welcomed)
-            return None
+            return None;
         }
     };
 

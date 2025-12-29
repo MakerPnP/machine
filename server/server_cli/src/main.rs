@@ -1,19 +1,21 @@
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
+
 use anyhow::bail;
-use clap::Parser;
 use camera::CameraHandle;
-use ergot::toolkits::tokio_udp::{register_router_interface, RouterStack};
+use clap::Parser;
+use config::{IO_BOARD_LOCAL_ADDR, IO_BOARD_REMOTE_ADDR, OPERATOR_LOCAL_ADDR, OPERATOR_REMOTE_ADDR};
+use ergot::toolkits::tokio_udp::{RouterStack, register_router_interface};
 use ioboard::IOBOARD_TX_BUFFER_SIZE;
 use log::info;
 use networking::UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX;
 use operator::OPERATOR_TX_BUFFER_SIZE;
 use operator_shared::camera::CameraIdentifier;
 use tokio::sync::broadcast::Receiver;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{Mutex, broadcast};
 use tokio::{net::UdpSocket, signal};
-use config::{IO_BOARD_LOCAL_ADDR, IO_BOARD_REMOTE_ADDR, OPERATOR_LOCAL_ADDR, OPERATOR_REMOTE_ADDR};
+
 use crate::config::Config;
 
 pub mod camera;
@@ -21,8 +23,8 @@ pub mod ioboard;
 pub mod networking;
 pub mod operator;
 
-pub mod config;
 pub mod cli;
+pub mod config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -32,16 +34,17 @@ async fn main() -> anyhow::Result<()> {
 
     console_subscriber::init();
 
-    let _ = server_vision::dump_cameras()
-        .inspect_err(|e| info!("Error dumping cameras: {:?}", e));
-
+    let _ = server_vision::dump_cameras().inspect_err(|e| info!("Error dumping cameras: {:?}", e));
 
     let confile_filename = args.config;
     let Ok(config_content) = fs::read_to_string(&confile_filename) else {
-        bail!("Unable to read config file, make sure it exists and is readable. filename: {:?}", confile_filename)
+        bail!(
+            "Unable to read config file, make sure it exists and is readable. filename: {:?}",
+            confile_filename
+        )
     };
-    let Ok(config) = ron::from_str::<Config>(&config_content)
-        .inspect_err(|e| info!("Error parsing config file: {:?}", e))
+    let Ok(config) =
+        ron::from_str::<Config>(&config_content).inspect_err(|e| info!("Error parsing config file: {:?}", e))
     else {
         bail!("Unable to load config. filename: {:?}", confile_filename)
     };
@@ -54,13 +57,23 @@ async fn main() -> anyhow::Result<()> {
 
     let io_board_udp_socket = UdpSocket::bind(IO_BOARD_LOCAL_ADDR)
         .await
-        .map_err(|e|anyhow::format_err!("Unable to create local UDP socket for io boards. address: {}, error: {}", IO_BOARD_LOCAL_ADDR, e))
-        ?;
+        .map_err(|e| {
+            anyhow::format_err!(
+                "Unable to create local UDP socket for io boards. address: {}, error: {}",
+                IO_BOARD_LOCAL_ADDR,
+                e
+            )
+        })?;
     io_board_udp_socket
         .connect(IO_BOARD_REMOTE_ADDR)
         .await
-        .map_err(|e|anyhow::format_err!("Unable to create remote UDP socket for io boards. address: {}, error: {}", IO_BOARD_REMOTE_ADDR, e))
-        ?;
+        .map_err(|e| {
+            anyhow::format_err!(
+                "Unable to create remote UDP socket for io boards. address: {}, error: {}",
+                IO_BOARD_REMOTE_ADDR,
+                e
+            )
+        })?;
 
     register_router_interface(
         &stack,
@@ -73,13 +86,23 @@ async fn main() -> anyhow::Result<()> {
 
     let operator_udp_socket = UdpSocket::bind(OPERATOR_LOCAL_ADDR)
         .await
-        .map_err(|e|anyhow::format_err!("Unable to create local UDP socket for operator UI. address: {}, error: {}", IO_BOARD_LOCAL_ADDR, e))
-        ?;
+        .map_err(|e| {
+            anyhow::format_err!(
+                "Unable to create local UDP socket for operator UI. address: {}, error: {}",
+                IO_BOARD_LOCAL_ADDR,
+                e
+            )
+        })?;
     operator_udp_socket
         .connect(OPERATOR_REMOTE_ADDR)
         .await
-        .map_err(|e|anyhow::format_err!("Unable to create UDP socket for operator UI. address: {}, error: {}", OPERATOR_REMOTE_ADDR, e))
-        ?;
+        .map_err(|e| {
+            anyhow::format_err!(
+                "Unable to create UDP socket for operator UI. address: {}, error: {}",
+                OPERATOR_REMOTE_ADDR,
+                e
+            )
+        })?;
 
     register_router_interface(
         &stack,
