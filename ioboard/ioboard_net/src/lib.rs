@@ -64,7 +64,7 @@ impl<CLIENT: TcpConnect> IoConnection<CLIENT> {
     pub async fn run(&mut self) -> ! {
         loop {
             // You need to start a server on the host machine, for example: `nc -l 8000`
-            let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 18, 63), 8000));
+            let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 18, 41), 8000));
 
             info!("Connecting...");
             let r = self.client.connect(addr).await;
@@ -170,7 +170,7 @@ async fn networking_task(stack: embassy_net::Stack<'static>, spawner: Spawner, s
     let mut udp_socket = UdpSocket::new(stack, rx_meta, rx_buffer, tx_meta, tx_buffer);
 
     let port = 8000_u16;
-    let remote_endpoint = IpEndpoint::new(Ipv4Address::new(192, 168, 18, 63).into(), port);
+    let remote_endpoint = IpEndpoint::new(Ipv4Address::new(192, 168, 18, 41).into(), port);
     let local_endpoint = IpEndpoint::new(config.address.address().into(), port);
     udp_socket
         .bind(local_endpoint)
@@ -423,7 +423,7 @@ async fn udp_spam_task(stack: embassy_net::Stack<'static>) -> ! {
 
     let mut socket = UdpSocket::new(stack, &mut rx_meta, &mut rx_buffer, &mut tx_meta, &mut tx_buffer);
 
-    let remote_endpoint = (Ipv4Address::new(192, 168, 18, 63), 8000);
+    let remote_endpoint = (Ipv4Address::new(192, 168, 18, 41), 8000);
     socket
         .bind(remote_endpoint)
         .expect("bound");
