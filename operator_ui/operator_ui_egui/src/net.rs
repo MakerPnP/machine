@@ -34,6 +34,8 @@ pub async fn ergot_task(
 ) -> anyhow::Result<()> {
     info!("Starting networking on: {}", LOCAL_ADDR);
 
+    let mut app_event_rx = app_event_tx.subscribe();
+
     let queue = new_std_queue(4096);
     let stack: EdgeStack = new_target_stack(&queue, 1024);
     let udp_socket = UdpSocket::bind(LOCAL_ADDR)
@@ -60,99 +62,112 @@ pub async fn ergot_task(
         .name("ergot/yeet-listener")
         .spawn(yeet_listener(stack.clone(), app_event_tx.subscribe()))?;
 
-    let discovery_results = loop {
-        let query = SocketQuery {
-            key: OperatorCommandEndpoint::REQ_KEY.to_bytes(),
-            nash_req: NameRequirement::Any,
-            frame_kind: FrameKind::ENDPOINT_REQ,
-            broadcast: false,
-        };
+    let query = SocketQuery {
+        key: OperatorCommandEndpoint::REQ_KEY.to_bytes(),
+        nash_req: NameRequirement::Any,
+        frame_kind: FrameKind::ENDPOINT_REQ,
+        broadcast: false,
+    };
 
-        let res = stack
-            .discovery()
-            .discover_sockets(4, Duration::from_secs(1), &query)
-            .await;
-        if res.is_empty() {
-            warn!("No discovery results");
-        } else {
-            break res;
+    let discovery_results = loop {
+        let discovery = stack.discovery();
+
+        select! {
+            res = discovery.discover_sockets(4, Duration::from_secs(1), &query) => {
+                if res.is_empty() {
+                    warn!("No discovery results");
+                } else {
+                    break Some(res);
+                }
+            }
+            event = app_event_rx.recv() => {
+                if let Ok(event) = event {
+                    match event {
+                        AppEvent::Shutdown => {
+                            info!("Shutdown requested during discovery, exiting");
+                            break None
+                        }
+                    }
+                }
+            }
         }
 
         time::sleep(Duration::from_millis(250)).await;
     };
-    info!("Found {} command endpoints", discovery_results.len());
 
-    // TODO just using the first one for now
-    let command_endpoint_remote_address = discovery_results[0].address;
+    if let Some(discovery_results) = discovery_results {
+        info!("Found {} command endpoints", discovery_results.len());
 
-    let heartbeat_sender = tokio::task::spawn(heartbeat_sender(
-        stack.clone(),
-        command_endpoint_remote_address,
-        app_event_tx.subscribe(),
-    ));
+        // TODO just using the first one for now
+        let command_endpoint_remote_address = discovery_results[0].address;
 
-    // TODO enumerate the available cameras from the server
-    let camera_configs = [
-        (CameraIdentifier::new(0), TARGET_FPS),
-        (CameraIdentifier::new(1), SCHEDULED_FPS_MAX),
-        //(CameraIdentifier::new(2), SCHEDULED_FPS_MAX),
-    ];
+        let heartbeat_sender = tokio::task::spawn(heartbeat_sender(
+            stack.clone(),
+            command_endpoint_remote_address,
+            app_event_tx.subscribe(),
+        ));
 
-    info!("Starting cameras. ids: {:?}", camera_configs);
-    for (camera_identifier, target_fps) in camera_configs.iter() {
-        {
-            let app_state = state.lock().unwrap();
-            app_state.add_camera(
-                *camera_identifier,
-                stack.clone(),
-                command_endpoint_remote_address,
-                *target_fps,
-            );
-        }
+        // TODO enumerate the available cameras from the server
+        let camera_configs = [
+            (CameraIdentifier::new(0), TARGET_FPS),
+            (CameraIdentifier::new(1), SCHEDULED_FPS_MAX),
+            //(CameraIdentifier::new(2), SCHEDULED_FPS_MAX),
+        ];
 
-        {
-            let mut workspaces = workspaces.lock().unwrap();
-
-            match workspaces.add_toggle(ToggleDefinition {
-                key: "camera",
-                kind: PaneKind::Camera {
-                    id: camera_identifier.clone(),
-                },
-            }) {
-                Err(WorkspaceError::DuplicateToggleKey) => {
-                    // ignore, we already have a toggle with this key - from a previous session
-                }
-                Err(e) => {
-                    error!("Failed to add toggle: {:?}", e);
-                }
-                Ok(()) => {}
+        info!("Starting cameras. ids: {:?}", camera_configs);
+        for (camera_identifier, target_fps) in camera_configs.iter() {
+            {
+                let app_state = state.lock().unwrap();
+                app_state.add_camera(
+                    *camera_identifier,
+                    stack.clone(),
+                    command_endpoint_remote_address,
+                    *target_fps,
+                );
             }
-        }
-    }
 
-    let mut app_event_rx = app_event_tx.subscribe();
+            {
+                let mut workspaces = workspaces.lock().unwrap();
 
-    loop {
-        if let Ok(event) = app_event_rx.recv().await {
-            match event {
-                AppEvent::Shutdown => {
-                    let state = state.lock().unwrap();
-                    state.context.request_repaint();
-                    break;
+                match workspaces.add_toggle(ToggleDefinition {
+                    key: "camera",
+                    kind: PaneKind::Camera {
+                        id: camera_identifier.clone(),
+                    },
+                }) {
+                    Err(WorkspaceError::DuplicateToggleKey) => {
+                        // ignore, we already have a toggle with this key - from a previous session
+                    }
+                    Err(e) => {
+                        error!("Failed to add toggle: {:?}", e);
+                    }
+                    Ok(()) => {}
                 }
             }
         }
+
+        loop {
+            if let Ok(event) = app_event_rx.recv().await {
+                match event {
+                    AppEvent::Shutdown => {
+                        let state = state.lock().unwrap();
+                        state.context.request_repaint();
+                        break;
+                    }
+                }
+            }
+        }
+        info!("Network shut down requested");
+
+        info!("Waiting for heartbeat sender to finish");
+        let _ = heartbeat_sender.await;
     }
-    info!("Network shut down requested");
 
     let camera_uis = {
         let app_state = state.lock().unwrap();
         app_state.prepare_stop_all_cameras()
     };
     AppState::stop_all_cameras(camera_uis).await;
-
-    info!("Waiting for heartbeat sender to finish");
-    let _ = heartbeat_sender.await;
 
     info!("Waiting for basic services to finish");
     let _ = basic_services_handle.await;
