@@ -4,11 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-linux = [
-    # required to avoid compilation error: "a `libclang` shared library is not loaded on this thread"
-    "opencv/clang-runtime"
-]
-
 opencv-410 = [
     "dep:opencv"
 ]
@@ -47,3 +42,7 @@ opencv             = { workspace = true, features = ["imgcodecs", "imgproc", "ob
 # tasks
 tokio              = { workspace = true }
 tokio-util         = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# required to avoid compilation error: "a `libclang` shared library is not loaded on this thread"
+opencv = { workspace = true, features = ["clang-runtime"], optional = true }
