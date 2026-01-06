@@ -5,11 +5,13 @@ edition = "2024"
 
 [features]
 opencv-410 = [
-    "dep:opencv"
+    "dep:opencv",
+    "opencv",
 ]
 
 opencv-411 = [
-    "dep:opencv"
+    "dep:opencv",
+    "opencv",
 ]
 
 opencv-capture = [
@@ -19,6 +21,9 @@ opencv-capture = [
 mediars-capture = [
     "dep:media"
 ]
+
+# used to assert that an opencv version was picked
+opencv = []
 
 [dependencies]
 server_common      = { path = "../server_common"}

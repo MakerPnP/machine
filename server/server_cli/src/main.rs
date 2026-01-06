@@ -3,6 +3,7 @@ use std::fs;
 use std::sync::Arc;
 
 use anyhow::bail;
+#[cfg(feature = "machine-vision")]
 use camera::CameraHandle;
 use clap::Parser;
 use config::{IO_BOARD_LOCAL_ADDR, IO_BOARD_REMOTE_ADDR, OPERATOR_LOCAL_ADDR, OPERATOR_REMOTE_ADDR};
@@ -18,6 +19,7 @@ use tokio::{net::UdpSocket, signal};
 
 use crate::config::Config;
 
+#[cfg(feature = "machine-vision")]
 pub mod camera;
 pub mod ioboard;
 pub mod networking;
@@ -34,6 +36,7 @@ async fn main() -> anyhow::Result<()> {
 
     console_subscriber::init();
 
+    #[cfg(feature = "machine-vision")]
     let _ = server_vision::dump_cameras().inspect_err(|e| info!("Error dumping cameras: {:?}", e));
 
     let confile_filename = args.config;
@@ -127,6 +130,7 @@ async fn main() -> anyhow::Result<()> {
     let app_state = Arc::new(Mutex::new(AppState {
         config,
         event_tx: app_event_tx.clone(),
+        #[cfg(feature = "machine-vision")]
         camera_clients: Arc::new(Mutex::new(HashMap::new())),
     }));
 
@@ -163,6 +167,7 @@ async fn main() -> anyhow::Result<()> {
 pub struct AppState {
     config: Config,
     event_tx: broadcast::Sender<AppEvent>,
+    #[cfg(feature = "machine-vision")]
     camera_clients: Arc<Mutex<HashMap<CameraIdentifier, CameraHandle>>>,
 }
 

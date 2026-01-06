@@ -14,6 +14,7 @@ use operator_shared::camera::{
     CameraFrameChunk, CameraFrameChunkKind, CameraFrameImageChunk, CameraFrameMeta, CameraIdentifier,
 };
 use server_common::camera::CameraDefinition;
+#[cfg(feature = "machine-vision")]
 use server_vision::{CameraFrame, capture_loop};
 use tokio::sync::{Mutex, broadcast};
 use tokio::{select, time};

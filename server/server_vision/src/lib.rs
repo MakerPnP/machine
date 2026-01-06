@@ -97,10 +97,10 @@ pub async fn capture_loop(
         VideoCaptureImpl::MediaRS(mut loop_impl) => loop_impl.run(callback).await,
         #[cfg(feature = "opencv-capture")]
         VideoCaptureImpl::OpenCV(mut loop_impl) => loop_impl.run(callback).await,
-        #[cfg(not(any(feature = "mediars-capture", feature = "opencv-capture")))]
-        compile_error!("No camera capture implementation available") => {
-            unreachable!()
-        }
+        // #[cfg(not(any(feature = "mediars-capture", feature = "opencv-capture")))]
+        // compile_error!("No camera capture implementation available") => {
+        //     unreachable!()
+        // }
     };
 
     if let Err(e) = result {

@@ -14,6 +14,9 @@ use tokio::{select, time};
 
 use crate::AppEvent;
 
+#[cfg(test)]
+mod sanity_tests;
+
 pub const UDP_OVER_ETH_MTU: usize = 1500;
 pub const IP_OVERHEAD_SIZE: usize = 20;
 pub const UDP_OVERHEAD_SIZE: usize = 8;

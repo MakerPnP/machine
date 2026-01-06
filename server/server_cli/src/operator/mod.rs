@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::AppState;
+#[cfg(feature = "machine-vision")]
 use crate::camera::{CameraHandle, camera_definition_for_identifier, camera_manager};
 
 // TODO configure these more appropriately.
@@ -30,11 +31,20 @@ endpoint!(
 );
 
 pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState>>) {
-    let (app_event_rx, clients) = {
+    let app_event_rx = {
         let app_state = app_state.lock().await;
         let app_event_rx = app_state.event_tx.subscribe();
+        app_event_rx
+    };
+
+    #[cfg(feature = "machine-vision")]
+    let (mut camera_managers, clients) = {
+        let app_state = app_state.lock().await;
         let clients: Arc<Mutex<HashMap<CameraIdentifier, CameraHandle>>> = app_state.camera_clients.clone();
-        (app_event_rx, clients)
+
+        let mut camera_managers = HashMap::new();
+
+        (camera_managers, clients)
     };
 
     let mut app_shutdown_handler = Box::pin(crate::app_shutdown_handler(app_event_rx));
@@ -48,9 +58,7 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
     let mut hdl = server_socket.attach();
     let command_server_port_id = hdl.port();
 
-    let mut camera_managers = HashMap::new();
-
-    info!("Camera command server, port_id: {}", command_server_port_id);
+    info!("Operator command server, port_id: {}", command_server_port_id);
 
     let timeout_duration = Duration::from_secs(10);
     loop {
@@ -60,7 +68,7 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
                 warn!("operator timeout (no command received). duration: {}", timeout_duration.as_secs());
             }
             _ = &mut app_shutdown_handler => {
-                info!("operator shutdown requested, stopping camera command handler");
+                info!("operator shutdown requested, stopping command server");
                 break
             }
             r = hdl.serve_full(async |msg| {
@@ -71,6 +79,7 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
                         info!("heartbeat received from: {:?}, value: {}", msg.hdr.src, value);
                         OperatorCommandResponse::Acknowledged
                     }
+                    #[cfg(feature = "machine-vision")]
                     OperatorCommandRequest::CameraCommand(identifier, camera_command) => {
                         info!("camera command received from: {:?}, identifier: {}, command: {:?}", msg.hdr.src, identifier, camera_command);
                         match camera_command {
@@ -152,11 +161,14 @@ pub async fn operator_listener(stack: RouterStack, app_state: Arc<Mutex<AppState
         }
     }
 
-    info!("Shutting down all cameras");
-    for (_identifier, (handle, shutdown_flag)) in camera_managers.into_iter() {
-        shutdown_flag.cancel();
-        let _ = handle.await;
+    #[cfg(feature = "machine-vision")]
+    {
+        info!("Shutting down all cameras");
+        for (_identifier, (handle, shutdown_flag)) in camera_managers.into_iter() {
+            shutdown_flag.cancel();
+            let _ = handle.await;
+        }
     }
 
-    info!("Camera command handler stopped");
+    info!("Operator command server stopped");
 }

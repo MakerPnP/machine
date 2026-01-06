@@ -9,12 +9,14 @@ use crate::camera::{CameraCommand, CameraCommandError, CameraIdentifier, CameraS
 #[derive(Schema, Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum OperatorCommandRequest {
     Heartbeat(u64),
+    #[cfg(feature = "machine-vision")]
     CameraCommand(CameraIdentifier, CameraCommand),
 }
 
 #[derive(Debug, Serialize, Deserialize, Schema, Clone)]
 pub enum OperatorCommandResponse {
     Acknowledged,
+    #[cfg(feature = "machine-vision")]
     CameraCommandResult(Result<CameraStreamerCommandResult, CameraCommandError>),
 }
 

@@ -7,10 +7,18 @@ edition = "2024"
 default = ["development-machine-1"]
 
 opencv-capture = [
+    "dep:server_vision",
     "server_vision/opencv-capture",
+    "machine-vision",
 ]
 mediars-capture = [
+    "dep:server_vision",
     "server_vision/mediars-capture",
+    "machine-vision",
+]
+
+machine-vision = [
+    "operator_shared/machine-vision",
 ]
 
 #
@@ -26,7 +34,7 @@ development-machine-2 = []
 [dependencies]
 operator_shared    = { workspace = true }
 ioboard_shared     = { workspace = true }
-server_vision      = { path = "../server_vision" }
+server_vision      = { path = "../server_vision", optional = true }
 server_common      = { path = "../server_common" }
 
 # logging
