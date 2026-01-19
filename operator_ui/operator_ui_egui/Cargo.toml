@@ -21,7 +21,7 @@ console_logging = []
 default = ["console_logging"]
 
 [dependencies]
-operator_shared      = { workspace = true }
+operator_shared      = { workspace = true, features = ["machine-vision"] }
 ergot_util           = { workspace = true }
 i18n                 = { git = "https://github.com/MakerPnP/makerpnp.git" }
 
