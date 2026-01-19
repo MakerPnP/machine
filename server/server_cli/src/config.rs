@@ -149,7 +149,7 @@ pub fn camera_definitions() -> Vec<CameraDefinition> {
 pub const IO_BOARD_LOCAL_ADDR: &str = "0.0.0.0:8000";
 pub const IO_BOARD_REMOTE_ADDR: &str = "192.168.18.64:8000";
 pub const OPERATOR_LOCAL_ADDR: &str = "0.0.0.0:8001";
-pub const OPERATOR_REMOTE_ADDR: &str = "192.168.18.41:8002";
+pub const OPERATOR_REMOTE_ADDR: &str = "127.0.0.1:8002";
 
 // Rules:
 // 1) The names in config structures should be as simple as possible.
