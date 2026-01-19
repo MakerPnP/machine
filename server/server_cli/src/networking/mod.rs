@@ -71,6 +71,8 @@ async fn do_device_discovery(stack: RouterStack) {
     let mut seen = HashSet::new();
     let mut ticker = interval(Duration::from_secs(10));
     loop {
+        ticker.tick().await;
+
         let new_seen = stack
             .discovery()
             .discover(max, Duration::from_millis(250))
@@ -91,8 +93,6 @@ async fn do_device_discovery(stack: RouterStack) {
         for (index, item) in seen.iter().enumerate() {
             info!("{}: {:?}", index, item);
         }
-
-        ticker.tick().await;
     }
 }
 
