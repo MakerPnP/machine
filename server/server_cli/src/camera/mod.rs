@@ -208,7 +208,7 @@ pub async fn camera_manager(
             let shutdown_flag = shutdown_flag.clone();
             async move {
                 if let Err(e) = capture_loop(tx, camera_definition, shutdown_flag.clone()).await {
-                    error!("capture loop error: {e:?}");
+                    error!("capture loop error: {}", e);
                     shutdown_flag.cancel();
                 }
             }
