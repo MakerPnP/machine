@@ -104,13 +104,17 @@ pub async fn yeet_listener(stack: RouterStack, app_event_rx: Receiver<AppEvent>)
     let mut hdl = subber.subscribe();
 
     let mut packets_this_interval = 0;
-    let interval = Duration::from_secs(1);
-    let mut ticker = time::interval(interval);
+    let desired_interval = Duration::from_secs(1);
+    let mut ticker = time::interval(desired_interval);
+    ticker.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+    let mut last_tick_at = time::Instant::now();
     loop {
         select! {
-            _ = ticker.tick() => {
+            now = ticker.tick() => {
+                let interval = now - last_tick_at;
                 info!("packet rate: {}/{:?}", packets_this_interval, interval);
                 packets_this_interval = 0;
+                last_tick_at = now;
             }
             msg = hdl.recv() => {
                 packets_this_interval += 1;
