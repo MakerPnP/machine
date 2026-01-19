@@ -62,6 +62,8 @@ pub async fn basic_services(stack: RouterStack, port: u16, app_event_rx: Receive
             info!("basic services shutdown requested, stopping");
         },
     }
+
+    info!("basic services stopped");
 }
 
 async fn do_device_discovery(stack: RouterStack) {
