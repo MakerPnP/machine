@@ -21,6 +21,9 @@ use crate::{SCHEDULED_FPS_MAX, SCHEDULED_FPS_MIN, TARGET_FPS};
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
+const STREAM_TIMEOUT: Duration = Duration::from_secs(5);
+const STEAM_RETRY_INTERVAL: Duration = Duration::from_secs(5);
+
 pub async fn camera_frame_listener(
     stack: EdgeStack,
     tx_out: Sender<CameraFrame>,
@@ -55,9 +58,10 @@ pub async fn camera_frame_listener(
 
     let mut in_progress: HashMap<u64, InProgressFrame> = HashMap::new();
 
-    let mut target_fps = target_fps;
+    let mut effective_fps = target_fps;
     let mut frame_timestamps = std::collections::VecDeque::with_capacity(60);
     let mut latest_msg_at = None;
+    let mut latest_request_at = None;
 
     let mut ticker = tokio::time::interval(Duration::from_millis(250));
 
@@ -67,15 +71,20 @@ pub async fn camera_frame_listener(
                 info!("Frame listener shutdown requested. identifier: {}", camera_identifier);
                 break
             }
-            _ = ticker.tick() => {
+            now = ticker.tick() => {
+                let have_recent_message = latest_msg_at
+                    .map(|t| now.duration_since(t) <= STREAM_TIMEOUT)
+                    .unwrap_or(false);
 
-                let now = Instant::now();
+                let have_recent_request = latest_request_at
+                    .map(|t| now.duration_since(t) <= STEAM_RETRY_INTERVAL)
+                    .unwrap_or(false);
 
-                let should_send_start = latest_msg_at
-                    .map(|t| now.duration_since(t) > Duration::from_secs(1))
-                    .unwrap_or(true);
+                let should_send_start = !have_recent_message && !have_recent_request;
 
                 if should_send_start {
+                    latest_request_at = Some(now);
+                    debug!("Sending start request. latest_msg_at: {:?}, latest_request_at: {:?}", latest_msg_at, latest_request_at);
                     let result = command_client
                     .request(&OperatorCommandRequest::CameraCommand(
                         camera_identifier,
@@ -121,18 +130,18 @@ pub async fn camera_frame_listener(
 
                             // Smooth update using exponential moving average
                             let alpha = 0.1;
-                            target_fps = (1.0 - alpha) * target_fps + alpha * (measured_fps as f32);
+                            effective_fps = (1.0 - alpha) * effective_fps + alpha * (measured_fps as f32);
 
-                            debug!("estimated FPS: {:.1}, target FPS: {:.1}, total_span: {}ms, span: {}ms",
+                            debug!("measured FPS: {:.1}, effective FPS: {:.1}, total_span: {}ms, span: {}ms",
                                 measured_fps,
-                                target_fps,
+                                effective_fps,
                                 total_span.num_milliseconds(),
                                 newest_previous_span.num_milliseconds(),
                             );
                         }
 
                         // schedule next render
-                        let clamped_fps = target_fps.clamp(SCHEDULED_FPS_MIN.into(), SCHEDULED_FPS_MAX.into());
+                        let clamped_fps = effective_fps.clamp(SCHEDULED_FPS_MIN.into(), SCHEDULED_FPS_MAX.into());
 
                         let frame_interval = Duration::from_secs_f64(1.0 / clamped_fps as f64);
 

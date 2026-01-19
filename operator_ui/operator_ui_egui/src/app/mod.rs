@@ -27,7 +27,7 @@ use crate::net::ergot_task;
 use crate::runtime::tokio_runtime::TokioRuntime;
 use crate::ui_commands::{UiCommand, handle_command};
 use crate::workspace::{ViewportState, Workspaces};
-use crate::{TARGET_FPS, task};
+use crate::task;
 
 mod ui;
 
