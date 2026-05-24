@@ -2,9 +2,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
+use ergot::interface_manager::profiles::router::Router;
 use ergot::interface_manager::InterfaceSendError;
 use ergot::interface_manager::interface_impls::tokio_udp::TokioUdpInterface;
-use ergot::interface_manager::profiles::direct_router::DirectRouter;
 use ergot::net_stack::ArcNetStack;
 use ergot::toolkits::tokio_udp::RouterStack;
 use ergot::{Address, NetStackSendError, topic};
@@ -25,7 +25,7 @@ use crate::AppState;
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
 pub async fn camera_streamer(
-    stack: ArcNetStack<CriticalSectionRawMutex, DirectRouter<TokioUdpInterface>>,
+    stack: ArcNetStack<CriticalSectionRawMutex, Router<TokioUdpInterface, rand::rngs::StdRng, 64, 64>>,
     mut rx: broadcast::Receiver<Arc<CameraFrame>>,
     definition: CameraDefinition,
     chunk_size: usize,

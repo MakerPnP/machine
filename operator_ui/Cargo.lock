@@ -575,10 +575,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
-name = "bbq2"
-version = "0.4.2"
+name = "bbqueue"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25d3e5fd78b60ce3a60e21e9a92b1d5e741328264de8e609193e2bf7616747bd"
+checksum = "68917624e17aad88607cb5a5936f6da9b607c48c711e4e9ed101e7189aed28c2"
 dependencies = [
  "const-init",
  "maitake-sync",
@@ -1336,9 +1336,9 @@ checksum = "dc2d050bdc5c21e0862a89256ed8029ae6c290a93aecefc73084b3002cdebb01"
 
 [[package]]
 name = "embassy-time"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4fa65b9284d974dad7a23bb72835c4ec85c0b540d86af7fc4098c88cff51d65"
+checksum = "592b0c143ec626e821d4d90da51a2bd91d559d6c442b7c74a47d368c9e23d97a"
 dependencies = [
  "cfg-if",
  "critical-section",
@@ -1353,9 +1353,9 @@ dependencies = [
 
 [[package]]
 name = "embassy-time-driver"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0a244c7dc22c8d0289379c8d8830cae06bb93d8f990194d0de5efb3b5ae7ba6"
+checksum = "6ee71af1b3a0deaa53eaf2d39252f83504c853646e472400b763060389b9fcc9"
 dependencies = [
  "document-features",
 ]
@@ -1523,7 +1523,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 name = "ergot"
 version = "0.12.0"
 dependencies = [
- "bbq2",
+ "bbqueue",
  "cobs 0.3.0",
  "cobs-acc",
  "const-fnv1a-hash",
@@ -1540,6 +1540,7 @@ dependencies = [
  "postcard",
  "postcard-schema",
  "rand",
+ "rand_core",
  "serde",
  "tokio",
 ]
@@ -2630,9 +2631,9 @@ checksum = "08ab2867e3eeeca90e844d1940eab391c9dc5228783db2ed999acbc0a9ed375a"
 
 [[package]]
 name = "maitake-sync"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "748f86d9befd480b602c3bebc9ef30dbf2f3dfc8acc4a73d07b90f0117e6de3f"
+checksum = "3d77c365d697828821727b9bc09e6bc3c518b8c63804e79e1be5a5ae091a7c5f"
 dependencies = [
  "cordyceps",
  "loom",

@@ -5,10 +5,10 @@ use ergot::traits::Endpoint;
 use ergot::well_known::{NameRequirement, SocketQuery};
 use ergot::{
     FrameKind,
-    interface_manager::profiles::direct_edge::tokio_udp::InterfaceKind,
-    toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack, register_edge_interface},
+    toolkits::tokio_udp::{EdgeStack, new_std_queue, new_target_stack},
     topic,
 };
+use ergot::toolkits::tokio_udp::register_edge_target_interface;
 use operator_shared::camera::CameraIdentifier;
 use tokio::sync::broadcast;
 use tokio::{net::UdpSocket, select, time};
@@ -50,7 +50,7 @@ pub async fn ergot_task(
 
     let port = udp_socket.local_addr().unwrap().port();
 
-    register_edge_interface(&stack, udp_socket, &queue, InterfaceKind::Target)
+    register_edge_target_interface(&stack, udp_socket, &queue, None, None)
         .await
         .unwrap();
 

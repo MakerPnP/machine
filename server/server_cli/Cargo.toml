@@ -63,3 +63,5 @@ serde              = { workspace = true }
 
 # cli
 clap               = { workspace = true, features = ["derive"] }
+
+rand               = { workspace = true }

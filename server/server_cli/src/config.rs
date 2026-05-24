@@ -20,7 +20,7 @@ pub fn camera_definitions() -> Vec<CameraDefinition> {
                 }),
                 #[cfg(feature = "mediars-capture")]
                 CameraSource::MediaRS(MediaRSCameraConfig {
-                    device_id: "\\\\?\\usb#vid_045e&pid_0772&mi_00#a&6e1307a&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global".to_string(),
+                    device_id: "\\\\?\\usb#vid_045e&pid_0772&mi_00#c&2c5491c4&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global".to_string(),
                     four_cc: None,
                 }),
             ],
@@ -41,7 +41,7 @@ pub fn camera_definitions() -> Vec<CameraDefinition> {
                 }),
                 #[cfg(feature = "mediars-capture")]
                 CameraSource::MediaRS(MediaRSCameraConfig {
-                    device_id: "\\\\?\\usb#vid_32e6&pid_9211&mi_00#9&351a8e0&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global".to_string(),
+                    device_id: "\\\\?\\usb#vid_32e6&pid_9211&mi_00#c&2393f5c7&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global".to_string(),
                     four_cc: Some(['Y', 'U', 'Y', 'V']),
                 }),
             ],
@@ -52,27 +52,27 @@ pub fn camera_definitions() -> Vec<CameraDefinition> {
             height: 480,
             fps: 100.0,
         },
-        CameraDefinition {
-            name: "Microsoft XBox Vision Live".to_string(),
-            sources: vec![
-                #[cfg(feature = "opencv-capture")]
-                CameraSource::OpenCV(OpenCVCameraConfig {
-                    index: 2,
-                    four_cc: Some(['Y', 'U', 'Y', '2']),
-                }),
-                #[cfg(feature = "mediars-capture")]
-                CameraSource::MediaRS(MediaRSCameraConfig {
-                    device_id: "\\\\?\\usb#vid_045e&pid_0294&mi_00#a&2f495d5d&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global".to_string(),
-                    four_cc: Some(['Y', 'U', 'Y', 'V']),
-                }),
-            ],
-            stream_config: CameraStreamConfig {
-                jpeg_quality: 95,
-            },
-            width: 640,
-            height: 480,
-            fps: 30.0,
-        },
+        // CameraDefinition {
+        //     name: "Microsoft XBox Vision Live".to_string(),
+        //     sources: vec![
+        //         #[cfg(feature = "opencv-capture")]
+        //         CameraSource::OpenCV(OpenCVCameraConfig {
+        //             index: 2,
+        //             four_cc: Some(['Y', 'U', 'Y', '2']),
+        //         }),
+        //         #[cfg(feature = "mediars-capture")]
+        //         CameraSource::MediaRS(MediaRSCameraConfig {
+        //             device_id: "\\\\?\\usb#vid_045e&pid_0294&mi_00#a&2f495d5d&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global".to_string(),
+        //             four_cc: Some(['Y', 'U', 'Y', 'V']),
+        //         }),
+        //     ],
+        //     stream_config: CameraStreamConfig {
+        //         jpeg_quality: 95,
+        //     },
+        //     width: 640,
+        //     height: 480,
+        //     fps: 30.0,
+        // },
     ];
 
     #[cfg(feature = "development-machine-2")]

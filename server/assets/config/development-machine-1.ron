@@ -8,7 +8,7 @@ Config (
                     four_cc: None,
                 )),
                 MediaRS(MediaRSCameraConfig(
-                    device_id: "\\\\?\\usb#vid_045e&pid_0772&mi_00#a&6e1307a&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global",
+                    device_id: "\\\\?\\usb#vid_045e&pid_0772&mi_00#c&2c5491c4&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global",
                     four_cc: None,
                 )),
             ],
@@ -27,7 +27,7 @@ Config (
                     four_cc: Some(('Y', 'U', 'Y', '2')),
                 )),
                 MediaRS(MediaRSCameraConfig (
-                    device_id: "\\\\?\\usb#vid_32e6&pid_9211&mi_00#9&16b06be9&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global",
+                    device_id: "\\\\?\\usb#vid_32e6&pid_9211&mi_00#c&2393f5c7&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global",
                     four_cc: Some(('Y', 'U', 'Y', 'V')),
                 )),
             ],
