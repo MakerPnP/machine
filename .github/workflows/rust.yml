@@ -21,4 +21,4 @@ jobs:
     - name: Update submodules
       run: git submodule update --init
     - name: Build (firmware-stm32h743zi)
-      run: cd ioboard/firmware-stm32h743zi && cargo build --verbose
+      run: cd firmware/firmware-stm32h743zi && cargo build --verbose
