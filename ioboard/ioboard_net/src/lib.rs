@@ -15,14 +15,16 @@ use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Duration, Ticker, Timer, WithTimeout};
 use embedded_io_async::Write;
 use embedded_nal_async::TcpConnect;
-use ergot::exports::bbq2::traits::coordination::cas::AtomicCoord;
-use ergot::interface_manager::profiles::direct_edge::embassy_net_udp_0_7::{
+use ergot::exports::bbqueue::traits::coordination::cas::AtomicCoord;
+use ergot::interface_manager::transports::embassy_net_udp::{
     RxTxWorker, UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX,
 };
 use ergot::logging::log_v0_4::LogSink;
 use ergot::toolkits::embassy_net_v0_7 as kit;
 use ergot::well_known::{DeviceInfo, ErgotPingEndpoint};
 use ergot::{Address, topic};
+use ergot::interface_manager::InterfaceState;
+use ergot::prelude::{EdgeFrameProcessor, EDGE_NODE_ID};
 use ioboard_shared::commands::IoBoardCommand;
 use ioboard_shared::yeet::Yeet;
 use ioboard_trace::tracepin;
@@ -64,7 +66,7 @@ impl<CLIENT: TcpConnect> IoConnection<CLIENT> {
     pub async fn run(&mut self) -> ! {
         loop {
             // You need to start a server on the host machine, for example: `nc -l 8000`
-            let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 18, 41), 8000));
+            let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 18, 18), 8000));
 
             info!("Connecting...");
             let r = self.client.connect(addr).await;
@@ -170,7 +172,7 @@ async fn networking_task(stack: embassy_net::Stack<'static>, spawner: Spawner, s
     let mut udp_socket = UdpSocket::new(stack, rx_meta, rx_buffer, tx_meta, tx_buffer);
 
     let port = 8000_u16;
-    let remote_endpoint = IpEndpoint::new(Ipv4Address::new(192, 168, 18, 41).into(), port);
+    let remote_endpoint = IpEndpoint::new(Ipv4Address::new(192, 168, 18, 18).into(), port);
     let local_endpoint = IpEndpoint::new(config.address.address().into(), port);
     udp_socket
         .bind(local_endpoint)
@@ -218,10 +220,10 @@ async fn networking_task(stack: embassy_net::Stack<'static>, spawner: Spawner, s
 #[embassy_executor::task]
 async fn run_socket(socket: UdpSocket<'static>, scratch_buf: &'static mut [u8], endpoint: IpEndpoint) {
     let consumer = OUTQ.framed_consumer();
-    let mut rxtx = RxTxWorker::new_target(&STACK, socket, (), consumer, endpoint);
+    let mut rxtx = RxTxWorker::new(&STACK, socket, EdgeFrameProcessor::new(), (), consumer, endpoint);
 
     loop {
-        _ = rxtx.run(scratch_buf).await;
+        _ = rxtx.run(InterfaceState::Active { net_id: 1, node_id: EDGE_NODE_ID }, scratch_buf).await;
     }
 }
 
@@ -423,7 +425,7 @@ async fn udp_spam_task(stack: embassy_net::Stack<'static>) -> ! {
 
     let mut socket = UdpSocket::new(stack, &mut rx_meta, &mut rx_buffer, &mut tx_meta, &mut tx_buffer);
 
-    let remote_endpoint = (Ipv4Address::new(192, 168, 18, 41), 8000);
+    let remote_endpoint = (Ipv4Address::new(192, 168, 18, 18), 8000);
     socket
         .bind(remote_endpoint)
         .expect("bound");
