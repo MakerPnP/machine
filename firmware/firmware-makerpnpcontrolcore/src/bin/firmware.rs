@@ -92,6 +92,11 @@ fn main() -> ! {
 
 #[embassy_executor::task]
 async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
+    let mut fpga_creset_b = Output::new(p.PF15, Level::Low, Speed::Low);
+
+    info!("Enabling FPGA");
+    fpga_creset_b.set_high();
+
     #[cfg(feature = "tracepin")]
     {
         info!("Initializing trace pins");
