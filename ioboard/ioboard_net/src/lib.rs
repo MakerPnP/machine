@@ -31,6 +31,7 @@ use ioboard_trace::tracepin;
 use log::{error, info};
 use mutex::raw_impls::cs::CriticalSectionRawMutex;
 use static_cell::{ConstStaticCell, StaticCell};
+use defmt::unwrap;
 
 //
 // Ergot configuration
@@ -118,8 +119,7 @@ pub fn init<'d, D: Driver>(driver: D, random_seed: u64, spawner: Spawner) -> Run
     defmt::info!("Hardware address: {}", stack.hardware_address());
 
     spawner
-        .spawn(networking_task(stack, spawner.clone(), SCRATCH_BUF.take()))
-        .unwrap();
+        .spawn(unwrap!(networking_task(stack, spawner.clone(), SCRATCH_BUF.take())));
 
     runner
 }
@@ -185,23 +185,23 @@ async fn networking_task(stack: embassy_net::Stack<'static>, spawner: Spawner, s
     );
 
     // Spawn I/O worker tasks
-    spawner.must_spawn(run_socket(udp_socket, scratch_buf, remote_endpoint));
+    spawner.spawn(unwrap!(run_socket(udp_socket, scratch_buf, remote_endpoint)));
 
     // Spawn socket using tasks
-    spawner.must_spawn(pingserver());
-    spawner.must_spawn(pinger());
-    spawner.must_spawn(discovery_responder());
+    spawner.spawn(unwrap!(pingserver()));
+    spawner.spawn(unwrap!(pinger()));
+    spawner.spawn(unwrap!(discovery_responder()));
 
     let yeet_command_sender = YEET_COMMAND_CHANNEL.sender();
     let yeet_command_receiver = YEET_COMMAND_CHANNEL.receiver();
 
-    spawner.must_spawn(yeeter(yeet_command_receiver));
-    spawner.must_spawn(command_listener(yeet_command_sender));
+    spawner.spawn(unwrap!(yeeter(yeet_command_receiver)));
+    spawner.spawn(unwrap!(command_listener(yeet_command_sender)));
 
     LOGSINK.register_static(log::LevelFilter::Info);
 
     if false {
-        spawner.must_spawn(udp_spam_task(stack));
+        spawner.spawn(unwrap!(udp_spam_task(stack)));
 
         crate::IoConnection::new(tcp_client)
             .run()

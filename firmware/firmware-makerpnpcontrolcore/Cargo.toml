@@ -1,6 +1,6 @@
 # cargo manifest format - https://doc.rust-lang.org/cargo/reference/manifest.html
 [package]
-name = "ioboard_firmware-stm32h743zi"
+name = "ioboard_firmware-makerpnpcontrolcore"
 version = "0.1.0"
 edition = "2024"
 
@@ -16,7 +16,7 @@ ioboard_main       = { path = "../../ioboard/ioboard_main" }
 ioboard_net        = { path = "../../ioboard/ioboard_net" }
 ioboard_trace      = { path = "../../ioboard/ioboard_trace" }
 
-embassy-stm32      = { version = "0.6.0", features = ["defmt", "stm32h743zi", "time-driver-any", "unstable-pac", "exti", "memory-x"] }
+embassy-stm32      = { version = "0.6.0", features = ["defmt", "stm32h735ig", "time-driver-tim12", "unstable-pac", "exti", "memory-x"] }
 embassy-executor   = { version = "0.10.0", features = ["defmt", "platform-cortex-m", "executor-thread", "executor-interrupt"] }
 embassy-time       = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime-us", "tick-hz-32_768"] }
 embassy-sync       = { version = "0.8.0", features = ["defmt"] }

@@ -1,5 +1,5 @@
 //! BUILDING:
-//! make sure the working directory is the `firmware-stm32h743zi` directory when running cargo.
+//! make sure the working directory is the `firmware-makerpnpcontrolcore` directory when running cargo.
 //! if not, you'll likely get a compile error in embassy executor as the target from the cargo.toml
 //! won't be picked up if you compile from the root directory
 
@@ -57,22 +57,13 @@ static HEAP: Heap = Heap::empty();
 // Embassy configuration
 //
 
-#[derive(Debug, Copy, Clone, PartialEq, Hash)]
-#[allow(dead_code)]
-enum CpuRevision {
-    RevV,
-    RevY,
-    RevZ,
-}
-const CPU_REV: CpuRevision = CpuRevision::RevY;
-
 bind_interrupts!(struct Irqs {
     ETH => eth::InterruptHandler;
-    RNG => rng::InterruptHandler<peripherals::RNG>;
+    HASH_RNG => rng::InterruptHandler<peripherals::RNG>;
 });
 
 #[interrupt]
-unsafe fn UART4() {
+unsafe fn I2C1_EV() {
     unsafe { EXECUTOR_HIGH.on_interrupt() }
 }
 
@@ -83,106 +74,14 @@ static EXECUTOR_LOW: StaticCell<Executor> = StaticCell::new();
 fn main() -> ! {
     //trigger_stack_corruption();
 
-    let mut config = Config::default();
-    config.rcc.hse = Some(rcc::Hse {
-        freq: embassy_stm32::time::Hertz(8_000_000),
-        mode: rcc::HseMode::Oscillator,
-    });
-    config.rcc.ls = LsConfig::off();
-    config.rcc.hsi48 = Some(Default::default()); // needed for RNG
-    config.rcc.sys = Sysclk::Pll1P;
-    config.rcc.d1c_pre = AHBPrescaler::Div1;
-    config.rcc.ahb_pre = AHBPrescaler::Div2;
-    config.rcc.apb1_pre = APBPrescaler::Div2;
-    config.rcc.apb2_pre = APBPrescaler::Div2;
-    config.rcc.apb3_pre = APBPrescaler::Div2;
-    config.rcc.apb4_pre = APBPrescaler::Div2;
-    config.rcc.timer_prescaler = rcc::TimerPrescaler::DefaultX2;
-
-    if CPU_REV == CpuRevision::RevV {
-        config.rcc.voltage_scale = rcc::VoltageScale::Scale0;
-        config.rcc.pll1 = Some(rcc::Pll {
-            source: Pllsrc::Hse,
-            prediv: Pllm::Div1,
-            mul: Plln::Mul120,
-            // 480Mhz
-            fracn: None,
-            divp: Some(PllDiv::Div2),
-            // 160Mhz
-            divq: Some(PllDiv::Div6),
-            divr: None,
-        });
-    } else {
-        config.rcc.voltage_scale = rcc::VoltageScale::Scale1;
-        config.rcc.pll1 = Some(rcc::Pll {
-            source: Pllsrc::Hse,
-            prediv: Pllm::Div1,
-            mul: Plln::Mul100,
-            // 400Mhz
-            fracn: None,
-            divp: Some(PllDiv::Div2),
-            // 160Mhz
-            divq: Some(PllDiv::Div5),
-            divr: None,
-        });
-    }
-    config.rcc.pll2 = Some(rcc::Pll {
-        source: Pllsrc::Hse,
-
-        prediv: Pllm::Div4,
-        mul: Plln::Mul200,
-        // 200Mhz
-        fracn: None,
-        divp: Some(PllDiv::Div2),
-        // 100Mhz
-        divq: Some(PllDiv::Div4),
-        // 200Mhz
-        divr: Some(PllDiv::Div2),
-    });
-    config.rcc.pll3 = Some(rcc::Pll {
-        source: Pllsrc::Hse,
-        prediv: Pllm::Div4,
-        mul: Plln::Mul192,
-        // 192Mhz
-        fracn: None,
-        divp: Some(PllDiv::Div2),
-        // 48Mhz
-        divq: Some(PllDiv::Div8),
-        // 92Mhz
-        divr: Some(PllDiv::Div4),
-    });
-
-    // 200mhz
-    config.rcc.mux.quadspisel = Fmcsel::Pll2R;
-    // 200mhz
-    config.rcc.mux.sdmmcsel = Sdmmcsel::Pll2R;
-    // 100mhz
-    config.rcc.mux.fdcansel = Fdcansel::Pll2Q;
-    // 48mhz from crystal (not RC48)
-    config.rcc.mux.usbsel = Usbsel::Pll3Q;
-    // 100/120mhz
-    config.rcc.mux.usart234578sel = Usart234578sel::Pclk1;
-    // 100/120mhz
-    config.rcc.mux.usart16910sel = Usart16910sel::Pclk2;
-    // 100/120mhz
-    config.rcc.mux.i2c1235sel = I2c1235sel::Pclk1;
-    // 100mhz
-    config.rcc.mux.i2c4sel = I2c4sel::Pclk4;
-    // 200mhz
-    config.rcc.mux.spi123sel = Saisel::Pll2P;
-    // 100mhz
-    config.rcc.mux.spi45sel = Spi45sel::Pll2Q;
-    // 100mhz
-    config.rcc.mux.spi6sel = Spi6sel::Pll2Q;
-
-    let p = embassy_stm32::init(config);
-    info!("firmware-stm32h743zi");
+    let p = rcc_setup::stm32h735g_init();
+    info!("firmware-makerpnpcontrolcore");
 
     init_heap();
 
-    // High-priority executor: using UART4 interrupt, priority level 6
-    interrupt::UART4.set_priority(Priority::P6);
-    let hp_spawner = EXECUTOR_HIGH.start(interrupt::UART4);
+    // High-priority executor: using unused I2C1 interrupt, priority level 6
+    interrupt::I2C1_EV.set_priority(Priority::P6);
+    let hp_spawner = EXECUTOR_HIGH.start(interrupt::I2C1_EV);
 
     // Low priority executor: runs in thread mode, using WFE/SEV
     let executor = EXECUTOR_LOW.init(Executor::new());
@@ -193,18 +92,16 @@ fn main() -> ! {
 
 #[embassy_executor::task]
 async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
-    info!("Initializing LED");
-    let led = Output::new(p.PB14, Level::Low, Speed::Low);
-    {
-        // scope required to release mutex guard
-        *(LED.lock().await) = Some(led);
-    }
-    lp_spawner.spawn(unwrap!(activity_indicator_task(&LED, Duration::from_millis(200))));
-
     #[cfg(feature = "tracepin")]
     {
         info!("Initializing trace pins");
-        let mut trace_pins = TracePinsService::new([p.PD2.into(), p.PD3.into(), p.PD4.into(), p.PD5.into()]);
+        // using TIM1 CH1-4 pins
+        let mut trace_pins = TracePinsService::new([
+            p.PE9.into(),
+            p.PE11.into(),
+            p.PE13.into(),
+            p.PE14.into()
+        ]);
         trace_pins.all_on();
         Timer::after(Duration::from_millis(500)).await;
         trace_pins.all_off();
@@ -222,11 +119,9 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     info!("Initializing ETH");
     // TODO generate mac address from CPU ID
     //      potentially using this algorythm (C): https://github.com/zephyrproject-rtos/zephyr/issues/59993#issuecomment-1644030438
-    let mac_addr = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
+    let mac_addr = [0x00, 0x00, 0xC0, 0xDE, 0xC0, 0xDE];
 
     static PACKETS: StaticCell<PacketQueue<8, 8>> = StaticCell::new();
-    // warning: Not all STM32H7 devices have the exact same pins here
-    // for STM32H747XIH, replace p.PB13 for PG12
     let device = Ethernet::new(
         PACKETS.init(PacketQueue::<8, 8>::new()),
         p.ETH,
@@ -250,13 +145,14 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
 
     info!("Initializing Stepper");
+    // using TIM8 CH1-3 pins
     let mut stepper = GpioBitbashStepper::new(
         // enable
-        Output::new(p.PC8, Level::Low, Speed::Low),
+        Output::new(p.PC6, Level::Low, Speed::Low),
         // step
-        Output::new(p.PC9, Level::Low, Speed::Low),
+        Output::new(p.PC7, Level::Low, Speed::Low),
         // direction
-        Output::new(p.PC10, Level::Low, Speed::Low),
+        Output::new(p.PC8, Level::Low, Speed::Low),
         StepperEnableMode::ActiveHigh,
         1000,
         1000,
@@ -265,7 +161,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
     info!("Initialisation complete");
 
-    hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(stepper))));
+    //hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(stepper))));
 
     info!("running");
 
@@ -281,24 +177,6 @@ type Device = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
 #[embassy_executor::task]
 async fn embassy_net_task(mut runner: embassy_net::Runner<'static, Device>) -> ! {
     runner.run().await
-}
-
-type LedType = Mutex<ThreadModeRawMutex, Option<Output<'static>>>;
-static LED: LedType = Mutex::new(None);
-
-#[embassy_executor::task]
-async fn activity_indicator_task(led: &'static LedType, delay: Duration) {
-    let mut ticker = Ticker::every(delay);
-
-    loop {
-        {
-            let mut led_unlocked = led.lock().await;
-            if let Some(pin_ref) = led_unlocked.as_mut() {
-                pin_ref.toggle();
-            }
-        }
-        ticker.next().await;
-    }
 }
 
 type StepperInstance = GpioBitbashStepper<Output<'static>, Output<'static>, Output<'static>>;
@@ -366,4 +244,68 @@ pub fn trigger_stack_corruption() {
 
     // do a volatile read so compiler cannot prune the buffer away entirely
     unsafe { ptr::read_volatile(p) };
+}
+
+mod rcc_setup {
+
+    use embassy_stm32::rcc::mux::{Fmcsel, Rngsel, Usbsel};
+    use embassy_stm32::rcc::{Hse, HseMode, *};
+    use embassy_stm32::time::Hertz;
+    use embassy_stm32::{Config, Peripherals};
+
+    /// Sets up clocks for the stm32h735g mcu
+    /// change this if you plan to use a different microcontroller
+    pub fn stm32h735g_init() -> Peripherals {
+        // setup power and clocks for an stm32h735g-dk run from an external 25 Mhz external oscillator
+        let mut config = Config::default();
+        config.rcc.hse = Some(Hse {
+            freq: Hertz::mhz(50),
+            mode: HseMode::Bypass,
+        });
+        config.rcc.hsi48 = None;
+        //config.rcc.hsi48 = Some(Default::default()); // needed for RNG
+        config.rcc.hsi = None;
+        //config.rcc.hsi = Some(HSIPrescaler::Div1);
+        config.rcc.csi = false;
+        config.rcc.pll1 = Some(Pll {
+            source: PllSource::Hse,
+            prediv: PllPreDiv::Div4,  // 12.5Mhz
+            mul: PllMul::Mul44,       // 550Mhz
+            divp: Some(PllDiv::Div1), // 550Mhz
+            divq: Some(PllDiv::Div4), // 110Mhz
+            divr: Some(PllDiv::Div2), // 275Mhz
+        });
+        config.rcc.pll2 = Some(Pll {
+            source: PllSource::Hse,
+            prediv: PllPreDiv::Div5,  // 10Mhz
+            mul: PllMul::Mul40,       // 400Mhz
+            divp: Some(PllDiv::Div5), // 80Mhz
+            divq: Some(PllDiv::Div2), // 200Mhz
+            divr: Some(PllDiv::Div3), // 133.33Mhz (for OSPI)
+        });
+        config.rcc.pll3 = Some(Pll {
+            source: PllSource::Hse,
+            prediv: PllPreDiv::Div25, // 2Mhz
+            mul: PllMul::Mul96,       // 192Mhz
+            divp: Some(PllDiv::Div1), // 192Mhz
+            divq: Some(PllDiv::Div4), // 48Mhz (USB)
+            divr: Some(PllDiv::Div8), // 24Mhz
+        });
+        config.rcc.voltage_scale = VoltageScale::Scale0;
+        config.rcc.supply_config = SupplyConfig::DirectSMPS;
+        config.rcc.sys = Sysclk::Pll1P; // 550Mhz
+        config.rcc.d1c_pre = AHBPrescaler::Div1; // 550Mhz
+        config.rcc.ahb_pre = AHBPrescaler::Div2; // 275Mhz
+        config.rcc.apb1_pre = APBPrescaler::Div2; // 137.5Mhz
+        config.rcc.apb2_pre = APBPrescaler::Div2; // 137.5Mhz
+        config.rcc.apb3_pre = APBPrescaler::Div2; // 137.5Mhz
+        config.rcc.apb4_pre = APBPrescaler::Div2; // 137.5Mhz
+
+        config.rcc.mux.octospisel = Fmcsel::Pll2R; // 133.33Mhz
+        config.rcc.mux.rngsel = Rngsel::Pll1Q; // 110Mhz
+        //config.rcc.mux.rngsel = Rngsel::Hsi48;
+        config.rcc.mux.usbsel = Usbsel::Pll3Q; // 48Mhz
+
+        embassy_stm32::init(config)
+    }
 }

@@ -8,21 +8,18 @@ edition = "2024"
 [dependencies]
 ioboard_trace      = { path = "../ioboard_trace" }
 ioboard_shared     = { path = "../../common/ioboard_shared", features = ["defmt"] }
-embedded-nal-async = "0.8.0"
-embedded-io-async  = "0.6.1"
+embedded-nal-async = { workspace = true }
+embedded-io-async  = { workspace = true }
 
-embassy-net        = { version = "0.7.1", features = ["defmt", "tcp", "dhcpv4", "medium-ethernet"] }
-embassy-time       = { version = "0.5.0", features = ["defmt", "defmt-timestamp-uptime"] }
-embassy-executor   = { version = "0.9.1" }
-embassy-sync       = { version = "0.7.2" }
-embassy-futures    = { version = "0.1.2" }
-
-#embassy-net       = { version = "0.7.1", path = "../../libs/embassy/embassy-net", features = ["defmt", "tcp", "dhcpv4", "medium-ethernet"] }
-#embassy-time      = { version = "0.5.0", path = "../../libs/embassy/embassy-time", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-net        = { workspace = true, features = ["defmt", "tcp", "dhcpv4", "medium-ethernet"] }
+embassy-time       = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-executor   = { workspace = true }
+embassy-sync       = { workspace = true }
+embassy-futures    = { workspace = true }
 
 ergot              = { path = "../../libs/ergot/crates/ergot", features = ["embassy-net-v0_7"] }
 mutex              = { workspace = true }
-bbq2               = { version = "0.4.1", default-features = false, features = ["critical-section", "maitake-sync-0_2"] }
+bbqueue           = { version = "0.7.0", default-features = false, features = ["critical-section", "maitake-sync-0_3"] }
 heapless           = { version = "0.9", default-features = false }
 postcard-schema    = { workspace = true, features = ["derive"] }
 serde              = { workspace = true, default-features = false, features = ["derive"] }
