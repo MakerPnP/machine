@@ -100,12 +100,12 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     #[cfg(feature = "tracepin")]
     {
         info!("Initializing trace pins");
-        // using TIM1 CH1-4 pins
+        // using TIM2 CH1-4 pins (P1_T32_CH1-4)
         let mut trace_pins = TracePinsService::new([
-            p.PE9.into(),
-            p.PE11.into(),
-            p.PE13.into(),
-            p.PE14.into()
+            p.PA0.into(),
+            p.PB3.into(),
+            p.PB10.into(),
+            p.PB11.into()
         ]);
         trace_pins.all_on();
         Timer::after(Duration::from_millis(500)).await;
@@ -150,14 +150,17 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
 
     info!("Initializing Stepper");
-    // using TIM8 CH1-3 pins
     let mut stepper = GpioBitbashStepper::new(
         // enable
-        Output::new(p.PC6, Level::Low, Speed::Low),
+        // Via PA8 to FPGA IOR_140_GBIN3, FPGA needs to route internally to the WAKE_1 output.
+        // enable is ACTIVE_LOW.
+        Output::new(p.PA8, Level::High, Speed::Low),
         // step
-        Output::new(p.PC7, Level::Low, Speed::Low),
+        // TIM1_CH1 = P1_T16_CH1 -> STEP_A_I (isolated) -> P1 MOTOR1
+        Output::new(p.PE9, Level::Low, Speed::Low),
         // direction
-        Output::new(p.PC8, Level::Low, Speed::Low),
+        // TIM1_CH2 = P1_T16_CH2 -> DIR_A_I (isolated) -> P1 MOTOR1
+        Output::new(p.PE11, Level::Low, Speed::Low),
         StepperEnableMode::ActiveHigh,
         1000,
         1000,
@@ -166,7 +169,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
     info!("Initialisation complete");
 
-    //hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(stepper))));
+    hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(stepper))));
 
     info!("running");
 
