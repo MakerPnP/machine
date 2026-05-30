@@ -53,23 +53,29 @@ pub async fn run<STEPPER: Stepper>(mut stepper: STEPPER) {
     loop {
         for i in 0..2 {
             info!("Run simple loop {}", i);
+            stepper.enable().unwrap();
+            Timer::after(Duration::from_millis(100)).await;
             if run_simple_loop(&mut stepper, move_steps)
                 .await
                 .is_err()
             {
                 break;
             }
+            stepper.disable().unwrap();
             Timer::after(Duration::from_millis(1000)).await;
         }
 
         for i in 0..2 {
             info!("Run trajectory {}", i);
+            stepper.enable().unwrap();
+            Timer::after(Duration::from_millis(100)).await;
             if run_trajectory_loop(&mut stepper, trajectory_units, steps_per_unit)
                 .await
                 .is_err()
             {
                 break;
             }
+            stepper.disable().unwrap();
             Timer::after(Duration::from_millis(1000)).await;
         }
     }
