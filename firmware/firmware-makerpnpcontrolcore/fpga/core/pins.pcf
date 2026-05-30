@@ -1,0 +1,13 @@
+### main ###
+set_io  TCXO H16
+
+### wake signals ###
+# temporarily using MCO input from MCU until WAKE_1 can by set by QSPI
+set_io  NWAKE_IN H11
+set_io  NWAKE_1 R9
+
+### blink ###
+set_io  FPGA_ACT E6
+
+
+
