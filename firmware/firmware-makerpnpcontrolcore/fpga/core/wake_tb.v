@@ -7,7 +7,7 @@ module wake_tb;
     wire NWAKE_1;
     reg RESET = 1;
 
-    // Instantiate your design (DUT = Device Under Test)
+    // Instantiate the DUT (DUT = Device Under Test)
     wake dut (
         .reset(RESET),
         .nwake_in(NWAKE_IN),

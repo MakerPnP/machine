@@ -3,7 +3,11 @@ module core_top (
     output FPGA_ACT,
     (* PULLUP = 1 *)
     input NWAKE_IN,
-    output NWAKE_1
+    output NWAKE_1,
+    output MUX_SEL1,
+    output MUX_SEL2,
+    output MUX_SEL3,
+    output MUX_SEL4,
 );
 
 wire clk_100;
@@ -36,6 +40,14 @@ wake u_wake (
     .reset(reset),
     .nwake_in(NWAKE_IN),
     .nwake_1(NWAKE_1)
+);
+
+timer_mux u_timer_mux (
+    .reset(reset),
+    .mux_sel1(MUX_SEL1),
+    .mux_sel2(MUX_SEL2),
+    .mux_sel3(MUX_SEL3),
+    .mux_sel4(MUX_SEL4)
 );
 
 endmodule

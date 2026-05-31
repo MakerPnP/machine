@@ -7,7 +7,7 @@ module blink_tb;
     wire FPGA_ACT;
     reg RESET = 1;
 
-    // Instantiate your design (DUT = Device Under Test)
+    // Instantiate the DUT (DUT = Device Under Test)
     blink #(
         .SPEED(10)   // small number for fast simulation
     ) dut (

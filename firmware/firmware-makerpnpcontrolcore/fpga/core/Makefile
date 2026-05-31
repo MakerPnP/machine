@@ -3,11 +3,11 @@
 
 PROJECT  := core
 TOP      := core_top
-TB       := blink wake
+TB       := blink wake timer_mux
 FAMILY   := ice40
 TYPE     := hx8k
 PACKAGE  := ct256
-VERILOGS := core_top.v blink.v wake.v pll.v
+VERILOGS := core_top.v blink.v wake.v pll.v timer_mux.v
 COMMON_VLOGS := common.v
 
 FLASH_ALGO_ROOT := ../../../../../dev-tools/makerpnpcore-w25q16jv

@@ -9,5 +9,8 @@ set_io  NWAKE_1 R9
 ### blink ###
 set_io  FPGA_ACT E6
 
-
-
+### timer muxes ###
+set_io  MUX_SEL1 L14
+set_io  MUX_SEL2 M15
+set_io  MUX_SEL3 D15
+set_io  MUX_SEL4 F15
