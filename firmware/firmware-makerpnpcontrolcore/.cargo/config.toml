@@ -12,7 +12,7 @@ rustflags = [
 ]
 
 [env]
-DEFMT_LOG = "info"
+DEFMT_LOG = "debug"
 
 [profile.release]
 # Allows defmt to display log locations even in release

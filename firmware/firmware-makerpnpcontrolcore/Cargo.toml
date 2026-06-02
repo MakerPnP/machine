@@ -38,6 +38,13 @@ embedded-hal-async = "1.0.0"
 static_cell        = "2.1.1"
 embedded-alloc     = "0.6.0"
 
+# this fork contains fixes from sebastianbergt and frozendrop forks.
+# including being updated to use embedded-hal 1.0.0 and defmt support
+tmc5160 = { git = "https://github.com/MakerPnP/tmc5160-rs.git", features = ["defmt"], branch = "makerpnp" }
+#tmc5160 = { path = "../../../tmc5160-rs", features = ["defmt"] }
+modular-bitfield-to-value = { git = "https://github.com/MakerPnp/modular-bitfield-to-value", branch = "makerpnp" }
+#modular-bitfield-to-value = { path = "../../../modular-bitfield-to-value" }
+
 # profiles - https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.release]
 debug = "full"

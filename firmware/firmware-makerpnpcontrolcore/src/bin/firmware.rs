@@ -13,7 +13,7 @@ use cortex_m_rt::entry;
 use defmt::*;
 use embassy_executor::SendSpawner;
 use embassy_executor::{Executor, InterruptExecutor, Spawner};
-use embassy_stm32::Peripherals;
+use embassy_stm32::{spi, Peripherals};
 use embassy_stm32::eth::{PacketQueue, Sma, StationManagement};
 use embassy_stm32::eth::{Ethernet, GenericPhy};
 use embassy_stm32::gpio::{Level, Output, Speed};
@@ -26,19 +26,26 @@ use embassy_stm32::rcc::mux::{
 use embassy_stm32::rcc::{AHBPrescaler, APBPrescaler, LsConfig, PllDiv, Sysclk};
 use embassy_stm32::rng::Rng;
 use embassy_stm32::{Config, bind_interrupts, eth, interrupt, peripherals, rcc, rng};
+use embassy_stm32::mode::Blocking;
+use embassy_stm32::spi::mode::Master;
+use embassy_stm32::spi::Spi;
+use embassy_stm32::time::mhz;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Ticker, Timer};
+use embassy_time::{Delay, Duration, Ticker, Timer};
 use embedded_alloc::LlffHeap as Heap;
+use embedded_hal::spi::Operation::DelayNs;
 use ioboard_main::stepper::Stepper;
 #[cfg(feature = "tracepin")]
 use ioboard_trace::tracepin;
 #[cfg(feature = "tracepin")]
 use ioboard_trace::tracepin::TracePins;
 use static_cell::StaticCell;
+use tmc5160::Tmc5160;
 use {defmt_rtt as _, panic_probe as _};
 
 use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
+use crate::stepper::tmc5160::Tmc5160Stepper;
 #[cfg(feature = "tracepin")]
 use crate::trace::TracePinsService;
 
@@ -150,18 +157,34 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
 
     info!("Initializing Stepper");
-    let mut stepper = GpioBitbashStepper::new(
-        // enable
-        // Via PA8 to FPGA IOR_140_GBIN3, FPGA needs to route internally to the WAKE_1 output.
-        // enable is ACTIVE_LOW.
-        Output::new(p.PA8, Level::High, Speed::Low),
+
+    // Setup spi i/o
+    let p1_sck = p.PD3;
+    let p1_mosi = p.PB15;
+    let p1_miso = p.PB14;
+    let mut p1_nss_1 = Output::new(p.PB12, Level::High, Speed::Low);
+    let mut p1_nss_2 = Output::new(p.PG3, Level::High, Speed::Low);
+    // enable
+    // Via PA8 to FPGA IOR_140_GBIN3, FPGA needs to route internally to the WAKE_1 output.
+    // enable is ACTIVE_LOW.
+    let p1_wake = Output::new(p.PA8, Level::High, Speed::Low);
+
+    let mut spi_config = spi::Config::default();
+    spi_config.frequency = mhz(1);
+
+    let spi = spi::Spi::new_blocking(p.SPI2, p1_sck, p1_mosi, p1_miso, spi_config);
+
+    let mut stepper = Tmc5160Stepper::new(
+        spi,
+        p1_nss_1,
+        p1_wake,
+        Delay,
         // step
         // TIM1_CH1 = P1_T16_CH1 -> STEP_A_I (isolated) -> P1 MOTOR1
         Output::new(p.PE9, Level::Low, Speed::Low),
         // direction
         // TIM1_CH2 = P1_T16_CH2 -> DIR_A_I (isolated) -> P1 MOTOR1
         Output::new(p.PE11, Level::Low, Speed::Low),
-        StepperEnableMode::ActiveHigh,
         1000,
         1000,
     );
@@ -187,7 +210,7 @@ async fn embassy_net_task(mut runner: embassy_net::Runner<'static, Device>) -> !
     runner.run().await
 }
 
-type StepperInstance = GpioBitbashStepper<Output<'static>, Output<'static>, Output<'static>>;
+type StepperInstance = Tmc5160Stepper<Spi<'static, Blocking, Master>, Output<'static>, Output<'static>, Delay, Output<'static>, Output<'static>>;
 #[embassy_executor::task]
 async fn stepper_task(runner: StepperRunner<StepperInstance>) {
     runner.run().await

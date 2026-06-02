@@ -804,8 +804,10 @@ dependencies = [
  "ioboard_main",
  "ioboard_net",
  "ioboard_trace",
+ "modular-bitfield-to-value",
  "panic-probe",
  "static_cell",
+ "tmc5160",
 ]
 
 [[package]]
@@ -955,6 +957,45 @@ name = "memchr"
 version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
+
+[[package]]
+name = "modular-bitfield"
+version = "0.14.0-pre"
+source = "git+https://github.com/makerpnp/modular-bitfield?rev=db61b82052990068f32f59d3ed187647159556db#db61b82052990068f32f59d3ed187647159556db"
+dependencies = [
+ "defmt 1.0.1",
+ "modular-bitfield-impl",
+ "static_assertions",
+]
+
+[[package]]
+name = "modular-bitfield-impl"
+version = "0.14.0-pre"
+source = "git+https://github.com/makerpnp/modular-bitfield?rev=db61b82052990068f32f59d3ed187647159556db#db61b82052990068f32f59d3ed187647159556db"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.110",
+]
+
+[[package]]
+name = "modular-bitfield-to-value"
+version = "0.1.0"
+source = "git+https://github.com/MakerPnp/modular-bitfield-to-value?branch=makerpnp#d7b1c4b92f844f2d0841cea7fac92928cd100267"
+dependencies = [
+ "modular-bitfield-to-value-impl",
+]
+
+[[package]]
+name = "modular-bitfield-to-value-impl"
+version = "0.1.0"
+source = "git+https://github.com/MakerPnp/modular-bitfield-to-value?branch=makerpnp#d7b1c4b92f844f2d0841cea7fac92928cd100267"
+dependencies = [
+ "modular-bitfield",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.110",
+]
 
 [[package]]
 name = "mutex"
@@ -1454,6 +1495,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f60246a4944f24f6e018aa17cdeffb7818b76356965d03b07d6a9886e8962185"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "tmc5160"
+version = "0.0.1"
+source = "git+https://github.com/MakerPnP/tmc5160-rs.git?branch=makerpnp#6d5fdf37b1f140926fcf7ef17ef4ba872c2e42dd"
+dependencies = [
+ "defmt 1.0.1",
+ "embedded-hal 1.0.0",
+ "modular-bitfield",
+ "modular-bitfield-to-value",
 ]
 
 [[package]]

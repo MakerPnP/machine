@@ -33,4 +33,6 @@ pub trait Stepper {
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum StepperError {
     IoError,
+    // FUTURE add a generic error type so the driver errors can be retained/handled/printed
+    DriverError,
 }
