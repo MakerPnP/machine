@@ -2,7 +2,7 @@
 set_io  TCXO H16
 
 ### wake signals ###
-# temporarily using MCO input from MCU until WAKE_1 can by set by QSPI
+# temporarily using MCO input from MCU to mirror the signal to NWAKE_[1-4] until WAKE_[1-4] can by set by QSPI
 set_io  NWAKE_IN H11
 set_io  NWAKE_1 R9
 
@@ -14,3 +14,9 @@ set_io  MUX_SEL1 L14
 set_io  MUX_SEL2 M15
 set_io  MUX_SEL3 D15
 set_io  MUX_SEL4 F15
+
+### expansion port clocks ###
+set_io  FPGA_CLK_1 T13
+set_io  FPGA_CLK_2 T14
+set_io  FPGA_CLK_3 B11
+set_io  FPGA_CLK_4 A11
