@@ -4,6 +4,9 @@ module core_top (
     (* PULLUP = 1 *)
     input NWAKE_IN,
     output NWAKE_1,
+    output NWAKE_2,
+    output NWAKE_3,
+    output NWAKE_4,
     output MUX_SEL1,
     output MUX_SEL2,
     output MUX_SEL3,

@@ -5,6 +5,9 @@ set_io  TCXO H16
 # temporarily using MCO input from MCU to mirror the signal to NWAKE_[1-4] until WAKE_[1-4] can by set by QSPI
 set_io  NWAKE_IN H11
 set_io  NWAKE_1 R9
+set_io  NWAKE_2 T11
+set_io  NWAKE_3 B10
+set_io  NWAKE_4 E13
 
 ### blink ###
 set_io  FPGA_ACT E6
