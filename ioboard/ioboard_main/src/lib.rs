@@ -26,6 +26,7 @@ pub async fn run<STEPPER: Stepper>(mut stepper: STEPPER) {
     stepper.set_pulse_width_us(step_pulse_width_us);
     stepper.set_pulse_delay_us(step_pulse_delay_us);
 
+    // NEMA 17 = 200 full steps/revolution.
     let default_motor_steps = 200;
     let micro_stepping_multiplier = 8;
     let motor_steps = default_motor_steps * micro_stepping_multiplier;
