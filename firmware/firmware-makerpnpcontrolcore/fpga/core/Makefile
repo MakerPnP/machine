@@ -1,16 +1,18 @@
 # MakerPnpControl-CORE
 # yosys+nextpnr
 
+YOSYS_ROOT := /usr/local/share/yosys
+FLASH_ALGO_ROOT := ../../../../../dev-tools/makerpnpcore-w25q16jv
+
 PROJECT  := core
 TOP      := core_top
-TB       := blink wake timer_mux clock_out
+TB       := blink wake timer_mux clock_out quadspi
 FAMILY   := ice40
 TYPE     := hx8k
 PACKAGE  := ct256
-VERILOGS := core_top.v blink.v wake.v pll.v timer_mux.v clock_out.v
-COMMON_VLOGS := common.v
+VERILOGS := core_top.v blink.v wake.v pll.v timer_mux.v clock_out.v memory.v quadspi.v encoders.v leds.v
+COMMON_VLOGS := common.v memory.v encoders.v $(YOSYS_ROOT)/ice40/cells_sim.v
 
-FLASH_ALGO_ROOT := ../../../../../dev-tools/makerpnpcore-w25q16jv
 
 # helper function: build file list per TB
 define TB_SRCS
@@ -48,7 +50,7 @@ $(PROJECT).bin: $(PROJECT).asc
 # -------------------------
 
 sim_%:
-	iverilog -o $*.vvp $(call TB_SRCS,$*)
+	iverilog -g2012 -o $*.vvp $(call TB_SRCS,$*)
 	vvp $*.vvp
 
 wave_%: sim_%
