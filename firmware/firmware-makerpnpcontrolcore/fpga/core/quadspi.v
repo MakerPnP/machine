@@ -7,7 +7,7 @@ module quadspi (
 
     // Memory Interface Port A
     output reg [11:0] mem_addr,
-    output reg [7:0] mem_din,
+    output reg [7:0]  mem_din,
     input  wire [7:0] mem_dout,
     output reg        mem_we
 );
@@ -26,13 +26,13 @@ module quadspi (
 
     // Tri-state buffer logic
     reg        io_out_en;
-    wire [3:0] io_out_mux;
+    reg [3:0]  io_out_reg;   // Changed to register to prevent combinatorial bleeding
     wire [3:0] io_in;
 
     // -----------------------------------------------------------------
     // Synchronous Edge Detection for Bursty MCU SCK
     // -----------------------------------------------------------------
-    reg [1:0] sck_sync;
+    reg [1:0] sck_sync = 2'b00;
     always @(posedge clk_sys or posedge cs_n) begin
         if (cs_n) begin
             sck_sync <= 2'b00;
@@ -41,8 +41,9 @@ module quadspi (
         end
     end
 
-    // High for exactly 1 clk_sys period when sck transitions low-to-high
-    wire sck_rising = (sck_sync == 2'b01);
+    // High for exactly 1 clk_sys period when sck transitions
+    wire sck_rising  = (sck_sync == 2'b01);
+    wire sck_falling = (sck_sync == 2'b10); // FIXED: Corrected from 2'b00 to 2'b10
 
     // this generates a warning: "Yosys has only limited support for tri-state logic at the moment."
     // ```
@@ -63,7 +64,7 @@ module quadspi (
             ) io_bit (
                 .PACKAGE_PIN(io[i]),
                 .OUTPUT_ENABLE(io_out_en),
-                .D_OUT_0(io_out_mux[i]),
+                .D_OUT_0(io_out_reg[i]), // Driven directly by the glitch-free register
                 .D_IN_0(io_in[i])
             );
         end
@@ -71,7 +72,30 @@ module quadspi (
 
     reg [3:0] nibble_buf;
 
+    // -----------------------------------------------------------------
+    // Synchronous Output Driver Logic (Prepares data on SCK Falling Edge)
+    // -----------------------------------------------------------------
+    always @(posedge clk_sys or posedge cs_n) begin
+        if (cs_n) begin
+            io_out_reg <= 4'b0;
+        end else if (sck_falling) begin
+            if (state == STATE_DATA_R) begin
+                // If phase_counter[0] is 0, the rising edge just processed the high nibble.
+                // We now load the low nibble so it is stable well before the next rising edge.
+                if (phase_counter[0] == 1'b1) begin
+                    io_out_reg <= mem_dout[3:0];
+                end else begin
+                    io_out_reg <= mem_dout[7:4];
+                end
+            end else begin
+                io_out_reg <= 4'b0;
+            end
+        end
+    end
 
+    // -----------------------------------------------------------------
+    // Main SPI Protocol State Machine (Processes on SCK Rising Edge)
+    // -----------------------------------------------------------------
     always @(posedge clk_sys or posedge cs_n) begin
         if (cs_n) begin
             state         <= STATE_CMD;
@@ -172,9 +196,5 @@ module quadspi (
             end
         end
     end
-
-    assign io_out_mux = (state == STATE_DATA_R) ?
-                        ((phase_counter[0] == 1'b0) ? mem_dout[7:4] : mem_dout[3:0]) :
-                        4'b0;
 
 endmodule
