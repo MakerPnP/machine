@@ -120,7 +120,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         clock_mode: false,
         wrap_size: WrapSize::None,
         // TODO increase this speed
-        clock_prescaler: 9, // 133.33Mhz / (0+1) = 13.33Mhz
+        clock_prescaler: 9, // 133.33Mhz / (9+1) = 13.33Mhz
         sample_shifting: false,
         delay_hold_quarter_cycle: false,
         chip_select_boundary: 0,
