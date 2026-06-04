@@ -72,6 +72,8 @@ module quadspi (
 
     reg [3:0] nibble_buf;
 
+    reg addr_increment_flag = 1'b0;
+
     // -----------------------------------------------------------------
     // Synchronous Output Driver Logic (Prepares data on SCK Falling Edge)
     // -----------------------------------------------------------------
@@ -164,10 +166,7 @@ module quadspi (
 
                         // Advance address space after the low nibble phase finishes
                         if (phase_counter[0] == 1'b1) begin
-                            if (mem_addr >= 12'h1FC)
-                                mem_addr <= 12'h000;
-                            else
-                                mem_addr <= mem_addr + 12'd1;
+                            addr_increment_flag = 1'b1;
                         end
                     end
 
@@ -186,13 +185,18 @@ module quadspi (
                         // Auto-Increment: Advance the pointer only on the clock edge
                         // AFTER the complete byte has been processed (wrapping from 1 back to 0)
                         if (phase_counter > 4'd0 && phase_counter[0] == 1'b0) begin
-                            if (mem_addr >= 12'h1FC)
-                                mem_addr <= 12'h000;
-                            else
-                                mem_addr <= mem_addr + 12'd1;
+                            addr_increment_flag = 1'b1;
                         end
                     end
                 endcase
+                if (addr_increment_flag == 1'b1) begin
+                    addr_increment_flag = 1'b0;
+
+                    if (mem_addr == 12'h1FF)
+                        mem_addr <= 12'h000;
+                    else
+                        mem_addr <= mem_addr + 12'd1;
+                end
             end
         end
     end
