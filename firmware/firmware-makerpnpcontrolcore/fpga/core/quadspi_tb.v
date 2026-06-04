@@ -348,6 +348,24 @@ module quadspi_tb;
 
         #100;
 
+        // -------------------------------------------------------------
+        // TEST 7: Wrap around and register map boundary
+        // -------------------------------------------------------------
+        $display("--- Test 7: Wrap around and register map boundary ---");
+        cs_n = 0; io_en = 1;
+        send_command_byte(8'h10);
+        send_address_word(16'h01f8);
+        dummy_phase();
+
+        for (i = 1; i <= 4; i = i + 1) begin
+            read_byte_data(b0); read_byte_data(b1);
+            read_byte_data(b2); read_byte_data(b3);
+            $display("Offset: %d, Value:  0x%h", i, {b0, b1, b2, b3});
+        end
+        cs_n = 1;
+
+        #100;
+
         $finish;
     end
 
