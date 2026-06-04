@@ -16,7 +16,7 @@ use embassy_executor::{Executor, InterruptExecutor, Spawner};
 use embassy_stm32::{spi, Peripherals};
 use embassy_stm32::eth::{PacketQueue, Sma, StationManagement};
 use embassy_stm32::eth::{Ethernet, GenericPhy};
-use embassy_stm32::gpio::{Level, Output, Speed};
+use embassy_stm32::gpio::{Level, Output, Speed, Input, Pull};
 use embassy_stm32::interrupt::{InterruptExt, Priority};
 use embassy_stm32::pac::rcc::vals::{Pllm, Plln, Pllsrc};
 use embassy_stm32::peripherals::{ETH, ETH_SMA};
@@ -25,6 +25,10 @@ use embassy_stm32::rcc::mux::{
 };
 use embassy_stm32::rcc::{AHBPrescaler, APBPrescaler, LsConfig, PllDiv, Sysclk};
 use embassy_stm32::rng::Rng;
+use embassy_stm32::ospi::{
+    AddressSize, ChipSelectHighTime, FIFOThresholdLevel, Instance, MemorySize, MemoryType, Ospi, OspiWidth,
+    TransferConfig, WrapSize,
+};
 use embassy_stm32::{Config, bind_interrupts, eth, interrupt, peripherals, rcc, rng};
 use embassy_stm32::mode::Blocking;
 use embassy_stm32::spi::mode::Master;
@@ -52,6 +56,8 @@ use crate::trace::TracePinsService;
 mod stepper;
 #[cfg(feature = "tracepin")]
 mod trace;
+
+mod fpga;
 
 //
 // Heap/Allocator configuration
@@ -100,9 +106,64 @@ fn main() -> ! {
 #[embassy_executor::task]
 async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
     let mut fpga_creset_b = Output::new(p.PF15, Level::Low, Speed::Low);
+    let fpga_cdone = Input::new(p.PC15, Pull::None);
 
     info!("Enabling FPGA");
     fpga_creset_b.set_high();
+
+    let ospi_config = embassy_stm32::ospi::Config {
+        fifo_threshold: FIFOThresholdLevel::_16Bytes,
+        memory_type: MemoryType::Standard,
+        device_size: MemorySize::_2MiB,
+        chip_select_high_time: ChipSelectHighTime::_1Cycle,
+        free_running_clock: false,
+        clock_mode: false,
+        wrap_size: WrapSize::None,
+        // TODO increase this speed
+        clock_prescaler: 9, // 133.33Mhz / (0+1) = 13.33Mhz
+        sample_shifting: false,
+        delay_hold_quarter_cycle: false,
+        chip_select_boundary: 0,
+        delay_block_bypass: true,
+        max_transfer: 0,
+        refresh: 0,
+    };
+
+    #[allow(unused_variables)]
+    let ospi1 = embassy_stm32::ospi::Ospi::new_blocking_quadspi(
+        p.OCTOSPI1,
+        p.PF10, // P1_CLK
+        p.PD11, // P1_IO0
+        p.PD12, // P1_IO1
+        p.PC2,  // P1_IO2
+        p.PD13, // P1_IO3
+        p.PG6,  // P1_NCS
+        ospi_config,
+    );
+
+    // wait for CDONE signal to be high from FPGA.
+    let initial_level = fpga_cdone.get_level();
+    loop {
+        let new_level = fpga_cdone.get_level();
+        if new_level == initial_level {
+            info!("Waiting for CDONE");
+            Timer::after(Duration::from_millis(50)).await;
+        } else {
+            info!("FPGA CDone level: {}", new_level);
+            break;
+        }
+    }
+
+    let mut fpga = fpga::FpgaCore::new(ospi1).await;
+    {
+        let ident = fpga.read_ident();
+        let version = fpga.read_version();
+        info!("FPGA core. ident: {}, version: {}", ident, version);
+
+        let mut fpga_mem: [u8; 0x200] = [0x00; 0x200];
+        fpga.read_block(0x0000, &mut fpga_mem);
+        info!("FPG memory:\n{:02x}", fpga_mem);
+    }
 
     #[cfg(feature = "tracepin")]
     {
