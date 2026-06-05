@@ -50,7 +50,7 @@ impl<I: Instance> FpgaCore<I> {
         buffer
     }
 
-    pub fn read_version(&mut self) -> [u8; 4] {
+    pub fn read_version(&mut self) -> FpgaVersion {
         let mut buffer = [0; 4];
         let transaction: TransferConfig = TransferConfig {
             instruction: Some(CMD_READ_16 as u32),
@@ -67,7 +67,8 @@ impl<I: Instance> FpgaCore<I> {
             ..Default::default()
         };
         self.ospi.blocking_read(&mut buffer, transaction).unwrap();
-        buffer
+
+        FpgaVersion::from_bytes(buffer)
     }
 
     pub fn read_buttons(&mut self) -> u8 {
@@ -140,5 +141,25 @@ impl<I: Instance> FpgaCore<I> {
         self.read_block(REG_LEDS, &mut buffer);
         buffer[0] &= !0b0000_0010;
         self.write_block(REG_LEDS, &buffer);
+    }
+}
+
+#[derive(defmt::Format)]
+#[repr(C)]
+pub struct FpgaVersion {
+    pub major: u8,
+    pub minor: u8,
+    pub patch: u8,
+    pub build: u8,
+}
+
+impl FpgaVersion {
+    pub fn from_bytes(bytes: [u8; 4]) -> Self {
+        Self {
+            major: bytes[0],
+            minor: bytes[1],
+            patch: bytes[2],
+            build: bytes[3],
+        }
     }
 }

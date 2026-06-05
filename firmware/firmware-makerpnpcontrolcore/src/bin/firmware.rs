@@ -158,10 +158,20 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     {
         let ident = fpga.read_ident();
         let version = fpga.read_version();
-        info!("FPGA core. ident: {}, version: {}", ident, version);
+        info!("FPGA core. ident: {:02x}, version: {}", ident, version);
 
         let mut fpga_mem: [u8; 0x200] = [0x00; 0x200];
         fpga.read_block(0x0000, &mut fpga_mem);
+
+        if ident == [0xFF, 0xFF, 0xFF, 0xFF ] {
+            defmt::panic!("No response from FPGA");
+        }
+
+        const EXPECTED_IDENT: [u8; 4] = [0xFA, 0xCE, 0xB0, 0x0B ];
+
+        if ident != EXPECTED_IDENT {
+            defmt::panic!("Unexpected FPGA ident. received: {:02x}, expected: {:02x}", ident, EXPECTED_IDENT)
+        }
     }
 
     let initial_buttons = fpga.read_buttons();
