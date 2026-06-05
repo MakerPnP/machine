@@ -4,6 +4,7 @@
 
 module quadspi_tb;
 
+    reg RESET;
     reg TCXO = 0;
     // Clock generation: 50 MHz simulated clock (10ns period)
     always #10 TCXO = ~TCXO;
@@ -51,6 +52,7 @@ module quadspi_tb;
     );
 
     memory memory_map_uut (
+        .reset(RESET),
         .clk_a(TCXO), // Driven straight by the QSPI Bus Master clock
         .addr_a(mem_addr),
         .we_a(mem_we),
@@ -160,25 +162,17 @@ module quadspi_tb;
         $dumpfile("quadspi_tb.vcd");
         $dumpvars(0, quadspi_tb);
 
-        // Pre-configure initial state of mock hardware elements
-
-        // mock io input status
-        mock_reg_io_in_1 = 8'h00;
-
-        // mock encoder variable counters
-        mock_enc_1 = 32'h11223344;
-        mock_enc_2 = 32'h55667788;
-        mock_enc_3 = 32'h99AABBCC;
-        mock_enc_4 = 32'hDDEEFF00;
-        mock_enc_5 = 32'h12345678;
-        mock_enc_6 = 32'h87654321;
-
         // MCU will drive these signals high on startup via interal pull-ups.
         cs_n = 1;
         clk = 1;
         // MCU will not drive this signals until a transfer begins.
         io_en = 0;
         io_drive = 4'b0;
+
+        // reset pulse
+        RESET = 1;
+        #20;
+        RESET = 0;
 
         #500;
 
@@ -208,7 +202,8 @@ module quadspi_tb;
         // TEST 2: Read Button Status Bits (IO_IN_1 Address 0x24)
         // -------------------------------------------------------------
         $display("--- Test 2: Simulating Pressed Buttons inside TB and Reading ---");
-        mock_reg_io_in_1 = 8'h03; // Simulate buttons being pressed on fabric side
+        // Simulate buttons being pressed on fabric side
+        mock_reg_io_in_1 = 8'h03;
         #100;
 
         cs_n = 0; io_en = 1;
@@ -225,9 +220,7 @@ module quadspi_tb;
         // TEST 3: Write LED Status Bits (Address 0x20)
         // -------------------------------------------------------------
         $display("--- Test 3: Writing LED State & Evaluating Strobes ---");
-        // We drop CS_N manually here to evaluate strobes *before* reset wipes it
 
-        // Track flag to see if we caught the strobe concurrently
         begin : test3_block
             reg led_strobe_caught;
             led_strobe_caught = 1'b0;
@@ -238,10 +231,11 @@ module quadspi_tb;
                     cs_n = 0; io_en = 1;
                     send_command_byte(8'h90);
                     send_address_word(16'h0020);
-                    send_byte(8'h01);
-                    // Add a safety buffer of system clock cycles while CS_N is still low
-                    repeat (5) @(posedge TCXO);
+                    send_byte(8'h03);
                     cs_n = 1;
+
+                    // Allow the sys_clk domain several cycles to flush out the strobe
+                    repeat (5) @(posedge TCXO);
                 end
 
                 // Thread B: Wait for the strobe to fire concurrently
@@ -260,7 +254,7 @@ module quadspi_tb;
         end
 
 
-        $display("Strobe LED Data: 0x%02h (Expected 01)", led_out);
+        $display("Strobe LED Data: 0x%02h (Expected 0x03)", led_out);
 
         #100;
 
@@ -275,7 +269,7 @@ module quadspi_tb;
         send_address_word(16'h0020);
         dummy_phase();
         read_byte_data(read_byte);
-        $display("LEDs Readout: Byte = 0x%02h (Expected 0x01)", read_byte);
+        $display("LEDs Readout: Byte = 0x%02h (Expected 0x03)", read_byte);
         cs_n = 1;
 
         #100;
@@ -284,6 +278,14 @@ module quadspi_tb;
         // TEST 5: Continuous Multi-Byte Read of All 6 Encoders (24 Bytes)
         // -------------------------------------------------------------
         $display("--- Test 5: Continuous Read of Encoders 1 to 6 (24 Bytes) ---");
+        // mock encoder variable counters
+        mock_enc_1 = 32'h11223344;
+        mock_enc_2 = 32'h55667788;
+        mock_enc_3 = 32'h99AABBCC;
+        mock_enc_4 = 32'hDDEEFF00;
+        mock_enc_5 = 32'h12345678;
+        mock_enc_6 = 32'h87654321;
+
         cs_n = 0; io_en = 1;
         send_command_byte(8'h10);
         send_address_word(16'h0040);
@@ -292,7 +294,7 @@ module quadspi_tb;
         for (i = 1; i <= 6; i = i + 1) begin
             read_byte_data(b0); read_byte_data(b1);
             read_byte_data(b2); read_byte_data(b3);
-            $display("  Encoder %0d Count Value: 0x%h", i, {b0, b1, b2, b3});
+            $display("Encoder %0d Count Value: 0x%h", i, {b0, b1, b2, b3});
         end
         cs_n = 1;
 
@@ -314,10 +316,10 @@ module quadspi_tb;
                     send_command_byte(8'h90);
                     send_address_word(16'h0010);
                     send_byte(8'h01);
-
-                    // Allow the 50MHz domain several cycles to flush out the strobe while CS_N is held low
-                    repeat (5) @(posedge TCXO);
                     cs_n = 1;
+
+                    // Allow the sys_clk domain several cycles to flush out the strobe
+                    repeat (5) @(posedge TCXO);
                 end
 
                 // Thread B: Wait concurrently for the strobe to fire
@@ -360,7 +362,7 @@ module quadspi_tb;
         for (i = 1; i <= 4; i = i + 1) begin
             read_byte_data(b0); read_byte_data(b1);
             read_byte_data(b2); read_byte_data(b3);
-            $display("Offset: %d, Value:  0x%h", i, {b0, b1, b2, b3});
+            $display("Offset: %2d, Value:  0x%h", i, {b0, b1, b2, b3});
         end
         cs_n = 1;
 

@@ -35,4 +35,4 @@ set_io QUADSPI1_NCS L16
 
 ### Buttons ###
 set_io USER_0 K11
-set_io USER_1 P12
+set_io USER_1 P13

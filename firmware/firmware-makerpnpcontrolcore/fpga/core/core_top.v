@@ -61,6 +61,7 @@ module core_top (
     // LEDs
     // ----------------------
     leds led_inst (
+        .reset(reset),
         .sys_clk(clk_100),
         .strobe_led_update(strobe_led_update),
         .led_out(led_out),
@@ -72,6 +73,7 @@ module core_top (
     // Instantiate Central Address Decoder
     // ----------------------
     memory memory_map_inst (
+        .reset(reset),
         .clk_a(QUADSPI1_CLK),
         .addr_a(mem_addr),
         .we_a(mem_we),

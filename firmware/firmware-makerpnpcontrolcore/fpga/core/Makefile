@@ -6,27 +6,56 @@ FLASH_ALGO_ROOT := ../../../../../dev-tools/makerpnpcore-w25q16jv
 
 PROJECT  := core
 TOP      := core_top
-TB       := blink wake timer_mux clock_out quadspi
+TB       := blink wake timer_mux clock_out quadspi leds
+INT_TB   := int_leds_mem
 FAMILY   := ice40
 TYPE     := hx8k
 PACKAGE  := ct256
-VERILOGS := core_top.v blink.v wake.v pll.v timer_mux.v clock_out.v memory.v quadspi.v encoders.v leds.v
-COMMON_VLOGS := common.v memory.v encoders.v $(YOSYS_ROOT)/ice40/cells_sim.v
+VERILOGS := \
+	core_top.v \
+	blink.v \
+	leds.v \
+	wake.v \
+	pll.v \
+	timer_mux.v \
+	clock_out.v \
+	memory.v \
+	quadspi.v \
+	encoders.v \
 
+COMMON_SRCS := common.v $(YOSYS_ROOT)/ice40/cells_sim.v
 
-# helper function: build file list per TB
+# ----------------------------
+# TESTBENCH SOURCE DEFINITIONS
+# ----------------------------
+
+# Regular TBs
+EXTRA_SRCS_blink :=
+EXTRA_SRCS_wake :=
+EXTRA_SRCS_timer_mux :=
+EXTRA_SRCS_clock_out :=
+EXTRA_SRCS_quadspi := memory.v
+EXTRA_SRCS_leds :=
+
+# Special / integration TBs
+EXTRA_SRCS_int_leds_mem := leds.v memory.v
+
 define TB_SRCS
-$(1).v $(1)_tb.v $(COMMON_VLOGS)
+$1.v $1_tb.v $(COMMON_SRCS) $(EXTRA_SRCS_$1)
 endef
 
-SIM_TARGETS := $(addprefix sim_,$(TB))
+define TB_SRCS_INT
+$1_tb.v $(COMMON_SRCS) $(EXTRA_SRCS_$1)
+endef
 
-VVP_FILES := $(addsuffix .vvp,$(TB))
-VCD_FILES := $(addsuffix .vcd,$(TB))
+SIM_TARGETS := $(addprefix sim_,$(TB)) $(addprefix sim_int_,$(INT_TB))
+
+VVP_FILES := $(addsuffix .vvp,$(TB)) $(addsuffix .vvp,$(INT_TB))
+VCD_FILES := $(addsuffix .vcd,$(TB)) $(addsuffix .vvp,$(INT_TB))
 
 all: \
 	$(PROJECT).bin \
-	sim
+	sim \
 
 # -------------------------
 # SYNTHESIS (FPGA build)
@@ -46,12 +75,18 @@ $(PROJECT).bin: $(PROJECT).asc
 
 
 # -------------------------
-# SIMULATION (NEW)
+# SIMULATION
 # -------------------------
 
 sim_%:
 	iverilog -g2012 -o $*.vvp $(call TB_SRCS,$*)
 	vvp $*.vvp
+	@echo ""
+
+sim_int_%:
+	iverilog -g2012 -o $*.vvp $(call TB_SRCS_INT,$*)
+	vvp $*.vvp
+	@echo ""
 
 wave_%: sim_%
 	gtkwave $*.vcd

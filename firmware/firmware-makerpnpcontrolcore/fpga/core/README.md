@@ -197,18 +197,19 @@ Description: Configuration register
 ##### 0x20 - LED (RW)
 
 ```
-7-1                              0         
+7-2                   1         0         
 +------------------------------------------+
-|               RESERVED         | MCU_ACT |
+|          RESERVED   | MCU_ACT | FPGA_ACT |
 +------------------------------------------+
 ```
 
 Bit definitions:
-- [0]   L = MCU_ACT LED control
-- [7:1] RESERVED (must be written as 0)
+- [0]   FPGA_ACT LED control
+- [1]   MCU_ACT LED control
+- [7:2] RESERVED (must be written as 0)
 
 Type: Read/Write
-Reset Value: 0
+Reset Value: 0b0000_0001
 Description: LED control register
 
 

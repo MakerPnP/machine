@@ -162,7 +162,23 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
         let mut fpga_mem: [u8; 0x200] = [0x00; 0x200];
         fpga.read_block(0x0000, &mut fpga_mem);
-        info!("FPG memory:\n{:02x}", fpga_mem);
+    }
+
+    let initial_buttons = fpga.read_buttons();
+    //for _ in 0..10 {
+    loop {
+        fpga.led_1_enable();
+        fpga.led_2_disable();
+        Timer::after(Duration::from_millis(100)).await;
+        fpga.led_1_disable();
+        fpga.led_2_enable();
+        Timer::after(Duration::from_millis(100)).await;
+
+        let new_buttons = fpga.read_buttons();
+
+        if new_buttons != initial_buttons {
+            break
+        }
     }
 
     #[cfg(feature = "tracepin")]

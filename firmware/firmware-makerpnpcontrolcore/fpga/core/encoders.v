@@ -2,7 +2,8 @@
 // Example of an internal module managing registers in real time
 module encoders (
     input  wire        sys_clk,
-    input  wire        strobe_encoder_reset, // From memory.v write decoder
+    // From memory.v write decoder
+    input  wire        strobe_encoder_reset,
     // Dummy inputs representing pulse tracks
     input  wire [5:0]  encoder_hardware_pins, 
     

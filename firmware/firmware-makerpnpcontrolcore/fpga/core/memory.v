@@ -2,6 +2,7 @@
 // Streamlined architecture with unified synchronous state registers and
 // an instantaneous combinational read-back multiplexer.
 module memory (
+    input              reset,
     input  wire        clk_a,       // Driven by System Clock (TCXO / clk_sys)
     input  wire [11:0] addr_a,      // Address space from QSPI
     input  wire        we_a,        // Write Enable from QSPI
@@ -26,6 +27,8 @@ module memory (
     // Hardcoded Read-Only Constants
     localparam [31:0] IDENT   = 32'hFA_CE_B0_0B;
     localparam [31:0] VERSION = 32'h01_02_03_04; // Major, Minor, Patch, Build
+
+    reg reset_flag = 1'b0;
 
     // -----------------------------------------------------------------
     // 1. INSTANTANEOUS COMBINATIONAL READ MULTIPLEXER
@@ -102,28 +105,39 @@ module memory (
     // -----------------------------------------------------------------
     // Storage flip-flops and command pulses belong together on the clock edge
     always @(posedge clk_a) begin
-        // Strobes default to 0; they automatically de-assert on the next system clock edge
-        strobe_led_update    <= 1'b0;
-        strobe_encoder_reset <= 1'b0;
+        if (reset) begin
+            reset_flag <= 1'b1;
 
-        if (we_a) begin
-            // Sim-only logging using non-blocking friendly formats
-            $strobe("(strobe)writing to address: 0x%04h, data: 0x%02h", addr_a, din_a);
-            $display("(display)writing to address: 0x%04h, data: 0x%02h", addr_a, din_a);
+            // Configure register defaults and set strobes
+            led_out <= 8'b0000_0001;
+            strobe_led_update    <= 1'b1;
 
-            case (addr_a)
-                12'h010: begin
-                    if (din_a[0] == 1'b1) begin
-                        strobe_encoder_reset <= 1'b1; // Registered clean 1-cycle pulse
-                        $display("resetting encoders");
+            strobe_encoder_reset <= 1'b1;
+        end else begin
+            // Strobes default to 0; they automatically de-assert on the next system clock edge
+            strobe_led_update    <= 1'b0;
+            strobe_encoder_reset <= 1'b0;
+            reset_flag <= 1'b0;
+
+            if (we_a) begin
+                // Sim-only logging using non-blocking friendly formats
+                $strobe("(strobe)writing to address: 0x%04h, data: 0x%02h", addr_a, din_a);
+                $display("(display)writing to address: 0x%04h, data: 0x%02h", addr_a, din_a);
+
+                case (addr_a)
+                    12'h010: begin
+                        if (din_a[0] == 1'b1) begin
+                            strobe_encoder_reset <= 1'b1; // Registered clean 1-cycle pulse
+                            $display("resetting encoders");
+                        end
                     end
-                end
-                12'h020: begin
-                    led_out           <= din_a;        // Saves stable configuration state
-                    strobe_led_update <= 1'b1;         // Registered clean 1-cycle pulse
-                end
-                default: begin end
-            endcase
+                    12'h020: begin
+                        led_out           <= din_a;        // Saves stable configuration state
+                        strobe_led_update <= 1'b1;         // Registered clean 1-cycle pulse
+                    end
+                    default: begin end
+                endcase
+            end
         end
     end
 

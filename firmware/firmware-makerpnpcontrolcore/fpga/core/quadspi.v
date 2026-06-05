@@ -102,9 +102,11 @@ module quadspi (
         if (cs_n) begin
             state         <= STATE_CMD;
             phase_counter <= 0;
+            if (io_out_en) begin
+                $display("disabling quadspi outputs");
+            end
             io_out_en     <= 0;
             mem_we        <= 0;
-            mem_addr      <= 0;
             cmd           <= 0;
             addr          <= 0;
             nibble_buf    <= 0;
@@ -155,7 +157,7 @@ module quadspi (
                         end else begin
                             phase_counter <= phase_counter + 4'd1;
                             if (phase_counter == 4'd3) begin
-                                $display("Enabling outputs");
+                                $display("enabling quadspi outputs");
                                 io_out_en     <= 1'b1;
                             end
                         end
