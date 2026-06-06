@@ -51,10 +51,8 @@ module core_top (
 
     reg [7:0] la_src = 2;
     wire [15:0] led_debug;
-    //wire [15:0] la_in = led_debug;
-    ////wire [15:0] la_in = 16'h0F0F;
-
-    //reg [15:0] led_debug;
+    wire [15:0] la_in = led_debug;
+    //wire [15:0] la_in = 16'h0F0F;
 
     assign reset = ~locked;
 
@@ -72,8 +70,7 @@ module core_top (
         .sys_clk(clk_100),
         .la_io(LA_IO),
         .la_src_in(la_src),
-        //.la_in(la_in)
-        .la_in(led_debug)
+        .la_in(la_in)
     );
 
     // ----------------------
