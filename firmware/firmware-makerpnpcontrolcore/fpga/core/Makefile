@@ -62,7 +62,7 @@ all: \
 # SYNTHESIS (FPGA build)
 # -------------------------
 
-$(PROJECT).json: $(VERILOGS)
+$(PROJECT).json: $(VERILOGS) Makefile
 	yosys -q -l yosys.log -p 'synth_${FAMILY} -top $(TOP) -json $(PROJECT).json' $(VERILOGS)
 
 $(PROJECT).asc: $(PROJECT).json pins.pcf
