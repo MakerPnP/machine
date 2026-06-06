@@ -13,6 +13,9 @@ set_io  NWAKE_4 E13
 set_io  FPGA_ACT E6
 set_io  MCU_ACT F7
 
+### buzzer ###
+set_io  BUZZER D4
+
 ### timer muxes ###
 set_io  MUX_SEL1 L14
 set_io  MUX_SEL2 M15

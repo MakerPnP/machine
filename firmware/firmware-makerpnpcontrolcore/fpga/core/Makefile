@@ -16,6 +16,7 @@ VERILOGS := \
 	la.v \
 	blink.v \
 	leds.v \
+	buzzer.v \
 	wake.v \
 	pll.v \
 	timer_mux.v \

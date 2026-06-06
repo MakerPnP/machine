@@ -1,9 +1,13 @@
 module core_top (
     input             TCXO,          // H16 Bank 1 50 MHz TCXO
+
     input  wire       USER_0,        // Button 0 (External Pull-up to 3V3)
     input  wire       USER_1,        // Button 1 (External Pull-up to 3V3)
+
     output wire       MCU_ACT,       // LED 1
     output wire       FPGA_ACT,      // LED 2
+
+    output wire       BUZZER,        // Buzzer
 
     output  wire [15:0] LA_IO,
 
@@ -44,14 +48,18 @@ module core_top (
     wire [7:0]  reg_io_in_1;
     wire [31:0] enc_1, enc_2, enc_3, enc_4, enc_5, enc_6;
 
-    wire [7:0]  led_out;
-
+    wire [7:0]  led_ctrl;
+    wire [15:0] led_debug;
     wire        strobe_led_update;
+
+    wire [7:0]  buzzer_ctrl;
+    wire [15:0] buzzer_debug;
+    wire        strobe_buzzer_update;
+
     wire        strobe_encoder_reset;
 
     reg [7:0] la_src = 2;
-    wire [15:0] led_debug;
-    wire [15:0] la_in = led_debug;
+    wire [15:0] la_in = buzzer_debug;
     //wire [15:0] la_in = 16'h0F0F;
 
     assign reset = ~locked;
@@ -79,11 +87,23 @@ module core_top (
     leds led_inst (
         .reset(reset),
         .sys_clk(clk_100),
-        .strobe_led_update(strobe_led_update),
-        .led_out(led_out),
+        .strobe_update(strobe_led_update),
+        .led_ctrl(led_ctrl),
         .mcu_act(MCU_ACT),
         .fpga_act(FPGA_ACT),
         .debug(led_debug),
+    );
+
+    // ----------------------
+    // Buzzer
+    // ----------------------
+    buzzer buzzer_inst (
+        .reset(reset),
+        .sys_clk(clk_100),
+        .strobe_update(strobe_buzzer_update),
+        .buzzer_ctrl(buzzer_ctrl),
+        .buzzer(BUZZER),
+        .debug(buzzer_debug),
     );
 
     // ----------------------
@@ -104,7 +124,9 @@ module core_top (
 
         // Outputs from write-decoder to modules
         .strobe_led_update(strobe_led_update),
-        .led_out(led_out),
+        .led_ctrl(led_ctrl),
+        .strobe_buzzer_update(strobe_buzzer_update),
+        .buzzer_ctrl(buzzer_ctrl),
         .strobe_encoder_reset(strobe_encoder_reset)
     );
 

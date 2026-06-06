@@ -292,6 +292,14 @@ type FpgaInstance = FpgaCore<embassy_stm32::peripherals::OCTOSPI1>;
 
 #[embassy_executor::task]
 async fn fpga_task(mut fpga: FpgaInstance) -> ! {
+
+    for index in 0..4 {
+        fpga.buzzer_enable();
+        Timer::after(Duration::from_millis(80 - (20 * index))).await;
+        fpga.buzzer_disable();
+        Timer::after(Duration::from_millis(80)).await;
+    }
+
     loop {
         fpga.led_1_disable();
         fpga.led_2_enable();

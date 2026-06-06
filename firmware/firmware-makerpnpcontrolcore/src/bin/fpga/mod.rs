@@ -14,8 +14,9 @@ pub use commands::*;
 
 
 mod registers {
-    pub const REG_LEDS: u16 = 0x0020;
+    pub const REG_LED_CTRL: u16 = 0x0020;
     pub const REG_IO_IN: u16 = 0x0024;
+    pub const REG_BUZZER_CTRL: u16 = 0x0028;
 }
 pub use registers::*;
 
@@ -117,30 +118,44 @@ impl<I: Instance> FpgaCore<I> {
 
     pub fn led_1_enable(&mut self) {
         let mut buffer: [u8; 1] = [0xff; 1];
-        self.read_block(REG_LEDS, &mut buffer);
+        self.read_block(REG_LED_CTRL, &mut buffer);
         buffer[0] |= 0b0000_0001;
-        self.write_block(REG_LEDS, &buffer);
+        self.write_block(REG_LED_CTRL, &buffer);
     }
 
     pub fn led_1_disable(&mut self) {
         let mut buffer: [u8; 1] = [0xff; 1];
-        self.read_block(REG_LEDS, &mut buffer);
+        self.read_block(REG_LED_CTRL, &mut buffer);
         buffer[0] &= !0b0000_0001;
-        self.write_block(REG_LEDS, &buffer);
+        self.write_block(REG_LED_CTRL, &buffer);
     }
 
     pub fn led_2_enable(&mut self) {
         let mut buffer: [u8; 1] = [0xff; 1];
-        self.read_block(REG_LEDS, &mut buffer);
+        self.read_block(REG_LED_CTRL, &mut buffer);
         buffer[0] |= 0b0000_0010;
-        self.write_block(REG_LEDS, &buffer);
+        self.write_block(REG_LED_CTRL, &buffer);
     }
 
     pub fn led_2_disable(&mut self) {
         let mut buffer: [u8; 1] = [0xff; 1];
-        self.read_block(REG_LEDS, &mut buffer);
+        self.read_block(REG_LED_CTRL, &mut buffer);
         buffer[0] &= !0b0000_0010;
-        self.write_block(REG_LEDS, &buffer);
+        self.write_block(REG_LED_CTRL, &buffer);
+    }
+
+    pub fn buzzer_enable(&mut self) {
+        let mut buffer: [u8; 1] = [0xff; 1];
+        self.read_block(REG_BUZZER_CTRL, &mut buffer);
+        buffer[0] |= 0b0000_0001;
+        self.write_block(REG_BUZZER_CTRL, &buffer);
+    }
+
+    pub fn buzzer_disable(&mut self) {
+        let mut buffer: [u8; 1] = [0xff; 1];
+        self.read_block(REG_BUZZER_CTRL, &mut buffer);
+        buffer[0] &= !0b0000_0001;
+        self.write_block(REG_BUZZER_CTRL, &buffer);
     }
 }
 

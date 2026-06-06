@@ -8,7 +8,7 @@ module int_leds_mem_tb;
     wire FPGA_ACT;
     wire MCU_ACT;
 
-    reg [7:0] led_out;
+    reg [7:0] led_ctrl;
     reg strobe_led_update;
 
 
@@ -32,8 +32,8 @@ module int_leds_mem_tb;
     leds leds_int (
         .reset(RESET),
         .sys_clk(TCXO),
-        .led_out(led_out),
-        .strobe_led_update(strobe_led_update),
+        .led_ctrl(led_ctrl),
+        .strobe_update(strobe_led_update),
         .mcu_act(MCU_ACT),
         .fpga_act(FPGA_ACT)
     );
@@ -56,7 +56,7 @@ module int_leds_mem_tb;
 
         // Catch output strobes directly for evaluation
         .strobe_led_update(strobe_led_update),
-        .led_out(led_out),
+        .led_ctrl(led_ctrl),
         .strobe_encoder_reset(strobe_encoder_reset)
     );
 

@@ -36,7 +36,7 @@ module quadspi_tb;
     wire        mem_we;
 
     wire        strobe_led_update;
-    wire [7:0]  led_out;
+    wire [7:0]  led_ctrl;
     wire        strobe_encoder_reset;
 
     // Direct instantiation of your isolated modules under test (UUT)
@@ -69,7 +69,7 @@ module quadspi_tb;
 
         // Catch output strobes directly for evaluation
         .strobe_led_update(strobe_led_update),
-        .led_out(led_out),
+        .led_ctrl(led_ctrl),
         .strobe_encoder_reset(strobe_encoder_reset)
     );
 
@@ -254,7 +254,7 @@ module quadspi_tb;
         end
 
 
-        $display("Strobe LED Data: 0x%02h (Expected 0x03)", led_out);
+        $display("Strobe LED Data: 0x%02h (Expected 0x03)", led_ctrl);
 
         #100;
 

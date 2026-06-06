@@ -20,7 +20,9 @@ module memory (
 
     // Write Connections TO internal modules
     output reg         strobe_led_update,
-    output reg [7:0]   led_out,
+    output reg [7:0]   led_ctrl,
+    output reg         strobe_buzzer_update,
+    output reg [7:0]   buzzer_ctrl,
     output reg         strobe_encoder_reset // Triggers an encoder reset
 );
 
@@ -49,10 +51,13 @@ module memory (
             12'h007: dout_a = VERSION[7:0];
 
             // LED outputs readback
-            12'h020: dout_a = led_out;
+            12'h020: dout_a = led_ctrl;
 
             // IO INPUTS (Buttons)
             12'h024: dout_a = reg_io_in_1;
+
+            // Buzzer control readback
+            12'h028: dout_a = buzzer_ctrl;
 
             // ENCODER 1 (32-bit layout sliced into bytes)
             12'h040: dout_a = enc_1[31:24];
@@ -109,14 +114,19 @@ module memory (
             reset_flag <= 1'b1;
 
             // Configure register defaults and set strobes
-            led_out <= 8'b0000_0011;
+            led_ctrl <= 8'b0000_0011;
             strobe_led_update    <= 1'b1;
+
+            buzzer_ctrl <= 8'b0000_0000;
+            strobe_buzzer_update    <= 1'b1;
 
             strobe_encoder_reset <= 1'b1;
         end else begin
             // Strobes default to 0; they automatically de-assert on the next system clock edge
             strobe_led_update    <= 1'b0;
+            strobe_buzzer_update <= 1'b0;
             strobe_encoder_reset <= 1'b0;
+            
             reset_flag <= 1'b0;
 
             if (we_a) begin
@@ -132,8 +142,12 @@ module memory (
                         end
                     end
                     12'h020: begin
-                        led_out           <= din_a;        // Saves stable configuration state
+                        led_ctrl           <= din_a;        // Saves stable configuration state
                         strobe_led_update <= 1'b1;         // Registered clean 1-cycle pulse
+                    end
+                    12'h028: begin
+                        buzzer_ctrl       <= din_a;        // Saves stable configuration state
+                        strobe_buzzer_update <= 1'b1;         // Registered clean 1-cycle pulse
                     end
                     default: begin end
                 endcase

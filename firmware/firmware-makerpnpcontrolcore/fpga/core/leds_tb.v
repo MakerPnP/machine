@@ -8,15 +8,15 @@ module leds_tb;
     wire FPGA_ACT;
     wire MCU_ACT;
 
-    reg [7:0] led_out;
+    reg [7:0] led_ctrl;
     reg strobe_led_update = 1'b0;
 
     // Instantiate the DUT (DUT = Device Under Test)
     leds dut (
         .reset(RESET),
         .sys_clk(TCXO),
-        .led_out(led_out),
-        .strobe_led_update(strobe_led_update),
+        .led_ctrl(led_ctrl),
+        .strobe_update(strobe_led_update),
         .mcu_act(MCU_ACT),
         .fpga_act(FPGA_ACT)
     );
@@ -37,7 +37,7 @@ module leds_tb;
         // Run simulation for some time
         #100;
 
-        led_out = 8'b0000_0000;
+        led_ctrl = 8'b0000_0000;
         // hold the strobe for a few clock cycles
         strobe_led_update = 1'b1;
         #100;
@@ -49,7 +49,7 @@ module leds_tb;
         // Run simulation for some time
         #100;
 
-        led_out = 8'b0000_0011;
+        led_ctrl = 8'b0000_0011;
         // hold the strobe for a few clock cycles
         strobe_led_update = 1'b1;
         #100;
