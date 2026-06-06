@@ -1,5 +1,5 @@
 module core_top (
-    input             TCXO,      // H16 Bank 1 50 MHz TCXO
+    input             TCXO,          // H16 Bank 1 50 MHz TCXO
     input  wire       USER_0,        // Button 0 (External Pull-up to 3V3)
     input  wire       USER_1,        // Button 1 (External Pull-up to 3V3)
     output wire       MCU_ACT,       // LED 1
@@ -94,7 +94,7 @@ module core_top (
     // ----------------------
     memory memory_map_inst (
         .reset(reset),
-        .clk_a(QUADSPI1_CLK),
+        .clk_a(clk_100),
         .addr_a(mem_addr),
         .we_a(mem_we),
         .din_a(mem_din),
