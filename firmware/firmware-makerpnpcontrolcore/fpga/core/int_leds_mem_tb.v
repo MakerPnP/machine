@@ -3,12 +3,11 @@
 module int_leds_mem_tb;
 
     // Testbench signals
+    reg RESET;
     reg TCXO = 0;
     wire FPGA_ACT;
     wire MCU_ACT;
 
-    // TODO
-    reg RESET = 1;
     reg [7:0] led_out;
     reg strobe_led_update;
 
