@@ -9,7 +9,7 @@ module quadspi (
     output reg [11:0] mem_addr,
     output reg [7:0]  mem_din,
     input  wire [7:0] mem_dout,
-    output reg        mem_we
+    output reg        mem_we    = 0
 );
 
     // Named Localparam States

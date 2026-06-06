@@ -37,7 +37,7 @@ module leds_tb;
         // Run simulation for some time
         #100;
 
-        led_out = 8'b0000_0010;
+        led_out = 8'b0000_0000;
         // hold the strobe for a few clock cycles
         strobe_led_update = 1'b1;
         #100;
@@ -46,7 +46,17 @@ module leds_tb;
 
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
 
+        // Run simulation for some time
         #100;
+
+        led_out = 8'b0000_0011;
+        // hold the strobe for a few clock cycles
+        strobe_led_update = 1'b1;
+        #100;
+        strobe_led_update = 1'b0;
+        #100;
+
+        $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
 
         $finish;
     end

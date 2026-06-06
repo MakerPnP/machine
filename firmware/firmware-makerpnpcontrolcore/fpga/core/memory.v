@@ -109,7 +109,7 @@ module memory (
             reset_flag <= 1'b1;
 
             // Configure register defaults and set strobes
-            led_out <= 8'b0000_0001;
+            led_out <= 8'b0000_0011;
             strobe_led_update    <= 1'b1;
 
             strobe_encoder_reset <= 1'b1;

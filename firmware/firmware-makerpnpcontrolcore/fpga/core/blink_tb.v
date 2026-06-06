@@ -32,6 +32,9 @@ module blink_tb;
         // Run simulation for some time
         #2500;
 
+        $display("LED: %d", FPGA_ACT);
+
+
         $finish;
     end
 

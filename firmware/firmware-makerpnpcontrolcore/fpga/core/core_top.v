@@ -49,7 +49,12 @@ module core_top (
     wire        strobe_led_update;
     wire        strobe_encoder_reset;
 
-    reg [7:0] la_src = 1;
+    reg [7:0] la_src = 2;
+    wire [15:0] led_debug;
+    //wire [15:0] la_in = led_debug;
+    ////wire [15:0] la_in = 16'h0F0F;
+
+    //reg [15:0] led_debug;
 
     assign reset = ~locked;
 
@@ -66,7 +71,9 @@ module core_top (
         .reset(reset),
         .sys_clk(clk_100),
         .la_io(LA_IO),
-        .la_src_in(la_src)
+        .la_src_in(la_src),
+        //.la_in(la_in)
+        .la_in(led_debug)
     );
 
     // ----------------------
@@ -78,7 +85,8 @@ module core_top (
         .strobe_led_update(strobe_led_update),
         .led_out(led_out),
         .mcu_act(MCU_ACT),
-        .fpga_act(FPGA_ACT)
+        .fpga_act(FPGA_ACT),
+        .debug(led_debug),
     );
 
     // ----------------------
