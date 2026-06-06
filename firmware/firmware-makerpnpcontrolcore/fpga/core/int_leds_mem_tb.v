@@ -25,7 +25,7 @@ module int_leds_mem_tb;
     reg [11:0] mem_addr;
     reg [7:0]  mem_din;
     reg [7:0]  mem_dout;
-    reg        mem_we;
+    reg        mem_we   = 0;
 
     wire        strobe_encoder_reset;
 
