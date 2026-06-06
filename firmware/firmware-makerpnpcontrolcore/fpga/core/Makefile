@@ -13,6 +13,7 @@ TYPE     := hx8k
 PACKAGE  := ct256
 VERILOGS := \
 	core_top.v \
+	la.v \
 	blink.v \
 	leds.v \
 	wake.v \

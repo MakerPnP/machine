@@ -5,6 +5,8 @@ module core_top (
     output wire       MCU_ACT,       // LED 1
     output wire       FPGA_ACT,      // LED 2
 
+    output  wire [15:0] LA_IO,
+
     (* PULLUP = 1 *)
     input NWAKE_IN,
     output NWAKE_1,
@@ -47,6 +49,8 @@ module core_top (
     wire        strobe_led_update;
     wire        strobe_encoder_reset;
 
+    reg [7:0] la_src = 1;
+
     assign reset = ~locked;
 
     // ----------------------
@@ -56,6 +60,13 @@ module core_top (
         .clock_in(TCXO),
         .clock_out(clk_100),
         .locked(locked)
+    );
+
+    la la_inst (
+        .reset(reset),
+        .sys_clk(clk_100),
+        .la_io(LA_IO),
+        .la_src_in(la_src)
     );
 
     // ----------------------

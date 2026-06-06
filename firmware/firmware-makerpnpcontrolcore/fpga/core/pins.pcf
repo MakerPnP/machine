@@ -36,3 +36,22 @@ set_io QUADSPI1_NCS L16
 ### Buttons ###
 set_io USER_0 K11
 set_io USER_1 P13
+
+### Logic Analyzer ###
+set_io LA_IO[0] P2
+set_io LA_IO[1] R1
+set_io LA_IO[2] M2
+set_io LA_IO[3] P1
+set_io LA_IO[4] L1
+set_io LA_IO[5] M1
+set_io LA_IO[6] J2
+set_io LA_IO[7] K1
+set_io LA_IO[8] J1
+set_io LA_IO[9] H1
+set_io LA_IO[10] G1
+set_io LA_IO[11] G2
+set_io LA_IO[12] F1
+set_io LA_IO[13] F2
+set_io LA_IO[14] D1
+set_io LA_IO[15] D2
+
