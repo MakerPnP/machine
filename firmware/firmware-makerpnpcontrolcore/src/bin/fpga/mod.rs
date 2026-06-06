@@ -93,11 +93,11 @@ impl<I: Instance> FpgaCore<I> {
             ..Default::default()
         };
         self.ospi.blocking_read(buffer, transaction).unwrap();
-        info!("FPGA block read. address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", address, buffer.len(), buffer);
+        trace!("FPGA block read. address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", address, buffer.len(), buffer);
     }
 
     pub fn write_block(&mut self, address: u16, buffer: &[u8]) {
-        info!("FPGA block write. address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", address, buffer.len(), buffer);
+        trace!("FPGA block write. address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", address, buffer.len(), buffer);
         let transaction: TransferConfig = TransferConfig {
             instruction: Some(CMD_WRITE_16 as u32),
             isize: AddressSize::_8Bit,
