@@ -47,7 +47,7 @@ use ioboard_trace::tracepin::TracePins;
 use static_cell::StaticCell;
 use tmc5160::Tmc5160;
 use {defmt_rtt as _, panic_probe as _};
-
+use crate::fpga::FpgaCore;
 use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
 use crate::stepper::tmc5160::Tmc5160Stepper;
 #[cfg(feature = "tracepin")]
@@ -174,22 +174,19 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         }
     }
 
-    let initial_buttons = fpga.read_buttons();
-    //for _ in 0..10 {
-    loop {
-        fpga.led_1_enable();
-        fpga.led_2_disable();
-        Timer::after(Duration::from_millis(100)).await;
-        fpga.led_1_disable();
-        fpga.led_2_enable();
-        Timer::after(Duration::from_millis(100)).await;
+    if false {
+        info!("Waiting for either button to be pressed.");
+        let initial_buttons = fpga.read_buttons();
+        loop {
+            let new_buttons = fpga.read_buttons();
 
-        let new_buttons = fpga.read_buttons();
-
-        if new_buttons != initial_buttons {
-            break
+            if new_buttons != initial_buttons {
+                break
+            }
         }
     }
+
+    lp_spawner.spawn(unwrap!(fpga_task(fpga)));
 
     #[cfg(feature = "tracepin")]
     {
@@ -287,6 +284,20 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     loop {
         info!("Tick");
         ticker.next().await;
+    }
+}
+
+type FpgaInstance = FpgaCore<embassy_stm32::peripherals::OCTOSPI1>;
+
+#[embassy_executor::task]
+async fn fpga_task(mut fpga: FpgaInstance) -> ! {
+    loop {
+        fpga.led_1_enable();
+        fpga.led_2_enable();
+        Timer::after(Duration::from_millis(100)).await;
+        fpga.led_1_disable();
+        fpga.led_2_disable();
+        Timer::after(Duration::from_millis(100)).await;
     }
 }
 
