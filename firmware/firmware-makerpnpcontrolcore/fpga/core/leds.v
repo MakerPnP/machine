@@ -14,6 +14,8 @@ module leds (
     reg strobe_sync_r1, strobe_sync_r2;
     reg [7:0] led_out_sync;
 
+    reg activity_flag = 1'b0;
+
     always @(posedge sys_clk) begin
         if (reset) begin
             strobe_sync_r1 = 1;
@@ -40,17 +42,19 @@ module leds (
             $display("LED out (sync): 0x%02h", led_out_sync);
         end
 
+        activity_flag = ~activity_flag;
+
         //debug = 16'hffff;
         debug = {
             led_out[7:0],
-            1'b0,
             reset,
             sys_clk,
             fpga_act,
             mcu_act,
             strobe_sync_r1,
             strobe_sync_r2,
-            strobe_led_update
+            strobe_led_update,
+            activity_flag
         };
     end
 
