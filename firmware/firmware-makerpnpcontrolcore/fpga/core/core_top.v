@@ -22,7 +22,8 @@ module core_top (
 
     input  wire       QUADSPI1_CLK,
     input  wire       QUADSPI1_NCS,
-    inout  wire [3:0] QUADSPI1_IO,       // Maps to QUADSPI1_IO0, QUADSPI1_IO1,...
+    // Maps to QUADSPI1_IO0, QUADSPI1_IO1,...
+    inout  wire [3:0] QUADSPI1_IO
 );
 
     wire clk_100;
