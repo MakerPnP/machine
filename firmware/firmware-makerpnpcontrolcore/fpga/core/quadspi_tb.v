@@ -53,7 +53,7 @@ module quadspi_tb;
 
     memory memory_map_uut (
         .reset(RESET),
-        .clk_a(TCXO), // Driven straight by the QSPI Bus Master clock
+        .clk_a(TCXO),
         .addr_a(mem_addr),
         .we_a(mem_we),
         .din_a(mem_din),

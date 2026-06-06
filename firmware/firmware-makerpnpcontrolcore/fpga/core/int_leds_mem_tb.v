@@ -40,7 +40,7 @@ module int_leds_mem_tb;
 
     memory memory_int (
         .reset(RESET),
-        .clk_a(TCXO), // Driven straight by the QSPI Bus Master clock
+        .clk_a(TCXO),
         .addr_a(mem_addr),
         .we_a(mem_we),
         .din_a(mem_din),
