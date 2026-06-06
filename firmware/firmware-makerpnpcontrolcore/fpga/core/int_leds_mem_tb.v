@@ -75,6 +75,29 @@ module int_leds_mem_tb;
 
         // Run simulation for some time
         #100;
+        mem_we = 1'b1;
+        mem_addr = 12'h020;
+        mem_din = 8'b0000_0000;
+
+        // hold the write strobe for one clock cycle
+        #10;
+        mem_we = 1'b0;
+
+        // Run to let clocks sync
+        #100;
+        $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
+
+        mem_we = 1'b1;
+        mem_addr = 12'h020;
+        mem_din = 8'b0000_0001;
+
+        // hold the write strobe for one clock cycle
+        #10;
+        mem_we = 1'b0;
+
+        // Run to let clocks sync
+        #100;
+        $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
 
         mem_we = 1'b1;
         mem_addr = 12'h020;
@@ -86,7 +109,18 @@ module int_leds_mem_tb;
 
         // Run to let clocks sync
         #100;
+        $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
 
+        mem_we = 1'b1;
+        mem_addr = 12'h020;
+        mem_din = 8'b0000_0011;
+
+        // hold the write strobe for one clock cycle
+        #10;
+        mem_we = 1'b0;
+
+        // Run to let clocks sync
+        #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
 
         $finish;
