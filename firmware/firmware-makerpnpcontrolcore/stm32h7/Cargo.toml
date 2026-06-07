@@ -12,9 +12,9 @@ tracepin = [
 ]
 
 [dependencies]
-ioboard_main       = { path = "../../ioboard/ioboard_main" }
-ioboard_net        = { path = "../../ioboard/ioboard_net" }
-ioboard_trace      = { path = "../../ioboard/ioboard_trace" }
+ioboard_main       = { path = "../../../ioboard/ioboard_main" }
+ioboard_net        = { path = "../../../ioboard/ioboard_net" }
+ioboard_trace      = { path = "../../../ioboard/ioboard_trace" }
 
 embassy-stm32      = { version = "0.6.0", features = ["defmt", "stm32h735ig", "time-driver-tim12", "unstable-pac", "exti", "memory-x"] }
 embassy-executor   = { version = "0.10.0", features = ["defmt", "platform-cortex-m", "executor-thread", "executor-interrupt"] }
