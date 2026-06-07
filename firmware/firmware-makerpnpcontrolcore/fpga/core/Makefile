@@ -6,28 +6,25 @@ FLASH_ALGO_ROOT := ../../../../../dev-tools/makerpnpcore-w25q16jv
 
 PROJECT  := core
 TOP      := core_top
-TB       := blink wake timer_mux clock_out quadspi leds
-INT_TB   := int_leds_mem
 FAMILY   := ice40
 TYPE     := hx8k
 PACKAGE  := ct256
-VERILOGS := \
-	core_top.v \
-	la.v \
-	blink.v \
-	leds.v \
-	buzzer.v \
-	wake.v \
-	pll.v \
-	timer_mux.v \
-	clock_out.v \
-	memory.v \
-	quadspi.v \
-	encoders.v \
-
-COMMON_SRCS := common.v $(YOSYS_ROOT)/ice40/cells_sim.v
 
 BUILD := build
+SRC_MAIN := src/main
+SRC_TEST := src/test
+
+VERILOGS := $(shell find $(SRC_MAIN) -type f -name "*.v" ! -name "*_tb.v")
+TB_FILES := $(shell find $(SRC_TEST) -type f -name "*_tb.v" ! -name "int_*.tb.v")
+TB_INT_FILES := $(shell find $(SRC_TEST) -type f -name "*_tb.v" ! -name "int_*_tb.v")
+
+TB := $(basename $(notdir $(TB_FILES)))
+TB := $(patsubst %_tb,%,$(TB))
+
+TB_INT := $(basename $(notdir $(TB_INT_FILES)))
+TB_INT := $(patsubst %_tb,%,$(TB_INT))
+
+COMMON_SRCS := $(SRC_MAIN)/common.v $(YOSYS_ROOT)/ice40/cells_sim.v
 
 # ----------------------------
 # TESTBENCH SOURCE DEFINITIONS
@@ -38,24 +35,39 @@ EXTRA_SRCS_blink :=
 EXTRA_SRCS_wake :=
 EXTRA_SRCS_timer_mux :=
 EXTRA_SRCS_clock_out :=
-EXTRA_SRCS_quadspi := memory.v
+EXTRA_SRCS_quadspi := $(SRC_MAIN)/registers/memory.v
 EXTRA_SRCS_leds :=
 
 # Special / integration TBs
-EXTRA_SRCS_int_leds_mem := leds.v memory.v
+EXTRA_SRCS_int_leds_mem := $(SRC_MAIN)/io/leds.v $(SRC_MAIN)/registers/memory.v
 
-define TB_SRCS
-$1.v $1_tb.v $(COMMON_SRCS) $(EXTRA_SRCS_$1)
+# Find RTL file matching module name
+define FIND_RTL
+$(shell find $(SRC_MAIN) -name "$1.v")
 endef
 
-define TB_SRCS_INT
-$1_tb.v $(COMMON_SRCS) $(EXTRA_SRCS_$1)
+# Find TB file
+define FIND_TB
+$(shell find $(SRC_TEST) -name "$1_tb.v")
+endef
+
+define TB_SRCS
+$(call FIND_RTL,$1) \
+$(call FIND_TB,$1) \
+$(COMMON_SRCS) \
+$(EXTRA_SRCS_$1)
+endef
+
+define TB_INT_SRCS
+$(call FIND_TB,$1) \
+$(COMMON_SRCS) \
+$(EXTRA_SRCS_$1)
 endef
 
 SIM_TARGETS := $(addprefix sim_,$(TB)) $(addprefix sim_int_,$(INT_TB))
 
-VVP_FILES := $(addprefix $(BUILD)/sim/,$(addsuffix _tb.vvp,$(TB))) $(addprefix $(BUILD)/sim_int/,$(addsuffix _tb.vvp,$(INT_TB)))
-VCD_FILES := $(addprefix $(BUILD)/sim/,$(addsuffix _tb.vcd,$(TB))) $(addprefix $(BUILD)/sim_int/,$(addsuffix _tb.vcd,$(INT_TB)))
+VVP_FILES := $(addprefix $(BUILD)/sim/,$(addsuffix _tb.vvp,$(TB))) $(addprefix $(BUILD)/sim_int/int_,$(addsuffix _tb.vvp,$(INT_TB)))
+VCD_FILES := $(addprefix $(BUILD)/sim/,$(addsuffix _tb.vcd,$(TB))) $(addprefix $(BUILD)/sim_int/int_,$(addsuffix _tb.vcd,$(INT_TB)))
 
 all: \
 	$(PROJECT).bin \
@@ -92,8 +104,8 @@ sim_%:
 
 sim_int_%:
 	mkdir -p $(BUILD)/sim_int
-	iverilog -g2012 -o $(BUILD)/sim_int/$*_tb.vvp $(call TB_SRCS_INT,$*)
-	cd $(BUILD)/sim_int && vvp -n $*_tb.vvp
+	iverilog -g2012 -o $(BUILD)/sim_int/int_$*_tb.vvp $(call TB_INT_SRCS,int_$*)
+	cd $(BUILD)/sim_int && vvp -n int_$*_tb.vvp
 	@echo ""
 
 wave_gtk_%: sim_%
@@ -110,12 +122,12 @@ sim: $(SIM_TARGETS)
 # -------------------------
 
 clean:
-	rm -rf $(BUILD)/$(PROJECT).bin $(BUILD)/$(PROJECT).asc $(BUILD)/$(PROJECT).json \
+	rm -f $(BUILD)/$(PROJECT).bin $(BUILD)/$(PROJECT).asc $(BUILD)/$(PROJECT).json \
 		$(BUILD)/yosys.log $(BUILD)/nextpnr.log \
 		$(VVP_FILES) $(VCD_FILES)
-	rmdir $(BUILD)/sim
-	rmdir $(BUILD)/sim_int
-	rmdir $(BUILD)
+	@rmdir $(BUILD)/sim || true
+	@rmdir $(BUILD)/sim_int || true
+	@rmdir $(BUILD) || true
 # -------------------------
 # LOAD FPGA
 # -------------------------
