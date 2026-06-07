@@ -15,22 +15,28 @@ SRC_MAIN := src/main
 SRC_TEST := src/test
 
 VERILOGS := $(shell find $(SRC_MAIN) -type f -name "*.v" ! -name "*_tb.v")
+
+# Gather testbench paths
 TB_FILES := $(shell find $(SRC_TEST) -type f -name "*_tb.v" ! -name "int_*.tb.v")
 TB_INT_FILES := $(shell find $(SRC_TEST) -type f -name "*_tb.v" ! -name "int_*_tb.v")
 
-TB := $(basename $(notdir $(TB_FILES)))
-TB := $(patsubst %_tb,%,$(TB))
-
-TB_INT := $(basename $(notdir $(TB_INT_FILES)))
-TB_INT := $(patsubst %_tb,%,$(TB_INT))
+# Preserve relative paths: Strip the leading 'src/' prefix, then drop the extension/suffix
+TB := $(patsubst src/%,%,$(patsubst %_tb.v,%,$(TB_FILES)))
+TB_INT := $(patsubst src/%,%,$(patsubst %_tb.v,%,$(TB_INT_FILES)))
 
 COMMON_SRCS := $(SRC_MAIN)/common.v $(YOSYS_ROOT)/ice40/cells_sim.v
+
+# Extract the unique generated subdirectory relative paths under build/
+# e.g., "test/bar1/ test/bar2/"
+GEN_DIRS := $(sort $(dir $(TB) $(TB_INT)))
 
 # ----------------------------
 # TESTBENCH SOURCE DEFINITIONS
 # ----------------------------
 
-# Regular TBs
+# FUTURE consider using the testbench path somehow here, currently this prevents multi testbench files with
+#        the same name in difference directories
+# Regular TBs (Use the flat module name for variable lookups)
 EXTRA_SRCS_blink :=
 EXTRA_SRCS_wake :=
 EXTRA_SRCS_timer_mux :=
@@ -46,32 +52,26 @@ define FIND_RTL
 $(shell find $(SRC_MAIN) -name "$1.v")
 endef
 
-# Find TB file
-define FIND_TB
-$(shell find $(SRC_TEST) -name "$1_tb.v")
-endef
-
+# Reconstruct sources using the relative path ($1 is like 'test/bar1/foo')
 define TB_SRCS
-$(call FIND_RTL,$1) \
-$(call FIND_TB,$1) \
+$(call FIND_RTL,$(notdir $1)) \
+src/$1_tb.v \
 $(COMMON_SRCS) \
-$(EXTRA_SRCS_$1)
+$(EXTRA_SRCS_$(notdir $1))
 endef
 
 define TB_INT_SRCS
-$(call FIND_TB,$1) \
+src/$1_tb.v \
 $(COMMON_SRCS) \
-$(EXTRA_SRCS_$1)
+$(EXTRA_SRCS_$(notdir $1))
 endef
 
-SIM_TARGETS := $(addprefix sim_,$(TB)) $(addprefix sim_int_,$(INT_TB))
-
-VVP_FILES := $(addprefix $(BUILD)/sim/,$(addsuffix _tb.vvp,$(TB))) $(addprefix $(BUILD)/sim_int/int_,$(addsuffix _tb.vvp,$(INT_TB)))
-VCD_FILES := $(addprefix $(BUILD)/sim/,$(addsuffix _tb.vcd,$(TB))) $(addprefix $(BUILD)/sim_int/int_,$(addsuffix _tb.vcd,$(INT_TB)))
+# Simulation targets match the relative paths: sim/test/bar1/foo
+SIM_TARGETS := $(addprefix sim/,$(TB)) $(addprefix sim/,$(TB_INT))
 
 all: \
 	$(PROJECT).bin \
-	sim \
+	sim
 
 # -------------------------
 # SYNTHESIS (FPGA build)
@@ -91,30 +91,24 @@ $(PROJECT).asc: $(BUILD)/$(PROJECT).json pins.pcf
 $(PROJECT).bin: $(PROJECT).asc
 	icepack $(BUILD)/$(PROJECT).asc $(BUILD)/$(PROJECT).bin
 
-
 # -------------------------
 # SIMULATION
 # -------------------------
 
-sim_%:
-	mkdir -p $(BUILD)/sim
-	iverilog -g2012 -o $(BUILD)/sim/$*_tb.vvp $(call TB_SRCS,$*)
-	cd $(BUILD)/sim && vvp -n $*_tb.vvp
+# Match target like sim/test/bar1/foo
+sim/%:
+	@mkdir -p $(BUILD)/$(dir $*)
+	iverilog -g2012 -o $(BUILD)/$*_tb.vvp $(call TB_SRCS,$*)
+	cd $(BUILD)/$(dir $*) && vvp -n $(notdir $*_tb.vvp)
 	@echo ""
 
-sim_int_%:
-	mkdir -p $(BUILD)/sim_int
-	iverilog -g2012 -o $(BUILD)/sim_int/int_$*_tb.vvp $(call TB_INT_SRCS,int_$*)
-	cd $(BUILD)/sim_int && vvp -n int_$*_tb.vvp
-	@echo ""
-
-wave_gtk_%: sim_%
+wave_gtk_%: sim/%
 	gtkwave $(BUILD)/$*.vcd
 
-wave_%: sim_%
+wave_%: sim/%
 	surfer $(BUILD)/$*.vcd
 
-# Optional: run all simulations
+# Run all simulations
 sim: $(SIM_TARGETS)
 
 # -------------------------
@@ -122,15 +116,22 @@ sim: $(SIM_TARGETS)
 # -------------------------
 
 clean:
+	# 1. Remove specific synthesis top-level files
 	rm -f $(BUILD)/$(PROJECT).bin $(BUILD)/$(PROJECT).asc $(BUILD)/$(PROJECT).json \
-		$(BUILD)/yosys.log $(BUILD)/nextpnr.log \
-		$(VVP_FILES) $(VCD_FILES)
-	@rmdir $(BUILD)/sim || true
-	@rmdir $(BUILD)/sim_int || true
-	@rmdir $(BUILD) || true
+		$(BUILD)/yosys.log $(BUILD)/nextpnr.log
+	# 2. Safely remove only the test directories generated under build/
+	@for dir in $(GEN_DIRS); do \
+		if [ -d "$(BUILD)/$$dir" ]; then \
+			echo "Removing $(BUILD)/$$dir"; \
+			rm -rf "$(BUILD)/$$dir"; \
+		fi; \
+	done
+	# 3. Clean up empty parent directories up to $(BUILD) without touching $(BUILD) itself
+	@find $(BUILD) -type d -empty -delete 2>/dev/null || true
+
 # -------------------------
 # LOAD FPGA
 # -------------------------
 
 load: $(PROJECT).bin
-	 probe-rs download --chip makerpnpcore-w25q16jv --chip-description-path $(FLASH_ALGO_ROOT)/target/definition.yaml $(PROJECT).bin --binary-format=bin --base-address 0x70000000 --verify
+	probe-rs download --chip makerpnpcore-w25q16jv --chip-description-path $(FLASH_ALGO_ROOT)/target/definition.yaml $(PROJECT).bin --binary-format=bin --base-address 0x70000000 --verify
