@@ -29,14 +29,23 @@ also, you can see the specific make targets by running `make help` as follows:
 $ make help
 Available Makefile targets:
 
-  all                            all: Default target. Synthesizes the FPGA binary and builds simulations.
-  sim/%                          sim/<path_to_testbench>: Run a specific testbench preserving relative path layout, e.g. sim/test/bar1/foo
-  wave_gtk_%                     wave_gtk_<path_to_testbench>: Open gtkwave for the specified simulation target.
-  wave_%                         wave_<path_to_testbench>: Open surfer for the specified simulation target.
-  sim                            sim: Execute all discovered regular and integration simulation targets.
-  clean                          clean: Surgically removes only generated compilation and simulation assets without deleting all of build/.
-  load                           load: Flash the synthesized core binary onto the hardware chip target using probe-rs.
-  help                           help: Display this help message containing descriptions of available targets.
+  all                                 all: Default target. Synthesizes the FPGA binary and builds simulations.
+  sim/%                               sim/<path_to_testbench>: Run a specific testbench preserving relative path layout, e.g. sim/test/bar1/foo
+  wave_gtk/%                          wave_gtk_<path_to_testbench>: Run simulation and open gtkwave for a regular target.
+  wave/%                              wave_<path_to_testbench>: Run simulation and open surfer for a regular target.
+  sim                                 sim: Execute all discovered regular and integration simulation targets.
+  clean                               clean: Surgically removes only generated compilation and simulation assets without deleting all of build/.
+  load                                load: Flash the synthesized core binary onto the hardware chip target using probe-rs.
+  help                                help: Display this help message containing descriptions of available targets and valid simulation paths.
+
+Valid testbench paths for sim/%, wave/%, and wave_gtk/%:
+  test/clock_out
+  test/comms/quadspi
+  test/io/blink
+  test/io/leds
+  test/io/timer_mux
+  test/io/wake
+  test/registers/int_leds_mem
 ```
 
 ## Test benches

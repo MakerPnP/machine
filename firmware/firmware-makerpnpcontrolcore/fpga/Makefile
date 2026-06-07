@@ -133,19 +133,26 @@ clean:
 load: $(PROJECT).bin
 	probe-rs download --chip makerpnpcore-w25q16jv --chip-description-path $(FLASH_ALGO_ROOT)/target/definition.yaml $(PROJECT).bin --binary-format=bin --base-address 0x70000000 --verify
 
-## help: Display this help message containing descriptions of available targets.
+# -------------------------
+# HELP TARGET
+# -------------------------
+
+## help: Display this help message containing descriptions of available targets and valid simulation paths.
 help:
-	@echo "Available Makefile targets:"
-	@echo ""
+	@printf "Available Makefile targets:\n\n"
 	@awk '/^[a-zA-Z\-_0-9%\/]+:/ { \
 		helpMessage = match(lastLine, /^## (.*)/); \
 		if (helpMessage) { \
 			helpOut = substr(lastLine, RSTART + 3, RLENGTH); \
 			gsub(/:.*/, "", $$1); \
-			printf "  \033[36m%-30s\033[0m %s\n", $$1, helpOut; \
+			printf "  \033[36m%-35s\033[0m %s\n", $$1, helpOut; \
 			} \
 		} \
 		{ lastLine = $$0 }' $(MAKEFILE_LIST)
-	@echo ""
+	@printf "\n\033[1;34mValid testbench paths for sim/%%, wave/%%, and wave_gtk/%%:\033[0m\n"
+	@for path in $(TB); do \
+		printf "  %s\n" "$$path"; \
+	done
+	@printf "\n"
 
 .PHONY: all sim clean load help
