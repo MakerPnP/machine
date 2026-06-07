@@ -17,18 +17,16 @@ SRC_TEST := src/test
 VERILOGS := $(shell find $(SRC_MAIN) -type f -name "*.v" ! -name "*_tb.v")
 
 # Gather testbench paths
-TB_FILES := $(shell find $(SRC_TEST) -type f -name "*_tb.v" ! -name "int_*.v")
-TB_INT_FILES := $(shell find $(SRC_TEST) -type f -name "int_*_tb.v")
+TB_FILES := $(shell find $(SRC_TEST) -type f -name "*_tb.v")
 
 # Preserve relative paths: Strip the leading 'src/' prefix, then drop the extension/suffix
 TB := $(patsubst src/%,%,$(patsubst %_tb.v,%,$(TB_FILES)))
-TB_INT := $(patsubst src/%,%,$(patsubst %_tb.v,%,$(TB_INT_FILES)))
 
 COMMON_SRCS := $(SRC_MAIN)/common.v $(YOSYS_ROOT)/ice40/cells_sim.v
 
 # Extract the unique generated subdirectory relative paths under build/
 # e.g., "test/bar1/ test/bar2/"
-GEN_DIRS := $(sort $(dir $(TB) $(TB_INT)))
+GEN_DIRS := $(sort $(dir $(TB)))
 
 # ----------------------------
 # TESTBENCH SOURCE DEFINITIONS
@@ -60,14 +58,8 @@ $(COMMON_SRCS) \
 $(EXTRA_SRCS_$(notdir $1))
 endef
 
-define TB_INT_SRCS
-src/$1_tb.v \
-$(COMMON_SRCS) \
-$(EXTRA_SRCS_$(notdir $1))
-endef
-
 # Simulation targets match the relative paths: sim/test/bar1/foo and sim_int/test/bar1/int_foo
-SIM_TARGETS := $(addprefix sim/,$(TB)) $(addprefix sim_int/,$(TB_INT))
+SIM_TARGETS := $(addprefix sim/,$(TB))
 
 ## all: Default target. Synthesizes the FPGA binary and builds simulations.
 all: \
@@ -103,28 +95,12 @@ sim/%:
 	cd $(BUILD)/$(dir $*) && vvp -n $(notdir $*_tb.vvp)
 	@echo ""
 
-# Match target like sim_int/test/bar1/int_leds_mem
-## sim_int/<path_to_int_testbench>: Run a specific integration testbench preserving relative path layout.
-sim_int/%:
-	@mkdir -p $(BUILD)/$(dir $*)
-	iverilog -g2012 -o $(BUILD)/$*_tb.vvp $(call TB_INT_SRCS,$*)
-	cd $(BUILD)/$(dir $*) && vvp -n $(notdir $*_tb.vvp)
-	@echo ""
-
 ## wave_gtk_<path_to_testbench>: Run simulation and open gtkwave for a regular target.
 wave_gtk/%: sim/%
 	gtkwave $(BUILD)/$*_tb.vcd
 
-## wave_gtk_int_<path_to_int_testbench>: Run simulation and open gtkwave for an integration target.
-wave_gtk_int/%: sim_int/%
-	gtkwave $(BUILD)/$*_tb.vcd
-
 ## wave_<path_to_testbench>: Run simulation and open surfer for a regular target.
 wave/%: sim/%
-	surfer $(BUILD)/$*_tb.vcd
-
-## wave_int_<path_to_int_testbench>: Run simulation and open surfer for an integration target.
-wave_int/%: sim_int/%
 	surfer $(BUILD)/$*_tb.vcd
 
 ## sim: Execute all discovered regular and integration simulation targets.
