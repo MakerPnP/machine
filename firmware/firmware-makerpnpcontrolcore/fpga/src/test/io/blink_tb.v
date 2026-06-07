@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
 
+`include "src/test/assertions.svh"
+
 module blink_tb;
 
     // Testbench signals
@@ -34,7 +36,7 @@ module blink_tb;
 
         $display("LED: %d", FPGA_ACT);
 
-
+        report();
         $finish;
     end
 

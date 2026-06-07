@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
 
+`include "src/test/assertions.svh"
+
 module int_leds_mem_tb;
 
     // Testbench signals
@@ -123,6 +125,7 @@ module int_leds_mem_tb;
         #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
 
+        report();
         $finish;
     end
 

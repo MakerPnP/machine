@@ -5,6 +5,7 @@ package tb_assert;
 
   localparam string COLOR_RED   = "\033[31m";
   localparam string COLOR_GREEN = "\033[32m";
+  localparam string COLOR_BLUE = "\033[34m";
   localparam string COLOR_WHITE = "\033[0m";
 
   int unsigned assert_count = 0;
@@ -15,16 +16,25 @@ package tb_assert;
     string color;
 
     $display("================================");
-    $display("ASSERTIONS: %0d", assert_count);
 
-    if (fail_count != 0)
-      color = COLOR_RED;
+    if (assert_count == 0)
+      color = COLOR_BLUE;
     else
       color = COLOR_GREEN;
 
-    $display("%sFAILURES  : %0d%s", color, fail_count, COLOR_WHITE);
-    $display("\033[37m");
+    $display("%sASSERTIONS: %0d%s", color, assert_count, COLOR_WHITE);
+
+    if (assert_count > 0) begin
+        if (fail_count != 0)
+          color = COLOR_RED;
+        else
+          color = COLOR_GREEN;
+
+        $display("%sFAILURES  : %0d%s", color, fail_count, COLOR_WHITE);
+    end
+
     $display("================================");
+
     if (fail_count > 0) $stop;
   endtask
 

@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
 
+`include "src/test/assertions.svh"
+
 module timer_mux_tb;
 
     // Testbench signals
@@ -31,6 +33,7 @@ module timer_mux_tb;
         // Run simulation for some time
         #100;
 
+        report();
         $finish;
     end
 

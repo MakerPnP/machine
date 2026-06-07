@@ -41,7 +41,6 @@ module wake_tb;
         `ASSERT_EQ(NWAKE_1, 1'd0);
 
         report();
-
         $finish;
     end
 
