@@ -32,12 +32,19 @@ endpackage
 
 import tb_assert::*;
 
-`define ASSERT_EQ(A, B) \
+// Updated Macro with 4 arguments (2 mandatory, 2 optional)
+// FMT defaults to "%0d" for backward compatibility
+// MSG defaults to "" (an empty string)
+`define ASSERT_EQ(A, B, FMT="%0d", MSG="") \
   assert ((A) == (B)) assert_count++; \
-     else begin \
-        fail_count++; \
-        $error("%sAssertion failed: %s == %0d, actual = %0d%s", COLOR_RED, `"A`", (B), (A), COLOR_WHITE); \
+  else begin \
+    fail_count++; \
+    if (MSG == "") begin \
+      $error($sformatf("%sAssertion failed: %s == %s, actual = %s%s", \
+                       COLOR_RED, `"A`", FMT, FMT, COLOR_WHITE), (B), (A)); \
+    end else begin \
+      $error($sformatf("%sAssertion failed: %s == %s, actual = %s - %s%s", \
+                       COLOR_RED, `"A`", FMT, FMT, MSG, COLOR_WHITE), (B), (A)); \
     end \
-
-
+  end
 `endif

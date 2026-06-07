@@ -45,9 +45,7 @@ module clock_out_tb;
         // Run simulation for some time
         #100;
 
-
         report();
-
         $finish;
     end
 

@@ -2,6 +2,8 @@
 // Isolated Unit Testbench bypassing core_top.v (Strict Verilog-2001)
 `timescale 1ns/1ps
 
+`include "src/test/assertions.svh"
+
 module quadspi_tb;
 
     reg RESET;
@@ -22,12 +24,7 @@ module quadspi_tb;
 
     // Local Testbench Signals to mimic internal FPGA modules
     reg [7:0]  mock_reg_io_in_1;
-    reg [31:0] mock_enc_1;
-    reg [31:0] mock_enc_2;
-    reg [31:0] mock_enc_3;
-    reg [31:0] mock_enc_4;
-    reg [31:0] mock_enc_5;
-    reg [31:0] mock_enc_6;
+    reg [31:0] mock_enc [0:5];
 
     // Interconnect Wires between isolated QuadSPI Core and Memory Map Decoder
     wire [11:0] mem_addr;
@@ -64,8 +61,8 @@ module quadspi_tb;
         .reg_io_in_1(mock_reg_io_in_1),
 
         // Encoders
-        .enc_1(mock_enc_1), .enc_2(mock_enc_2), .enc_3(mock_enc_3),
-        .enc_4(mock_enc_4), .enc_5(mock_enc_5), .enc_6(mock_enc_6),
+        .enc_1(mock_enc[0]), .enc_2(mock_enc[1]), .enc_3(mock_enc[2]),
+        .enc_4(mock_enc[3]), .enc_5(mock_enc[4]), .enc_6(mock_enc[5]),
 
         // Catch output strobes directly for evaluation
         .strobe_led_update(strobe_led_update),
@@ -129,6 +126,16 @@ module quadspi_tb;
         end
     endtask
 
+    task read_word_data;
+        output [31:0] r_data;
+        begin
+            read_byte_data(r_data[31:24]);
+            read_byte_data(r_data[23:16]);
+            read_byte_data(r_data[15:8]);
+            read_byte_data(r_data[7:0]);
+        end
+    endtask
+
     task dummy_phase;
         integer d;
         begin
@@ -142,6 +149,7 @@ module quadspi_tb;
     // Testbench execution variables
     reg [7:0] read_byte;
     reg [7:0] b0, b1, b2, b3;
+    reg [31:0] read_word;
     integer i;
 
     // Emulate what the encoders module does do when it handles a reset strobe
@@ -149,12 +157,12 @@ module quadspi_tb;
     always @(posedge TCXO) begin
         if (strobe_encoder_reset) begin
             $display("Resetting mock encoders");
-            mock_enc_1 = 32'd0;
-            mock_enc_2 = 32'd0;
-            mock_enc_3 = 32'd0;
-            mock_enc_4 = 32'd0;
-            mock_enc_5 = 32'd0;
-            mock_enc_6 = 32'd0;
+            mock_enc[0] = 32'd0;
+            mock_enc[1] = 32'd0;
+            mock_enc[2] = 32'd0;
+            mock_enc[3] = 32'd0;
+            mock_enc[4] = 32'd0;
+            mock_enc[5] = 32'd0;
         end
     end
 
@@ -185,15 +193,13 @@ module quadspi_tb;
         send_address_word(16'h0000);
         dummy_phase();
 
-        $write("IDENT Reg Data: ");
-        for (i = 0; i < 4; i = i + 1) begin
-            read_byte_data(read_byte); $write("%h", read_byte);
-        end
-        $write("\nVERSION Reg Data: ");
-        for (i = 0; i < 4; i = i + 1) begin
-            read_byte_data(read_byte); $write("%h", read_byte);
-        end
-        $write("\n");
+        read_word_data(read_word);
+        $display("IDENT Reg Data: 0x%08h", read_word);
+        `ASSERT_EQ(read_word, 32'hfaceb00b, "0x%08h", "Ident mismatch");
+
+        read_word_data(read_word);
+        $display("VERSION Reg Data: 0x%08h", read_word);
+        `ASSERT_EQ(read_word, 32'h01020304, "0x%08h", "Version mismatch");
         cs_n = 1;
 
         #100;
@@ -211,8 +217,9 @@ module quadspi_tb;
         send_address_word(16'h0024);
         dummy_phase();
         read_byte_data(read_byte);
-        $display("IO_IN_1 Readout: Byte = 0x%h (Expected 0x03)", read_byte);
         cs_n = 1;
+
+        `ASSERT_EQ(read_byte, 8'h03, "0x%02h", "IO_IN_1 Readout mismatch");
 
         #100;
 
@@ -249,12 +256,13 @@ module quadspi_tb;
             if (led_strobe_caught) begin
                 $display("Strobe LED signal caught");
             end else begin
-                $display("ERROR: Strobe LED signal missing");
+                $error("ERROR: Strobe LED signal missing");
             end
+            `ASSERT_EQ(led_strobe_caught, 1);
         end
 
 
-        $display("Strobe LED Data: 0x%02h (Expected 0x03)", led_ctrl);
+        `ASSERT_EQ(led_ctrl, 8'h03, "0x%02h", "LED_CTRL mismatch");
 
         #100;
 
@@ -269,8 +277,9 @@ module quadspi_tb;
         send_address_word(16'h0020);
         dummy_phase();
         read_byte_data(read_byte);
-        $display("LEDs Readout: Byte = 0x%02h (Expected 0x03)", read_byte);
         cs_n = 1;
+
+        `ASSERT_EQ(read_byte, led_ctrl, "0x%02h", "LED_CTRL readback mismatch");
 
         #100;
 
@@ -279,22 +288,24 @@ module quadspi_tb;
         // -------------------------------------------------------------
         $display("--- Test 5: Continuous Read of Encoders 1 to 6 (24 Bytes) ---");
         // mock encoder variable counters
-        mock_enc_1 = 32'h11223344;
-        mock_enc_2 = 32'h55667788;
-        mock_enc_3 = 32'h99AABBCC;
-        mock_enc_4 = 32'hDDEEFF00;
-        mock_enc_5 = 32'h12345678;
-        mock_enc_6 = 32'h87654321;
+
+        // Initialize the array
+        mock_enc[0] = 32'h11223344;
+        mock_enc[1] = 32'h55667788;
+        mock_enc[2] = 32'h99AABBCC;
+        mock_enc[3] = 32'hDDEEFF00;
+        mock_enc[4] = 32'h12345678;
+        mock_enc[5] = 32'h87654321;
 
         cs_n = 0; io_en = 1;
         send_command_byte(8'h10);
         send_address_word(16'h0040);
         dummy_phase();
 
-        for (i = 1; i <= 6; i = i + 1) begin
-            read_byte_data(b0); read_byte_data(b1);
-            read_byte_data(b2); read_byte_data(b3);
-            $display("Encoder %0d Count Value: 0x%h", i, {b0, b1, b2, b3});
+        for (i = 0; i <= 5; i = i + 1) begin
+            read_word_data(read_word);
+            $display("Encoder %0d value: 0x%08h", i + 1, read_word);
+            `ASSERT_EQ(read_word, mock_enc[i], "0x%08h", $sformatf("Encoder %0d mismatch", i));
         end
         cs_n = 1;
 
@@ -330,11 +341,13 @@ module quadspi_tb;
             join
 
             // Evaluate findings
+
             if (reset_strobe_caught) begin
                 $display("Strobe Encoder Reset signal detected");
             end else begin
-                $display("ERROR: Strobe Encoder Reset signal missing");
+                $error("ERROR: Strobe Encoder Reset signal missing");
             end
+            `ASSERT_EQ(reset_strobe_caught, 1);
         end
 
         #100;
@@ -345,8 +358,9 @@ module quadspi_tb;
         send_address_word(16'h0040);
         dummy_phase();
         read_byte_data(read_byte);
-        $display("Encoder 1 post-reset Byte 0 verification: 0x%h (Expected 00)", read_byte);
         cs_n = 1;
+
+        `ASSERT_EQ(read_byte, 8'h00, "0x%02h", "Encoder 1 was not reset");
 
         #100;
 
@@ -368,6 +382,7 @@ module quadspi_tb;
 
         #100;
 
+        report();
         $finish;
     end
 
