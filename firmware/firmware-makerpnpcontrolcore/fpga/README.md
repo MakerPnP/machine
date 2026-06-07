@@ -1,4 +1,4 @@
-# MakerPnPControl-core FPGA firmware
+# MakerPnPControl-CORE FPGA firmware
 
 This is the work-in-progress FPGA code for the ICE40HX8K-CT256 on the MakerPnPControl-CORE board.
 
