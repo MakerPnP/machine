@@ -23,6 +23,22 @@ A working icestorm toolchain, using yosys, nextpnr-ice40, icepack, iverilog.
 make
 ```
 
+also, you can see the specific make targets by running `make help` as follows:
+
+```
+$ make help
+Available Makefile targets:
+
+  all                            all: Default target. Synthesizes the FPGA binary and builds simulations.
+  sim/%                          sim/<path_to_testbench>: Run a specific testbench preserving relative path layout, e.g. sim/test/bar1/foo
+  wave_gtk_%                     wave_gtk_<path_to_testbench>: Open gtkwave for the specified simulation target.
+  wave_%                         wave_<path_to_testbench>: Open surfer for the specified simulation target.
+  sim                            sim: Execute all discovered regular and integration simulation targets.
+  clean                          clean: Surgically removes only generated compilation and simulation assets without deleting all of build/.
+  load                           load: Flash the synthesized core binary onto the hardware chip target using probe-rs.
+  help                           help: Display this help message containing descriptions of available targets.
+```
+
 ## Test benches
 
 When you run `make` is will run all the simulations, output of each testbench can be viewed using a vcd viewer

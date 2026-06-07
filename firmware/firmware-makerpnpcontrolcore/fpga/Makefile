@@ -69,6 +69,7 @@ endef
 # Simulation targets match the relative paths: sim/test/bar1/foo
 SIM_TARGETS := $(addprefix sim/,$(TB)) $(addprefix sim/,$(TB_INT))
 
+## all: Default target. Synthesizes the FPGA binary and builds simulations.
 all: \
 	$(PROJECT).bin \
 	sim
@@ -95,26 +96,29 @@ $(PROJECT).bin: $(PROJECT).asc
 # SIMULATION
 # -------------------------
 
-# Match target like sim/test/bar1/foo
+## sim/<path_to_testbench>: Run a specific testbench preserving relative path layout, e.g. sim/test/bar1/foo
 sim/%:
 	@mkdir -p $(BUILD)/$(dir $*)
 	iverilog -g2012 -o $(BUILD)/$*_tb.vvp $(call TB_SRCS,$*)
 	cd $(BUILD)/$(dir $*) && vvp -n $(notdir $*_tb.vvp)
 	@echo ""
 
+## wave_gtk_<path_to_testbench>: Open gtkwave for the specified simulation target.
 wave_gtk_%: sim/%
 	gtkwave $(BUILD)/$*.vcd
 
+## wave_<path_to_testbench>: Open surfer for the specified simulation target.
 wave_%: sim/%
 	surfer $(BUILD)/$*.vcd
 
-# Run all simulations
+## sim: Execute all discovered regular and integration simulation targets.
 sim: $(SIM_TARGETS)
 
 # -------------------------
 # CLEAN
 # -------------------------
 
+## clean: Surgically removes only generated compilation and simulation assets without deleting all of build/.
 clean:
 	# 1. Remove specific synthesis top-level files
 	rm -f $(BUILD)/$(PROJECT).bin $(BUILD)/$(PROJECT).asc $(BUILD)/$(PROJECT).json \
@@ -133,5 +137,23 @@ clean:
 # LOAD FPGA
 # -------------------------
 
+## load: Flash the synthesized core binary onto the hardware chip target using probe-rs.
 load: $(PROJECT).bin
 	probe-rs download --chip makerpnpcore-w25q16jv --chip-description-path $(FLASH_ALGO_ROOT)/target/definition.yaml $(PROJECT).bin --binary-format=bin --base-address 0x70000000 --verify
+
+## help: Display this help message containing descriptions of available targets.
+help:
+	@echo "Available Makefile targets:"
+	@echo ""
+	@awk '/^[a-zA-Z\-_0-9%\/]+:/ { \
+		helpMessage = match(lastLine, /^## (.*)/); \
+		if (helpMessage) { \
+			helpOut = substr(lastLine, RSTART + 3, RLENGTH); \
+			gsub(/:.*/, "", $$1); \
+			printf "  \033[36m%-30s\033[0m %s\n", $$1, helpOut; \
+			} \
+		} \
+		{ lastLine = $$0 }' $(MAKEFILE_LIST)
+	@echo ""
+
+.PHONY: all sim clean load help
