@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
 
+`include "src/test/assertions.svh"
+
 module clock_out_tb;
 
     // Testbench signals
@@ -30,6 +32,13 @@ module clock_out_tb;
 
         // Run simulation for some time
         #100;
+
+        `ASSERT_EQ(FPGA_CLK_1, 1'd0);
+        `ASSERT_EQ(FPGA_CLK_2, 1'd0);
+        `ASSERT_EQ(FPGA_CLK_3, 1'd0);
+        `ASSERT_EQ(FPGA_CLK_4, 1'd0);
+
+        report();
 
         $finish;
     end
