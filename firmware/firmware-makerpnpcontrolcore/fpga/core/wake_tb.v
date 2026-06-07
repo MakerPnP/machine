@@ -16,7 +16,7 @@ module wake_tb;
 
     // Simulation control
     initial begin
-        $dumpfile("wake.vcd");
+        $dumpfile("wake_tb.vcd");
         $dumpvars(0, wake_tb);
 
         // reset pulse, with NWAKE_IN=HIGH

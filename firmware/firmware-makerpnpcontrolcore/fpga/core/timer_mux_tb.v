@@ -20,7 +20,7 @@ module timer_mux_tb;
 
     // Simulation control
     initial begin
-        $dumpfile("timer_mux.vcd");
+        $dumpfile("timer_mux_tb.vcd");
         $dumpvars(0, timer_mux_tb);
 
         // reset pulse

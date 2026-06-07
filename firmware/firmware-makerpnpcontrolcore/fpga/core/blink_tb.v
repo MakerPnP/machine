@@ -21,7 +21,7 @@ module blink_tb;
 
     // Simulation control
     initial begin
-        $dumpfile("blink.vcd");
+        $dumpfile("blink_tb.vcd");
         $dumpvars(0, blink_tb);
 
         // reset pulse

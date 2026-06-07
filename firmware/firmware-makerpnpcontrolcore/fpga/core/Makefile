@@ -27,6 +27,8 @@ VERILOGS := \
 
 COMMON_SRCS := common.v $(YOSYS_ROOT)/ice40/cells_sim.v
 
+BUILD := build
+
 # ----------------------------
 # TESTBENCH SOURCE DEFINITIONS
 # ----------------------------
@@ -52,8 +54,8 @@ endef
 
 SIM_TARGETS := $(addprefix sim_,$(TB)) $(addprefix sim_int_,$(INT_TB))
 
-VVP_FILES := $(addsuffix .vvp,$(TB)) $(addsuffix .vvp,$(INT_TB))
-VCD_FILES := $(addsuffix .vcd,$(TB)) $(addsuffix .vvp,$(INT_TB))
+VVP_FILES := $(addprefix $(BUILD)/sim/,$(addsuffix _tb.vvp,$(TB))) $(addprefix $(BUILD)/sim_int/,$(addsuffix _tb.vvp,$(INT_TB)))
+VCD_FILES := $(addprefix $(BUILD)/sim/,$(addsuffix _tb.vcd,$(TB))) $(addprefix $(BUILD)/sim_int/,$(addsuffix _tb.vcd,$(INT_TB)))
 
 all: \
 	$(PROJECT).bin \
@@ -62,18 +64,20 @@ all: \
 # -------------------------
 # SYNTHESIS (FPGA build)
 # -------------------------
+$(BUILD):
+	mkdir -p $(BUILD)
 
-$(PROJECT).json: $(VERILOGS) Makefile
-	yosys -q -l yosys.log -p 'synth_${FAMILY} -top $(TOP) -json $(PROJECT).json' $(VERILOGS)
+$(BUILD)/$(PROJECT).json: $(VERILOGS) $(BUILD) Makefile
+	yosys -q -l $(BUILD)/yosys.log -p 'synth_${FAMILY} -top $(TOP) -json $(BUILD)/$(PROJECT).json' $(VERILOGS)
 
-$(PROJECT).asc: $(PROJECT).json pins.pcf
-	nextpnr-${FAMILY} -q -l nextpnr.log --${TYPE} --package ${PACKAGE} --json $(PROJECT).json --pcf pins.pcf --asc $(PROJECT).asc
+$(PROJECT).asc: $(BUILD)/$(PROJECT).json pins.pcf
+	nextpnr-${FAMILY} -q -l $(BUILD)/nextpnr.log --${TYPE} --package ${PACKAGE} --json $(BUILD)/$(PROJECT).json --pcf pins.pcf --asc $(BUILD)/$(PROJECT).asc
 	@echo ""
-	@grep -B 1 "%$$" nextpnr.log
+	@grep -B 1 "%$$" $(BUILD)/nextpnr.log
 	@echo ""
 
 $(PROJECT).bin: $(PROJECT).asc
-	icepack $(PROJECT).asc $(PROJECT).bin
+	icepack $(BUILD)/$(PROJECT).asc $(BUILD)/$(PROJECT).bin
 
 
 # -------------------------
@@ -81,17 +85,22 @@ $(PROJECT).bin: $(PROJECT).asc
 # -------------------------
 
 sim_%:
-	iverilog -g2012 -o $*.vvp $(call TB_SRCS,$*)
-	vvp $*.vvp
+	mkdir -p $(BUILD)/sim
+	iverilog -g2012 -o $(BUILD)/sim/$*_tb.vvp $(call TB_SRCS,$*)
+	cd $(BUILD)/sim && vvp -n $*_tb.vvp
 	@echo ""
 
 sim_int_%:
-	iverilog -g2012 -o $*.vvp $(call TB_SRCS_INT,$*)
-	vvp $*.vvp
+	mkdir -p $(BUILD)/sim_int
+	iverilog -g2012 -o $(BUILD)/sim_int/$*_tb.vvp $(call TB_SRCS_INT,$*)
+	cd $(BUILD)/sim_int && vvp -n $*_tb.vvp
 	@echo ""
 
+wave_gtk_%: sim_%
+	gtkwave $(BUILD)/$*.vcd
+
 wave_%: sim_%
-	gtkwave $*.vcd
+	surfer $(BUILD)/$*.vcd
 
 # Optional: run all simulations
 sim: $(SIM_TARGETS)
@@ -101,9 +110,12 @@ sim: $(SIM_TARGETS)
 # -------------------------
 
 clean:
-	rm -rf $(PROJECT).bin $(PROJECT).asc $(PROJECT).json \
-		yosys.log nextpnr.log abc.history \
+	rm -rf $(BUILD)/$(PROJECT).bin $(BUILD)/$(PROJECT).asc $(BUILD)/$(PROJECT).json \
+		$(BUILD)/yosys.log $(BUILD)/nextpnr.log \
 		$(VVP_FILES) $(VCD_FILES)
+	rmdir $(BUILD)/sim
+	rmdir $(BUILD)/sim_int
+	rmdir $(BUILD)
 # -------------------------
 # LOAD FPGA
 # -------------------------

@@ -65,7 +65,7 @@ module int_leds_mem_tb;
 
     // Simulation control
     initial begin
-        $dumpfile("int_mem_leds.vcd");
+        $dumpfile("int_leds_mem_tb.vcd");
         $dumpvars(0, int_leds_mem_tb);
 
         // reset pulse

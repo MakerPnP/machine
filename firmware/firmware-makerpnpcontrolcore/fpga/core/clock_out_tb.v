@@ -20,7 +20,7 @@ module clock_out_tb;
 
     // Simulation control
     initial begin
-        $dumpfile("clock_out.vcd");
+        $dumpfile("clock_out_tb.vcd");
         $dumpvars(0, clock_out_tb);
 
         // reset pulse
