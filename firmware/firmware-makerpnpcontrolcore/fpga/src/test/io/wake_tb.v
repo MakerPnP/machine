@@ -1,11 +1,13 @@
 `timescale 1ns/1ps
 
+`include "src/test/assertions.svh"
+
 module wake_tb;
 
     // Testbench signals
     reg NWAKE_IN;
     wire NWAKE_1;
-    reg RESET = 1;
+    reg RESET;
 
     // Instantiate the DUT (DUT = Device Under Test)
     wake dut (
@@ -25,11 +27,20 @@ module wake_tb;
         #10;
         // during reset pulse, NWAKE_IN goes LOW, but this should not be reflected on the output, until after reset goes LOW
         NWAKE_IN = 0;
-        #10;
+        #1;
+        `ASSERT_EQ(NWAKE_1, 1'd1);
+        #9;
         RESET = 0;
+
+        #1;
+        `ASSERT_EQ(NWAKE_1, 1'd0);
 
         // Run simulation for some time
         #100;
+
+        `ASSERT_EQ(NWAKE_1, 1'd0);
+
+        report();
 
         $finish;
     end
