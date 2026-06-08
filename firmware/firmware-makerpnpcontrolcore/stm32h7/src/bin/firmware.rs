@@ -163,6 +163,16 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
         let mut fpga_mem: [u8; 0x200] = [0x00; 0x200];
         fpga.read_block(0x0000, &mut fpga_mem);
+        debug!("FPGA register map (u8):\n{:02x}", fpga_mem);
+
+        let mut fpga_mem: [u32; 0x200 / 4] = [0x0000_0000; 0x200 / 4];
+        fpga.read_block_u32(0x0000, &mut fpga_mem);
+        debug!("FPGA register map (u32):\n{:08x}", fpga_mem);
+
+        let mut encoder_mem: [u32; 6] = [0x69b0_0b42, 0x69b0_0b42, 0x69b0_0b42, 0x69b0_0b42, 0x69b0_0b42, 0x69b0_0b42];
+        fpga.write_block_u32_chunked::<16>(0x0040, &mut encoder_mem);
+        fpga.read_block_u32(0x0040, &mut encoder_mem);
+        debug!("Encoder memory after write (u32):\n{:08x}", encoder_mem);
 
         if ident == [0xFF, 0xFF, 0xFF, 0xFF ] {
             defmt::panic!("No response from FPGA");

@@ -10,12 +10,12 @@ module int_leds_mem_tb;
     wire FPGA_ACT;
     wire MCU_ACT;
 
-    reg [7:0] led_ctrl;
+    reg [31:0] led_ctrl;
     reg strobe_led_update;
 
 
     // Local Testbench Signals to mimic internal FPGA modules
-    reg [7:0]  mock_reg_io_in_1;
+    reg [31:0] mock_reg_io_in_1;
     reg [31:0] mock_enc_1;
     reg [31:0] mock_enc_2;
     reg [31:0] mock_enc_3;
@@ -25,8 +25,8 @@ module int_leds_mem_tb;
 
     // Interconnect Wires between isolated QuadSPI Core and Memory Map Decoder
     reg [11:0] mem_addr;
-    reg [7:0]  mem_din;
-    reg [7:0]  mem_dout;
+    reg [31:0]  mem_din;
+    reg [31:0]  mem_dout;
     reg        mem_we   = 0;
 
     wire        strobe_encoder_reset;
@@ -79,7 +79,7 @@ module int_leds_mem_tb;
         #100;
         mem_we = 1'b1;
         mem_addr = 12'h020;
-        mem_din = 8'b0000_0000;
+        mem_din = 32'd0;
 
         // hold the write strobe for one clock cycle
         #10;
@@ -91,7 +91,7 @@ module int_leds_mem_tb;
 
         mem_we = 1'b1;
         mem_addr = 12'h020;
-        mem_din = 8'b0000_0001;
+        mem_din = {24'd0, 8'b0000_0001};
 
         // hold the write strobe for one clock cycle
         #10;
@@ -103,7 +103,7 @@ module int_leds_mem_tb;
 
         mem_we = 1'b1;
         mem_addr = 12'h020;
-        mem_din = 8'b0000_0010;
+        mem_din = {24'd0, 8'b0000_0010};
 
         // hold the write strobe for one clock cycle
         #10;
@@ -115,7 +115,7 @@ module int_leds_mem_tb;
 
         mem_we = 1'b1;
         mem_addr = 12'h020;
-        mem_din = 8'b0000_0011;
+        mem_din = {24'd0, 8'b0000_0011};
 
         // hold the write strobe for one clock cycle
         #10;

@@ -7,8 +7,8 @@ module quadspi (
 
     // Memory Interface Port A
     output reg [11:0] mem_addr,
-    output reg [7:0]  mem_din,
-    input  wire [7:0] mem_dout,
+    output reg [31:0]  mem_din,
+    input  wire [31:0] mem_dout,
     output reg        mem_we    = 0
 );
 
@@ -26,7 +26,7 @@ module quadspi (
 
     // Tri-state buffer logic
     reg        io_out_en;
-    reg [3:0]  io_out_reg;   // Changed to register to prevent combinatorial bleeding
+    reg [3:0]  io_out_reg;
     wire [3:0] io_in;
 
     // -----------------------------------------------------------------
@@ -70,9 +70,11 @@ module quadspi (
         end
     endgenerate
 
-    reg [3:0] nibble_buf;
+    reg [31:0] in_buf;
+    reg [31:0] out_buf;
 
-    reg addr_increment_flag = 1'b0;
+    reg word_complete_flag = 1'b0;
+    reg commit_flag = 1'b0;
 
     // -----------------------------------------------------------------
     // Synchronous Output Driver Logic (Prepares data on SCK Falling Edge)
@@ -82,13 +84,7 @@ module quadspi (
             io_out_reg <= 4'b0;
         end else if (sck_falling) begin
             if (state == STATE_DATA_R) begin
-                // If phase_counter[0] is 0, the rising edge just processed the high nibble.
-                // We now load the low nibble so it is stable well before the next rising edge.
-                if (phase_counter[0] == 1'b1) begin
-                    io_out_reg <= mem_dout[3:0];
-                end else begin
-                    io_out_reg <= mem_dout[7:4];
-                end
+                io_out_reg <= out_buf[31:28];
             end else begin
                 io_out_reg <= 4'b0;
             end
@@ -96,25 +92,67 @@ module quadspi (
     end
 
     // -----------------------------------------------------------------
-    // Main SPI Protocol State Machine (Processes on SCK Rising Edge)
+    // Immediate disable of io_outputs
     // -----------------------------------------------------------------
     always @(posedge clk_sys or posedge cs_n) begin
         if (cs_n) begin
-            state         <= STATE_CMD;
-            phase_counter <= 0;
             if (io_out_en) begin
                 $display("disabling quadspi outputs");
             end
-            io_out_en     <= 0;
-            mem_we        <= 0;
+            io_out_en <= 1'b0;
+        end else begin
+            if (sck_rising && state == STATE_DUMMY && phase_counter == 4'd3) begin
+                $display("enabling quadspi outputs");
+                io_out_en  <= 1'b1;
+            end
+        end
+    end
+
+    // -----------------------------------------------------------------
+    // Main SPI Protocol State Machine (Processes on SCK Rising Edge)
+    // -----------------------------------------------------------------
+    always @(posedge clk_sys) begin
+        if (word_complete_flag) begin
+            word_complete_flag <= 0;
+            case (state)
+                STATE_DATA_R: begin
+                    out_buf       <= mem_dout;
+                end
+                STATE_DATA_W: begin
+                    // capture the completed input buffer
+                    mem_din       <= in_buf;
+                    mem_we        <= 1'b1;
+                    $display("in_buf: 0x%08h", in_buf);
+                end
+            endcase
+        end
+
+        if (mem_we) begin
+            // if CS goes high during a commit, we need to clear mem_we on the next clock cycle.
+            // if mem_we is reset here the commit is lost.
+            commit_flag <= 1'b1;
+        end
+
+        if (commit_flag) begin
+            $display("disabling mem_we flag");
+            mem_we        <= 1'b0;
+            commit_flag   <= 1'b0;
+            // increment the address /after/ the write
+            $display("incrementing address after write");
+            if (mem_addr == 12'h1FC)
+                mem_addr <= 12'h000;
+            else
+                mem_addr <= mem_addr + 12'd4;
+        end
+
+        if (cs_n) begin
+            state         <= STATE_CMD;
+            phase_counter <= 0;
             cmd           <= 0;
             addr          <= 0;
-            nibble_buf    <= 0;
+            in_buf        <= 0;
+            word_complete_flag <= 0;
         end else begin
-            if (mem_we) begin
-                mem_we <= 1'b0;
-            end
-
             // Only process state modifications on valid rising edges of sck
             if (sck_rising) begin
                 case (state)
@@ -153,52 +191,45 @@ module quadspi (
                         if (phase_counter == 4'd7) begin
                             // 8 full clock periods finished
                             phase_counter <= 0;
+                            out_buf       <= mem_dout;
                             state         <= STATE_DATA_R;
                         end else begin
                             phase_counter <= phase_counter + 4'd1;
-                            if (phase_counter == 4'd3) begin
-                                $display("enabling quadspi outputs");
-                                io_out_en     <= 1'b1;
-                            end
                         end
                     end
 
                     STATE_DATA_R: begin
                         phase_counter <= phase_counter + 4'd1;
+                        out_buf <= out_buf << 4;
 
-                        // Advance address space after the low nibble phase finishes
-                        if (phase_counter[0] == 1'b1) begin
-                            addr_increment_flag = 1'b1;
+                        // Advance address space after the last nibble phase finishes
+                        if (phase_counter == 4'd7) begin
+
+                            phase_counter <= 4'd0;
+
+                            word_complete_flag <= 1;
+                            if (mem_addr == 12'h1FC)
+                                mem_addr <= 12'h000;
+                            else
+                                mem_addr <= mem_addr + 12'd4;
                         end
                     end
 
                     STATE_DATA_W: begin
                         phase_counter <= phase_counter + 4'd1;
 
-                        if (phase_counter[0] == 1'b0) begin
-                            nibble_buf    <= io_in;
-                            // Explicitly ensure strobe is low during high nibble
-                            mem_we        <= 1'b0;
+                        if (phase_counter == 4'd0) begin
+                            in_buf        <= {28'd0, io_in};
                         end else begin
-                            mem_din       <= {nibble_buf, io_in};
-                            mem_we        <= 1'b1; // Strobe high to commit the completed byte
-                        end
+                            in_buf       <= {in_buf << 4, io_in};
 
-                        // Auto-Increment: Advance the pointer only on the clock edge
-                        // AFTER the complete byte has been processed (wrapping from 1 back to 0)
-                        if (phase_counter > 4'd0 && phase_counter[0] == 1'b0) begin
-                            addr_increment_flag = 1'b1;
+                            if (phase_counter == 4'd7) begin
+                                word_complete_flag <= 1;
+                                phase_counter <= 4'd0;
+                            end
                         end
                     end
                 endcase
-                if (addr_increment_flag == 1'b1) begin
-                    addr_increment_flag = 1'b0;
-
-                    if (mem_addr == 12'h1FF)
-                        mem_addr <= 12'h000;
-                    else
-                        mem_addr <= mem_addr + 12'd1;
-                end
             end
         end
     end

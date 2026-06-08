@@ -1,18 +1,18 @@
 // Dedicated LED control module
 module leds (
     input  reset,
-    input  wire       sys_clk,
-    input  wire       strobe_update,
-    input  wire [7:0] led_ctrl,
-    output reg        mcu_act = 0,
-    output reg        fpga_act = 0,
-    output reg [15:0] debug
+    input  wire        sys_clk,
+    input  wire        strobe_update,
+    input  wire [31:0] led_ctrl,
+    output reg         mcu_act = 0,
+    output reg         fpga_act = 0,
+    output reg [15:0]  debug
 );
     // CDC (Clock Domain Crossing) Flag Catching
     // Because strobe_update /may/ originate from a diffent clock domain a simple pulse synchronizer
     // is used to clean it up for this clock domain.
     reg strobe_sync_r1, strobe_sync_r2;
-    reg [7:0] led_ctrl_sync;
+    reg [31:0] led_ctrl_sync;
 
     reg activity_flag = 1'b0;
 
@@ -21,7 +21,7 @@ module leds (
             strobe_sync_r1 = 1;
             strobe_sync_r2 = 0;
 
-            led_ctrl_sync = 8'b0000_0000;
+            led_ctrl_sync = 32'd0;
         end else begin
             strobe_sync_r2 = strobe_sync_r1;
             strobe_sync_r1 = strobe_update;
@@ -39,7 +39,7 @@ module leds (
             // Bit 1 handles USER MCU_ACT status
             mcu_act = led_ctrl_sync[1];
 
-            $display("LED out (sync): 0x%02h", led_ctrl_sync);
+            $display("LED out (sync): 0x%08h", led_ctrl_sync);
         end
 
         activity_flag = ~activity_flag;

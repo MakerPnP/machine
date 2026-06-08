@@ -40,19 +40,19 @@ module core_top (
 
     // Interconnect Wires between QSPI Core and Memory Map Decoder
     wire [11:0] mem_addr;
-    wire [7:0]  mem_din;
-    wire [7:0]  mem_dout;
+    wire [31:0] mem_din;
+    wire [31:0] mem_dout;
     wire        mem_we;
 
     // Interconnect Wires from Internal Modules to Memory Map Decoder
-    wire [7:0]  reg_io_in_1;
+    wire [31:0] reg_io_in_1;
     wire [31:0] enc_1, enc_2, enc_3, enc_4, enc_5, enc_6;
 
-    wire [7:0]  led_ctrl;
+    wire [31:0] led_ctrl;
     wire [15:0] led_debug;
     wire        strobe_led_update;
 
-    wire [7:0]  buzzer_ctrl;
+    wire [31:0] buzzer_ctrl;
     wire [15:0] buzzer_debug;
     wire        strobe_buzzer_update;
 
@@ -198,6 +198,6 @@ module core_top (
 
     // Map buttons to reg_io_in_1 (Bit 0 = USER 0, Bit 1 = USER 1)
     // Inverted (~btn) because external circuit pulls up to 3V3 (Pressed = 0)
-    assign reg_io_in_1 = {6'b000000, ~btn_sync_s[1], ~btn_sync_s[0]};
+    assign reg_io_in_1 = {30'd0, ~btn_sync_s[1], ~btn_sync_s[0]};
 
 endmodule

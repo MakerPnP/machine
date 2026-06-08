@@ -38,6 +38,8 @@ embedded-hal-async = "1.0.0"
 static_cell        = "2.1.1"
 embedded-alloc     = "0.6.0"
 
+byteorder          = { version = "1.5.0", default-features = false }
+
 # this fork contains fixes from sebastianbergt and frozendrop forks.
 # including being updated to use embedded-hal 1.0.0 and defmt support
 tmc5160 = { git = "https://github.com/MakerPnP/tmc5160-rs.git", features = ["defmt"], branch = "makerpnp" }
