@@ -44,6 +44,7 @@ EXTRA_SRCS_leds :=
 
 # Special / integration TBs
 EXTRA_SRCS_int_leds_mem := $(SRC_MAIN)/io/leds.v $(SRC_MAIN)/registers/memory.v
+EXTRA_SRCS_int_core_top := $(VERILOGS)
 
 # Find RTL file matching module name
 define FIND_RTL
@@ -91,7 +92,7 @@ $(PROJECT).bin: $(PROJECT).asc
 ## sim/<path_to_testbench>: Run a specific testbench preserving relative path layout, e.g. sim/test/bar1/foo
 sim/%:
 	@mkdir -p $(BUILD)/$(dir $*)
-	iverilog -g2012 -o $(BUILD)/$*_tb.vvp $(call TB_SRCS,$*)
+	iverilog -D SIM -g2012 -o $(BUILD)/$*_tb.vvp $(call TB_SRCS,$*)
 	cd $(BUILD)/$(dir $*) && vvp -n $(notdir $*_tb.vvp)
 	@echo ""
 

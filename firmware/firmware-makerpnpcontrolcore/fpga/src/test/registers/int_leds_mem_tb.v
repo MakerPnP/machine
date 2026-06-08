@@ -7,59 +7,49 @@ module int_leds_mem_tb;
     // Testbench signals
     reg RESET;
     reg TCXO = 0;
+
     wire FPGA_ACT;
     wire MCU_ACT;
 
-    reg [31:0] led_ctrl;
-    reg strobe_led_update;
-
-
-    // Local Testbench Signals to mimic internal FPGA modules
-    reg [31:0] mock_reg_io_in_1;
-    reg [31:0] mock_enc_1;
-    reg [31:0] mock_enc_2;
-    reg [31:0] mock_enc_3;
-    reg [31:0] mock_enc_4;
-    reg [31:0] mock_enc_5;
-    reg [31:0] mock_enc_6;
-
-    // Interconnect Wires between isolated QuadSPI Core and Memory Map Decoder
-    reg [11:0] mem_addr;
-    reg [31:0]  mem_din;
-    reg [31:0]  mem_dout;
+    reg [15:0] mem_addr;
+    reg [31:0] mem_din;
+    reg [31:0] mem_dout;
     reg        mem_we   = 0;
 
-    wire        strobe_encoder_reset;
+    reg [5:0]  led_addr;
+    reg [31:0] led_din;
+    reg [31:0] led_dout;
+    reg        led_we;
 
-    leds leds_int (
+    wire [15:0] debug;
+
+    leds dut (
         .reset(RESET),
         .sys_clk(TCXO),
-        .led_ctrl(led_ctrl),
-        .strobe_update(strobe_led_update),
+
+        .bus_we(led_we),
+        .bus_addr(led_addr),
+        .bus_din(led_din),
+        .bus_dout(led_dout),
+
         .mcu_act(MCU_ACT),
-        .fpga_act(FPGA_ACT)
+        .fpga_act(FPGA_ACT),
+
+        .debug(debug)
     );
 
-    memory memory_int (
+    memory memory_map_inst (
         .reset(RESET),
         .clk_a(TCXO),
-        .addr_a(mem_addr),
         .we_a(mem_we),
+        .addr_a(mem_addr),
         .din_a(mem_din),
         .dout_a(mem_dout),
 
-        // Route testbench mock variables directly into read multiplexer
-        // IO (buttons)
-        .reg_io_in_1(mock_reg_io_in_1),
-
-        // Encoders
-        .enc_1(mock_enc_1), .enc_2(mock_enc_2), .enc_3(mock_enc_3),
-        .enc_4(mock_enc_4), .enc_5(mock_enc_5), .enc_6(mock_enc_6),
-
-        // Catch output strobes directly for evaluation
-        .strobe_led_update(strobe_led_update),
-        .led_ctrl(led_ctrl),
-        .strobe_encoder_reset(strobe_encoder_reset)
+        .led_we(led_we),
+        .led_addr(led_addr),
+        .led_din(led_din),
+        .led_dout(led_dout)
     );
 
     // Clock generation: 100 MHz simulated clock (10ns period)
@@ -78,7 +68,7 @@ module int_leds_mem_tb;
         // Run simulation for some time
         #100;
         mem_we = 1'b1;
-        mem_addr = 12'h020;
+        mem_addr = 12'h040;
         mem_din = 32'd0;
 
         // hold the write strobe for one clock cycle
@@ -88,9 +78,10 @@ module int_leds_mem_tb;
         // Run to let clocks sync
         #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
+        `ASSERT_EQ(FPGA_ACT, 1'b0, "0b%1b", "FPGA_ACT mismatch");
+        `ASSERT_EQ(MCU_ACT, 1'b0, "0b%1b", "MCU_ACT mismatch");
 
         mem_we = 1'b1;
-        mem_addr = 12'h020;
         mem_din = {24'd0, 8'b0000_0001};
 
         // hold the write strobe for one clock cycle
@@ -100,9 +91,10 @@ module int_leds_mem_tb;
         // Run to let clocks sync
         #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
+        `ASSERT_EQ(FPGA_ACT, 1'b1, "0b%1b", "FPGA_ACT mismatch");
+        `ASSERT_EQ(MCU_ACT, 1'b0, "0b%1b", "MCU_ACT mismatch");
 
         mem_we = 1'b1;
-        mem_addr = 12'h020;
         mem_din = {24'd0, 8'b0000_0010};
 
         // hold the write strobe for one clock cycle
@@ -112,9 +104,10 @@ module int_leds_mem_tb;
         // Run to let clocks sync
         #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
+        `ASSERT_EQ(FPGA_ACT, 1'b0, "0b%1b", "FPGA_ACT mismatch");
+        `ASSERT_EQ(MCU_ACT, 1'b1, "0b%1b", "MCU_ACT mismatch");
 
         mem_we = 1'b1;
-        mem_addr = 12'h020;
         mem_din = {24'd0, 8'b0000_0011};
 
         // hold the write strobe for one clock cycle
@@ -124,6 +117,8 @@ module int_leds_mem_tb;
         // Run to let clocks sync
         #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
+        `ASSERT_EQ(MCU_ACT, 1'b1, "0b%1b", "MCU_ACT mismatch");
+        `ASSERT_EQ(FPGA_ACT, 1'b1, "0b%1b", "FPGA_ACT mismatch");
 
         report();
         $finish;

@@ -10,6 +10,28 @@
  * Achieved output frequency:   100.000 MHz
  */
 
+`ifdef SIM
+`timescale 1ns / 1ps
+module pll(
+    input  clock_in,
+    output reg clock_out,
+    output reg locked
+);
+    initial begin
+        $display("Using simulated PLL");
+
+        clock_out = 0;
+        locked = 0;
+
+        // wait a bit to simulate lock time
+        #100 locked = 1;
+        $display("locked");
+
+        // generate 2x clock (adjust timing to match your testbench timescale)
+        forever #10 clock_out = ~clock_out;
+    end
+endmodule
+`else
 module pll(
 	input  clock_in,
 	output clock_out,
@@ -31,3 +53,4 @@ SB_PLL40_CORE #(
 		);
 
 endmodule
+`endif

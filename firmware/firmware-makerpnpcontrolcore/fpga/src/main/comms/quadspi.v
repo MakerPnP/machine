@@ -6,7 +6,7 @@ module quadspi (
     inout  wire [3:0] io,
 
     // Memory Interface Port A
-    output reg [11:0] mem_addr,
+    output reg [15:0] mem_addr,
     output reg [31:0]  mem_din,
     input  wire [31:0] mem_dout,
     output reg        mem_we    = 0
@@ -131,18 +131,18 @@ module quadspi (
             // if CS goes high during a commit, we need to clear mem_we on the next clock cycle.
             // if mem_we is reset here the commit is lost.
             commit_flag <= 1'b1;
+            mem_we        <= 1'b0;
         end
 
         if (commit_flag) begin
             $display("disabling mem_we flag");
-            mem_we        <= 1'b0;
             commit_flag   <= 1'b0;
             // increment the address /after/ the write
             $display("incrementing address after write");
-            if (mem_addr == 12'h1FC)
-                mem_addr <= 12'h000;
+            if (mem_addr == 16'h01FC)
+                mem_addr <= 16'h0000;
             else
-                mem_addr <= mem_addr + 12'd4;
+                mem_addr <= mem_addr + 16'd4;
         end
 
         if (cs_n) begin
@@ -171,7 +171,7 @@ module quadspi (
                     STATE_ADDR: begin
                         if (phase_counter == 4'd3) begin
                             phase_counter <= 0;
-                            mem_addr <= {addr[7:0], io_in};
+                            mem_addr <= {addr[11:0], io_in};
 
                             if (cmd[7] == 1'b1) begin
                                 // High bit in MSB indicates a write operation
@@ -208,10 +208,10 @@ module quadspi (
                             phase_counter <= 4'd0;
 
                             word_complete_flag <= 1;
-                            if (mem_addr == 12'h1FC)
-                                mem_addr <= 12'h000;
+                            if (mem_addr == 16'h01FC)
+                                mem_addr <= 16'h0000;
                             else
-                                mem_addr <= mem_addr + 12'd4;
+                                mem_addr <= mem_addr + 16'd4;
                         end
                     end
 
@@ -221,7 +221,7 @@ module quadspi (
                         if (phase_counter == 4'd0) begin
                             in_buf        <= {28'd0, io_in};
                         end else begin
-                            in_buf       <= {in_buf << 4, io_in};
+                            in_buf       <= in_buf << 4 | io_in;
 
                             if (phase_counter == 4'd7) begin
                                 word_complete_flag <= 1;

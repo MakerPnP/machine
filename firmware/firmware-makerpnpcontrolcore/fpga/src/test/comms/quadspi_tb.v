@@ -1,5 +1,4 @@
-// quadspi_tb.v
-// Isolated Unit Testbench bypassing core_top.v (Strict Verilog-2001)
+// NOTE: addresses are incremented after reads/writes, tests assert the NEXT address
 `timescale 1ns / 1ps
 
 `include "src/test/assertions.svh"
@@ -22,19 +21,11 @@ module quadspi_tb;
     // Bidirectional Bus Tri-state Setup
     assign io = io_en ? io_drive : 4'bz;
 
-    // Local Testbench Signals to mimic internal FPGA modules
-    reg  [31:0] mock_reg_io_in_1;
-    reg  [31:0] mock_enc             [0:5];
-
     // Interconnect Wires between isolated QuadSPI Core and Memory Map Decoder
-    wire [11:0] mem_addr;
+    wire [15:0] mem_addr;
     wire [31:0] mem_din;
     wire [31:0] mem_dout;
     wire        mem_we;
-
-    wire        strobe_led_update;
-    wire [31:0] led_ctrl;
-    wire        strobe_encoder_reset;
 
     // Direct instantiation of your isolated modules under test (UUT)
     quadspi qspi_uut (
@@ -46,32 +37,6 @@ module quadspi_tb;
         .mem_din(mem_din),
         .mem_dout(mem_dout),
         .mem_we(mem_we)
-    );
-
-    memory memory_map_uut (
-        .reset (RESET),
-        .clk_a (TCXO),
-        .addr_a(mem_addr),
-        .we_a  (mem_we),
-        .din_a (mem_din),
-        .dout_a(mem_dout),
-
-        // Route testbench mock variables directly into read multiplexer
-        // IO (buttons)
-        .reg_io_in_1(mock_reg_io_in_1),
-
-        // Encoders
-        .enc_1(mock_enc[0]),
-        .enc_2(mock_enc[1]),
-        .enc_3(mock_enc[2]),
-        .enc_4(mock_enc[3]),
-        .enc_5(mock_enc[4]),
-        .enc_6(mock_enc[5]),
-
-        // Catch output strobes directly for evaluation
-        .strobe_led_update(strobe_led_update),
-        .led_ctrl(led_ctrl),
-        .strobe_encoder_reset(strobe_encoder_reset)
     );
 
     // Clock generator helper - Starts from 1, pulls low, then drives high
@@ -175,23 +140,8 @@ module quadspi_tb;
 
     // Testbench execution variables
     reg [7:0] read_byte;
-    reg [7:0] b0, b1, b2, b3;
     reg [31:0] read_word;
     integer i;
-
-    // Emulate what the encoders module does do when it handles a reset strobe
-
-    always @(posedge TCXO) begin
-        if (strobe_encoder_reset) begin
-            $display("Resetting mock encoders");
-            mock_enc[0] = 32'd0;
-            mock_enc[1] = 32'd0;
-            mock_enc[2] = 32'd0;
-            mock_enc[3] = 32'd0;
-            mock_enc[4] = 32'd0;
-            mock_enc[5] = 32'd0;
-        end
-    end
 
     initial begin
         $dumpfile("quadspi_tb.vcd");
@@ -212,9 +162,9 @@ module quadspi_tb;
         #500;
 
         // -------------------------------------------------------------
-        // TEST 1: Continuous Read (IDENT + VERSION) - 8 Bytes Total
+        // TEST 1: Sequential Read
         // -------------------------------------------------------------
-        $display("--- Test 1: Reading IDENT & VERSION Sequentially ---");
+        $display("--- Test 1: Sequential Read ---");
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h10);
@@ -222,196 +172,54 @@ module quadspi_tb;
         dummy_phase();
 
         read_long_word_data(read_word);
-        $display("IDENT Reg Data: 0x%08h", read_word);
-        `ASSERT_EQ(read_word, 32'hfaceb00b, "0x%08h", "Ident mismatch");
-
+        `ASSERT_EQ(mem_addr, 16'h0004, "0x%08h", "address mismatch");
         read_long_word_data(read_word);
-        $display("VERSION Reg Data: 0x%08h", read_word);
-        `ASSERT_EQ(read_word, 32'h01020304, "0x%08h", "Version mismatch");
+        `ASSERT_EQ(mem_addr, 16'h0008, "0x%08h", "address mismatch");
+
         cs_n = 1;
 
         #100;
 
         // -------------------------------------------------------------
-        // TEST 2: Read Button Status Bits (IO_IN_1 Address 0x24)
+        // TEST 2: Sequential Write
         // -------------------------------------------------------------
-        $display("--- Test 2: Simulating Pressed Buttons inside TB and Reading ---");
-        // Simulate buttons being pressed on fabric side
-        mock_reg_io_in_1 = 32'h03;
-        #100;
+        $display("--- Test 3: Sequential Write ---");
 
         cs_n  = 0;
         io_en = 1;
-        send_command_byte(8'h10);
-        send_address_word(16'h0024);
-        dummy_phase();
-        read_long_word_data(read_word);
+        send_command_byte(8'h90);
+        send_address_word(16'h1234);
+        send_long_word(32'ha1b2_c3d4);
+
+        `ASSERT_EQ(mem_addr, 16'h1234, "0x%04h", "address mismatch");
+        `ASSERT_EQ(mem_din, 32'ha1b2_c3d4, "0x%08h", "data mismatch");
+
+        send_long_word(32'he5f6_0718);
+
+        `ASSERT_EQ(mem_addr, 16'h1238, "0x%04h", "address mismatch");
+        `ASSERT_EQ(mem_din, 32'he5f6_0718, "0x%08h", "data mismatch");
+
         cs_n = 1;
 
-        `ASSERT_EQ(read_word, 32'h0000_0003, "0x%08h", "IO_IN_1 Readout mismatch");
+        // Minimum sys_clk domain cycles to flush out the write
+        repeat (3) @(posedge TCXO);
+
+        `ASSERT_EQ(mem_addr, 16'h123C, "0x%04h", "address mismatch");
 
         #100;
 
         // -------------------------------------------------------------
-        // TEST 3: Write LED Status Bits (Address 0x20)
+        // TEST 3: Wrap around and register map boundary
         // -------------------------------------------------------------
-        $display("--- Test 3: Writing LED State & Evaluating Strobes ---");
-
-        begin : test3_block
-            reg led_strobe_caught;
-            led_strobe_caught = 1'b0;
-
-            fork
-                // Thread A: Send the write data byte
-                begin
-                    cs_n  = 0;
-                    io_en = 1;
-                    send_command_byte(8'h90);
-                    send_address_word(16'h0020);
-                    send_long_word(32'h0000_0003);
-                    cs_n = 1;
-
-                    // Allow the sys_clk domain several cycles to flush out the strobe
-                    repeat (5) @(posedge TCXO);
-                end
-
-                // Thread B: Wait for the strobe to fire concurrently
-                begin
-                    @(posedge strobe_led_update);
-                    led_strobe_caught = 1'b1;
-                end
-            join
-
-            // Step past the evaluation delta plane to display results safely
-            if (led_strobe_caught) begin
-                $display("Strobe LED signal caught");
-            end else begin
-                $error("ERROR: Strobe LED signal missing");
-            end
-            `ASSERT_EQ(led_strobe_caught, 1);
-        end
-
-
-        `ASSERT_EQ(led_ctrl, 8'h03, "0x%02h", "LED_CTRL mismatch");
-
-        #100;
-
-        // -------------------------------------------------------------
-        // TEST 4: Read LED Status Bits (Address 0x20)
-        // -------------------------------------------------------------
-        $display("--- Test 4: Reading back the LED State ---");
-        #100;
-
-        cs_n  = 0;
-        io_en = 1;
-        send_command_byte(8'h10);
-        send_address_word(16'h0020);
-        dummy_phase();
-        read_long_word_data(read_word);
-        cs_n = 1;
-
-        `ASSERT_EQ(read_word, led_ctrl, "0x%02h", "LED_CTRL readback mismatch");
-
-        #100;
-
-        // -------------------------------------------------------------
-        // TEST 5: Continuous Multi-Byte Read of All 6 Encoders (24 Bytes)
-        // -------------------------------------------------------------
-        $display("--- Test 5: Continuous Read of Encoders 1 to 6 (24 Bytes) ---");
-        // mock encoder variable counters
-
-        // Initialize the array
-        mock_enc[0] = 32'h11223344;
-        mock_enc[1] = 32'h55667788;
-        mock_enc[2] = 32'h99AABBCC;
-        mock_enc[3] = 32'hDDEEFF00;
-        mock_enc[4] = 32'h12345678;
-        mock_enc[5] = 32'h87654321;
-
-        cs_n = 0;
-        io_en = 1;
-        send_command_byte(8'h10);
-        send_address_word(16'h0040);
-        dummy_phase();
-
-        for (i = 0; i <= 5; i = i + 1) begin
-            read_long_word_data(read_word);
-            $display("Encoder %0d value: 0x%08h", i + 1, read_word);
-            `ASSERT_EQ(read_word, mock_enc[i], "0x%08h", $sformatf("Encoder %0d mismatch", i));
-        end
-        cs_n = 1;
-
-        #100;
-
-        // -------------------------------------------------------------
-        // TEST 6: Reset All Encoders to 0 via CONFIG_1 (Address 0x10)
-        // -------------------------------------------------------------
-        $display("--- Test 6: Writing 0x01 to CONFIG_1 to Reset Encoders ---");
-
-        begin : test6_block
-            reg reset_strobe_caught;
-            reset_strobe_caught = 1'b0;
-
-            fork
-                // Thread A: Setup and execute the SPI transaction entirely within the fork
-                begin
-                    cs_n  = 0;
-                    io_en = 1;
-                    send_command_byte(8'h90);
-                    send_address_word(16'h0010);
-                    send_long_word(32'h0000_0001);
-                    cs_n = 1;
-
-                    // Allow the sys_clk domain several cycles to flush out the strobe
-                    repeat (5) @(posedge TCXO);
-                end
-
-                // Thread B: Wait concurrently for the strobe to fire
-                begin
-                    @(posedge strobe_encoder_reset);
-                    reset_strobe_caught = 1'b1;
-                end
-            join
-
-            // Evaluate findings
-
-            if (reset_strobe_caught) begin
-                $display("Strobe Encoder Reset signal detected");
-            end else begin
-                $error("ERROR: Strobe Encoder Reset signal missing");
-            end
-            `ASSERT_EQ(reset_strobe_caught, 1);
-        end
-
-        #100;
-
-        // Re-verify Encoder 1 has cleared out
-        cs_n  = 0;
-        io_en = 1;
-        send_command_byte(8'h10);
-        send_address_word(16'h0040);
-        dummy_phase();
-        read_byte_data(read_byte);
-        cs_n = 1;
-
-        `ASSERT_EQ(read_byte, 8'h00, "0x%02h", "Encoder 1 was not reset");
-
-        #100;
-
-        // -------------------------------------------------------------
-        // TEST 7: Wrap around and register map boundary
-        // -------------------------------------------------------------
-        $display("--- Test 7: Wrap around and register map boundary ---");
+        $display("--- Test 3: Wrap around and register map boundary ---");
         begin
-            reg [31:0] expected_data [3] = '{
-                // data from second to last address.
-                32'hFFFF_FFFF,
-                // marker at last address.
-                32'hDEAD_C0DE,
-                // ident from first address, as address should wrap round to 0 at 0x200
-                32'hFACE_B00B
-            };
             reg [15:0] address = 16'h01f8;
+            reg [15:0] expected_addresses[4] = '{
+                16'h01fc,
+                16'h0000,
+                16'h0004,
+                16'h0008
+            };
 
             cs_n  = 0;
             io_en = 1;
@@ -419,12 +227,12 @@ module quadspi_tb;
             send_address_word(address);
             dummy_phase();
 
-
-            for (i = 0; i < 3; i = i + 1) begin
+            for (i = 0; i < 4; i = i + 1) begin
                 read_long_word_data(read_word);
 
-                $display("Address: 0x%3h, Value:  0x%h", address, read_word);
-                `ASSERT_EQ(read_word, expected_data[i], "0x%02h", "Value mismatch");
+                $display("Address: 0x%3h", address);
+
+                `ASSERT_EQ(mem_addr, expected_addresses[i], "0x%04h", "address mismatch");
 
                 address = address + 16'd4;
             end

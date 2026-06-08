@@ -2,13 +2,12 @@
 
 `include "src/test/assertions.svh"
 
-module leds_tb;
+module buzzer_tb;
 
     // Testbench signals
     reg RESET;
     reg TCXO = 0;
-    wire FPGA_ACT;
-    wire MCU_ACT;
+    wire BUZZER;
 
     reg [5:0]  addr;
     reg [31:0] din;
@@ -18,7 +17,7 @@ module leds_tb;
     wire [15:0] debug;
 
     // Instantiate the DUT (DUT = Device Under Test)
-    leds dut (
+    buzzer dut (
         .reset(RESET),
         .sys_clk(TCXO),
 
@@ -27,8 +26,7 @@ module leds_tb;
         .bus_din(din),
         .bus_dout(dout),
 
-        .mcu_act(MCU_ACT),
-        .fpga_act(FPGA_ACT),
+        .buzzer(BUZZER),
 
         .debug(debug)
     );
@@ -38,8 +36,8 @@ module leds_tb;
 
     // Simulation control
     initial begin
-        $dumpfile("leds_tb.vcd");
-        $dumpvars(0, leds_tb);
+        $dumpfile("buzzer_tb.vcd");
+        $dumpvars(0, buzzer_tb);
 
         // reset pulse
         RESET = 1;
@@ -50,7 +48,7 @@ module leds_tb;
         #100;
 
         // TODO wrap this is a function
-        addr = 6'h00;
+        addr = 6'd0;
         din = {24'd0, 8'b0000_0000};
         we = 1'b1;
         #10;
@@ -59,15 +57,14 @@ module leds_tb;
 
         #100;
 
-        $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
-        `ASSERT_EQ(dout, 32'h0000_0000, "0x%08h", "LED_CTRL not updated");
-        `ASSERT_EQ(MCU_ACT, 1'b0, "0b%1b", "MCU_ACT not disabled");
-        `ASSERT_EQ(FPGA_ACT, 1'b0, "0b%1b", "FPGA_ACT not disabled");
+        $display("Buzzer. enabled: %d", BUZZER);
+        `ASSERT_EQ(dout, 32'h0000_0000, "0x%08h", "BUZZER_CTRL not updated");
+        `ASSERT_EQ(BUZZER, 1'b0, "0b%1b", "BUZZER not disabled");
 
 
         // TODO wrap this is a function
-        addr = 6'h00;
-        din = {24'd0, 8'b0000_0011};
+        addr = 6'd0;
+        din = {24'd0, 8'b0000_0001};
         we = 1'b1;
         #10;
         we = 1'b0;
@@ -75,10 +72,9 @@ module leds_tb;
 
         #100;
 
-        $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
-        `ASSERT_EQ(dout, 32'h0000_0003, "0x%08h", "LED_CTRL not updated");
-        `ASSERT_EQ(MCU_ACT, 1'b1, "0b%1b", "MCU_ACT not enabled");
-        `ASSERT_EQ(FPGA_ACT, 1'b1, "0b%1b", "FPGA_ACT not enabled");
+        $display("Buzzer. enabled: %d", BUZZER);
+        `ASSERT_EQ(dout, 32'h0000_0001, "0x%08h", "BUZZER_CTRL not updated");
+        `ASSERT_EQ(BUZZER, 1'b1, "0b%1b", "BUZZER not enabled");
 
         report();
         $finish;

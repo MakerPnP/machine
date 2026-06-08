@@ -5,7 +5,7 @@ module la
         input sys_clk,
         output wire [15:0] la_io,
         input wire [7:0] la_src_in,
-        input wire [15:0] la_in,
+        input wire [15:0] la_in
     );
 
     localparam SRC_DISABLED = 8'd0;

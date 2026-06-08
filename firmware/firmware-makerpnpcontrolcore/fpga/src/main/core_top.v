@@ -39,30 +39,60 @@ module core_top (
     wire wake_1;
 
     // Interconnect Wires between QSPI Core and Memory Map Decoder
-    wire [11:0] mem_addr;
+    wire [15:0] mem_addr;
     wire [31:0] mem_din;
     wire [31:0] mem_dout;
     wire        mem_we;
 
-    // Interconnect Wires from Internal Modules to Memory Map Decoder
-    wire [31:0] reg_io_in_1;
-    wire [31:0] enc_1, enc_2, enc_3, enc_4, enc_5, enc_6;
+    wire [5:0]  led_addr;
+    wire [31:0] led_din;
+    wire [31:0] led_dout;
+    wire        led_we;
 
-    wire [31:0] led_ctrl;
+    wire [5:0]  encoder_addr;
+    wire [31:0] encoder_din;
+    wire [31:0] encoder_dout;
+    wire        encoder_we;
+
+    wire [5:0]  io_addr;
+    wire [31:0] io_din;
+    wire [31:0] io_dout;
+    wire        io_we;
+
+    wire [5:0]  buzzer_addr;
+    wire [31:0] buzzer_din;
+    wire [31:0] buzzer_dout;
+    wire        buzzer_we;
+
     wire [15:0] led_debug;
-    wire        strobe_led_update;
-
-    wire [31:0] buzzer_ctrl;
     wire [15:0] buzzer_debug;
-    wire        strobe_buzzer_update;
-
-    wire        strobe_encoder_reset;
+    wire [15:0] io_debug;
+    wire [15:0] encoder_debug;
 
     reg [7:0] la_src = 2;
     wire [15:0] la_in = buzzer_debug;
     //wire [15:0] la_in = 16'h0F0F;
 
-    assign reset = ~locked;
+    reg [7:0] reset_cnt = 0;
+    reg reset_r = 1;
+
+    assign reset = reset_r;
+
+    // once the PLL is locked, release reset after a short delay
+    // to allow subsystems to process the reset signal while a clock is present
+    always @(posedge clk_100 or negedge locked) begin
+        if (!locked) begin
+            reset_cnt <= 0;
+            reset_r   <= 1;
+        end else begin
+            if (reset_cnt < 8'd10) begin
+                reset_cnt <= reset_cnt + 1;
+                reset_r   <= 1;
+            end else begin
+                reset_r   <= 0;
+            end
+        end
+    end
 
     // ----------------------
     // PLL
@@ -87,11 +117,15 @@ module core_top (
     leds led_inst (
         .reset(reset),
         .sys_clk(clk_100),
-        .strobe_update(strobe_led_update),
-        .led_ctrl(led_ctrl),
+
+        .bus_we(led_we),
+        .bus_addr(led_addr),
+        .bus_din(led_din),
+        .bus_dout(led_dout),
+
         .mcu_act(MCU_ACT),
         .fpga_act(FPGA_ACT),
-        .debug(led_debug),
+        .debug(led_debug)
     );
 
     // ----------------------
@@ -100,10 +134,47 @@ module core_top (
     buzzer buzzer_inst (
         .reset(reset),
         .sys_clk(clk_100),
-        .strobe_update(strobe_buzzer_update),
-        .buzzer_ctrl(buzzer_ctrl),
+
+        .bus_we(buzzer_we),
+        .bus_addr(buzzer_addr),
+        .bus_din(buzzer_din),
+        .bus_dout(buzzer_dout),
+
         .buzzer(BUZZER),
-        .debug(buzzer_debug),
+        .debug(buzzer_debug)
+    );
+
+    // ----------------------
+    // IO
+    // ----------------------
+    io io_inst (
+        .reset(reset),
+        .sys_clk(clk_100),
+
+        .bus_we(io_we),
+        .bus_addr(io_addr),
+        .bus_din(io_din),
+        .bus_dout(io_dout),
+        .user_0(USER_0),
+        .user_1(USER_1),
+        .debug(io_debug)
+    );
+
+    // ----------------------
+    // Encoders
+    // ----------------------
+    encoders encoder_inst (
+        .sys_clk(clk_100),
+        .reset(reset),
+
+        .bus_we(encoder_we),
+        .bus_addr(encoder_addr),
+        .bus_din(encoder_din),
+        .bus_dout(encoder_dout),
+
+        // TODO
+        .encoder_hardware_pins(6'b000000),
+        .debug(encoder_debug)
     );
 
     // ----------------------
@@ -112,22 +183,30 @@ module core_top (
     memory memory_map_inst (
         .reset(reset),
         .clk_a(clk_100),
-        .addr_a(mem_addr),
         .we_a(mem_we),
+        .addr_a(mem_addr),
         .din_a(mem_din),
         .dout_a(mem_dout),
 
-        // Inputs from modules to read-mux
-        .reg_io_in_1(reg_io_in_1),
-        .enc_1(enc_1), .enc_2(enc_2), .enc_3(enc_3),
-        .enc_4(enc_4), .enc_5(enc_5), .enc_6(enc_6),
+        .led_we(led_we),
+        .led_addr(led_addr),
+        .led_din(led_din),
+        .led_dout(led_dout),
 
-        // Outputs from write-decoder to modules
-        .strobe_led_update(strobe_led_update),
-        .led_ctrl(led_ctrl),
-        .strobe_buzzer_update(strobe_buzzer_update),
-        .buzzer_ctrl(buzzer_ctrl),
-        .strobe_encoder_reset(strobe_encoder_reset)
+        .encoder_we(encoder_we),
+        .encoder_addr(encoder_addr),
+        .encoder_din(encoder_din),
+        .encoder_dout(encoder_dout),
+
+        .io_we(io_we),
+        .io_addr(io_addr),
+        .io_din(io_din),
+        .io_dout(io_dout),
+
+        .buzzer_we(buzzer_we),
+        .buzzer_addr(buzzer_addr),
+        .buzzer_din(buzzer_din),
+        .buzzer_dout(buzzer_dout)
     );
 
     // ----------------------
@@ -177,27 +256,5 @@ module core_top (
         .clock_out3(FPGA_CLK_3),
         .clock_out4(FPGA_CLK_4)
     );
-
-    // Instantiate Encoders Module
-    encoders encoder_inst (
-        .sys_clk(clk_100),
-        .strobe_encoder_reset(strobe_encoder_reset),
-        .encoder_hardware_pins(6'b000000), // Map your actual encoder physical input pins here
-        .enc_1(enc_1), .enc_2(enc_2), .enc_3(enc_3),
-        .enc_4(enc_4), .enc_5(enc_5), .enc_6(enc_6)
-    );
-
-    // Button Capture / Debounce & Synchronizer Logic
-    // Sync external asynchronous buttons into the sys_clk domain
-    reg [1:0] btn_sync_m;
-    reg [1:0] btn_sync_s;
-    always @(posedge clk_100) begin
-        btn_sync_m <= {USER_1, USER_0};
-        btn_sync_s <= btn_sync_m;
-    end
-
-    // Map buttons to reg_io_in_1 (Bit 0 = USER 0, Bit 1 = USER 1)
-    // Inverted (~btn) because external circuit pulls up to 3V3 (Pressed = 0)
-    assign reg_io_in_1 = {30'd0, ~btn_sync_s[1], ~btn_sync_s[0]};
 
 endmodule
