@@ -2,7 +2,7 @@
 # yosys+nextpnr
 
 YOSYS_ROOT := /usr/local/share/yosys
-FLASH_ALGO_ROOT := ../../../../../dev-tools/makerpnpcore-w25q16jv
+FLASH_ALGO_ROOT := ../../../../dev-tools/makerpnpcore-w25q16jv
 
 PROJECT  := core
 TOP      := core_top
@@ -131,7 +131,7 @@ clean:
 
 ## load: Flash the synthesized core binary onto the hardware chip target using probe-rs.
 load: $(PROJECT).bin
-	probe-rs download --chip makerpnpcore-w25q16jv --chip-description-path $(FLASH_ALGO_ROOT)/target/definition.yaml $(PROJECT).bin --binary-format=bin --base-address 0x70000000 --verify
+	probe-rs download --chip makerpnpcore-w25q16jv --chip-description-path $(FLASH_ALGO_ROOT)/target/definition.yaml $(BUILD)/$(PROJECT).bin --binary-format=bin --base-address 0x70000000 --verify
 
 # -------------------------
 # HELP TARGET
