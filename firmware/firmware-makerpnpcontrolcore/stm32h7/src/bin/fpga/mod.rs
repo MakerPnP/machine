@@ -15,9 +15,9 @@ pub use commands::*;
 
 
 mod registers {
-    pub const REG_LED_CTRL: u16 = 0x0020;
-    pub const REG_IO_IN: u16 = 0x0024;
-    pub const REG_BUZZER_CTRL: u16 = 0x0028;
+    pub const REG_LED_CTRL: u16 = 0x0040;
+    pub const REG_IO_IN_1: u16 = 0x0084;
+    pub const REG_BUZZER_CTRL: u16 = 0x00C0;
 }
 pub use registers::*;
 
@@ -75,7 +75,7 @@ impl<I: Instance> FpgaCore<I> {
 
     pub fn read_buttons(&mut self) -> u8 {
         let mut buffer = [0; 1];
-        self.read_block(REG_IO_IN, &mut buffer);
+        self.read_block(REG_IO_IN_1, &mut buffer);
         buffer[0]
     }
 
