@@ -8,6 +8,7 @@ package tb_assert;
   localparam string COLOR_BLUE = "\033[34m";
   localparam string COLOR_WHITE = "\033[0m";
 
+  int unsigned success_count = 0;
   int unsigned assert_count = 0;
   int unsigned fail_count   = 0;
 
@@ -46,7 +47,8 @@ import tb_assert::*;
 // FMT defaults to "%0d" for backward compatibility
 // MSG defaults to "" (an empty string)
 `define ASSERT_EQ(A, B, FMT="%0d", MSG="") \
-  assert ((A) == (B)) assert_count++; \
+  assert_count++; \
+  assert ((A) == (B)) success_count++; \
   else begin \
     fail_count++; \
     if (MSG == "") begin \
