@@ -118,20 +118,22 @@ command set.
 
 #### Commands
 
-| Command | Name     | Address Length            | Dummy/Control          | Data     |
-|--------:|----------|---------------------------|------------------------|----------|
-| 0x10    | READ_16  | 2 bytes (16 bit address)  | 4 bytes/8 clock cycles | Data...  |
-| 0x90    | WRITE_16 | 2 bytes (16 bit address)  | None                   | Data...  |
+| Command | Name     | Address Length            | Dummy/Control          | Data    |
+|--------:|----------|---------------------------|------------------------|---------|
+| 0x10    | READ_16  | 2 bytes (16 bit address)  | 4 bytes/8 clock cycles | n * u32 |
+| 0x90    | WRITE_16 | 2 bytes (16 bit address)  | None                   | n * u32 |
 
 For all commands the leading bit of the command is used to indicate read or write mode.
 MSB = 0 == READ, MSB = 1 = WRITE.
+Registers are u32 sized and aligned. Big-endian byte ordering is used.
+Unaligned operations are not supported/permitted.
 
 Byte-wise:
 
-| Command | Name     | B1      | B2            | B3           | B4      | B5      | B6      | B7      | B8      | B9      | B10     | B11     | B12     | Bxx       |
-|--------:|----------|---------|---------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----------|
-|    0x10 | READ_16  | Command | Address[15:8] | Address[7:0] | Dummy   | Dummy   | Dummy   | Dummy   | Data[0] | Data[1] | Data[2] | Data[3] | Data[4] | Data[...] |
-|    0x90 | WRITE_16 | Command | Address[15:8] | Address[7:0] | Data[0] | Data[1] | Data[2] | Data[3] | Data[4] | Data[5] | Data[6] | Data[7] | Data[8] | Data[...] |
+| Command | Name     | B1      | B2            | B3           | B4      | B5      | B6      | B7      | B8      | B9      | B10     | B11     | Bxx       |
+|--------:|----------|---------|---------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|-----------|
+|    0x10 | READ_16  | Command | Address[15:8] | Address[7:0] | Dummy   | Dummy   | Dummy   | Dummy   | Data[0] | Data[1] | Data[2] | Data[3] | Data[...] |
+|    0x90 | WRITE_16 | Command | Address[15:8] | Address[7:0] | Data[0] | Data[1] | Data[2] | Data[3] | Data[4] | Data[5] | Data[6] | Data[7] | Data[...] |
 
 Bit wise: 
 
@@ -146,30 +148,30 @@ READ_16 Timing Example (4-bit IO)
 
 #### Register Map
 
+Registers are mapped into a per-peripheral address space. Addresses not listed are reserved.
+
 | Address | R/W | Name          | Length (bytes) | Purpose                |
 |--------:|:---:|---------------|----------------|------------------------|
-|    0x00 | RO  | IDENT         | 4              | A fixed identifier     |
-|    0x04 | RO  | VERSION       | 4              | A fixed version number |
-|    0x10 | WO  | CONFIG_1      | 4              | Config register 1      |
-|    0x20 | RW  | LED           | 1              | Read/Write LED status  |
-|    0x24 | RO  | IO_IN_1       | 1              | Read IO inputs         |
-|     ... |     | RESERVED      |                |                        |
-|    0x40 | RW  | ENCODER_1     | 4              | encoder 1              |
-|    0x44 | RW  | ENCODER_2     | 4              | encoder 2              |
-|    0x48 | RW  | ENCODER_3     | 4              | encoder 3              |
-|    0x4C | RW  | ENCODER_4     | 4              | encoder 4              |
-|    0x50 | RW  | ENCODER_5     | 4              | encoder 5              |
-|    0x54 | RW  | ENCODER_6     | 4              | encoder 6              |
-|     ... |     | RESERVED      |                |                        |
-|   0x1FC | RO  | END_OF_MEMORY | 4              |                        |
-
-REGISTERS - MEMORY MAPPED PERIPHERAL MAP (32-bit REGISTERS)
-=====================================================================
-
-All registers are 32-bit wide unless otherwise specified.
-Big-endian field ordering is shown for multi-byte decompositions.
+|  0x0000 | RO  | IDENT         | 4              | A fixed identifier     |
+|  0x0004 | RO  | VERSION       | 4              | A fixed version number |
+|  0x0040 | RW  | LED_CTRL      | 1              | LED control            |
+|  0x0080 | RW  | IO_CTRL       | 1              | IO control             |
+|  0x0084 | RO  | IO_IN_1       | 1              | Read IO inputs         |
+|  0x00C0 | RW  | BUZZER_CTRL   | 1              | Buzzer control         |
+|  0x0100 | RW  | ENCODER_CTRL  | 4              | Encoder control        |
+|  0x0120 | RW  | ENCODER_1     | 4              | encoder 1              |
+|  0x0124 | RW  | ENCODER_2     | 4              | encoder 2              |
+|  0x0128 | RW  | ENCODER_3     | 4              | encoder 3              |
+|  0x012C | RW  | ENCODER_4     | 4              | encoder 4              |
+|  0x0130 | RW  | ENCODER_5     | 4              | encoder 5              |
+|  0x0134 | RW  | ENCODER_6     | 4              | encoder 6              |
+|  0x01FC | RO  | END_OF_MEMORY | 4              | A fixed marker         |
 
 ##### 0x00 - IDENT (RO)
+
+Description: Fixed hardware identifier
+Type: Read-Only
+Reset Value: 0xFACEB00B
 
 ```
 31-0
@@ -179,12 +181,12 @@ Big-endian field ordering is shown for multi-byte decompositions.
 |              0xFACEB00B                  |
 +------------------------------------------+
 ```
-Type: Read-Only
-Reset Value: 0xFACEB00B
-Description: Fixed hardware identifier
 
 
 ##### 0x04 - VERSION (RO)
+
+Description: Firmware/hardware version encoding
+Type: Read-Only
 
 ```
 31-24     23-16      15-8       7-0
@@ -199,30 +201,14 @@ Field mapping:
 - [15:8]  PATCH (u8)
 - [7:0]   BUILD (u8)
 
-Type: Read-Only
-Description: Firmware/hardware version encoding
+##### 0x0040 - LED_CTRL (RW)
 
-
-##### 0x10 - CONFIG_1 (WO)
-
-```
-31-1                               0       
-+------------------------------------------+
-|              RESERVED            | RESET |
-+------------------------------------------+
-```
-Bit definitions:
-- [0]   RESET (1 = reset system, self-clears)
-- [31:1] RESERVED (ignored)
-
-Type: Write-Only
-Description: Configuration register
-
-
-##### 0x20 - LED (RW)
+Description: LED control register
+Type: Read/Write
+Reset Value: 0b0000_0001
 
 ```
-7-2                   1         0         
+31-2                  1         0         
 +------------------------------------------+
 |          RESERVED   | MCU_ACT | FPGA_ACT |
 +------------------------------------------+
@@ -231,17 +217,32 @@ Description: Configuration register
 Bit definitions:
 - [0]   FPGA_ACT LED control
 - [1]   MCU_ACT LED control
-- [7:2] RESERVED (must be written as 0)
+- [31:2] RESERVED (must be written as 0)
 
-Type: Read/Write
-Reset Value: 0b0000_0001
+##### 0x0080 - IO_CTRL (RW)
+
 Description: LED control register
-
-
-##### 0x24 - IO_IN_1 (RO)
+Type: Read/Write
+Reset Value: 0b0000_0000
 
 ```
-7-2                        1       0
+31-0         
++------------------------------------------+
+| RESERVED                                 |
++------------------------------------------+
+```
+
+Bit definitions:
+- [31:0] RESERVED (must be written as 0)
+
+
+##### 0x0084 - IO_IN_1 (RO)
+
+Description: Digital input status register
+Type: Read-Only
+
+```
+31-2                       1       0
 +------------------------------------------+
 |               RESERVED   | USER1 | USER0 |
 +------------------------------------------+
@@ -250,13 +251,48 @@ Description: LED control register
 Bit definitions:
 - [0] BUTTON_USER_0
 - [1] BUTTON_USER_1
-- [7:2] RESERVED
-
-Type: Read-Only
-Description: Digital input status register
+- [31:2] RESERVED
 
 
-##### 0x40 - 0x54 - ENCODER_[1-6] (RW)
+
+##### 0x00C0 - BUZZER_CTRL (RW)
+
+Description: Buzzer control register
+Type: Read/Write
+Reset Value: 0b0000_0000
+
+```
+31-1                              0         
++------------------------------------------+
+|          RESERVED               | BUZZER |
++------------------------------------------+
+```
+
+Bit definitions:
+- [0]   Buzzer enable (1 = enabled, 0 = disabled)
+- [31:1] RESERVED (must be written as 0)
+
+##### 0x0100 - ENCODER_CTRL (RW)
+
+Description: Configuration register
+Type: Read/Write
+Reset Value: 0b0000_0000
+
+```
+31-1                               0       
++------------------------------------------+
+|              RESERVED            | RESET |
++------------------------------------------+
+```
+Bit definitions:
+- [0]   RESET (1 = reset encoders, self-clears)
+- [31:1] RESERVED (ignored)
+
+
+##### 0x0120 - 0x0134 - ENCODER_[1-6] (RW)
+
+Type: Read/Write
+Description: 32-bit encoder counter/value register
 
 ```
 31-0
@@ -264,10 +300,8 @@ Description: Digital input status register
 |               ENCODER VALUE              |
 +------------------------------------------+
 ```
-Type: Read/Write
-Description: 32-bit encoder counter/value register
 
-##### 0x1FC - END_OF_MEMORY (RO)
+##### 0x01FC - END_OF_MEMORY (RO)
 
 ```
 31-0
