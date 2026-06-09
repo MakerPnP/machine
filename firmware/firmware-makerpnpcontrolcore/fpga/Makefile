@@ -73,11 +73,11 @@ all: \
 $(BUILD):
 	mkdir -p $(BUILD)
 
-$(BUILD)/$(PROJECT).json: $(VERILOGS) $(BUILD) Makefile
-	yosys -q -l $(BUILD)/yosys.log -p 'synth_${FAMILY} -top $(TOP) -json $(BUILD)/$(PROJECT).json' $(VERILOGS)
+$(BUILD)/$(PROJECT)-design.json: $(VERILOGS) $(BUILD) Makefile
+	yosys -q -l $(BUILD)/yosys.log -p 'synth_${FAMILY} -top $(TOP) -json $(BUILD)/$(PROJECT)-design.json' $(VERILOGS)
 
-$(PROJECT).asc: $(BUILD)/$(PROJECT).json pins.pcf
-	nextpnr-${FAMILY} -q -l $(BUILD)/nextpnr.log --${TYPE} --package ${PACKAGE} --json $(BUILD)/$(PROJECT).json --pcf pins.pcf --asc $(BUILD)/$(PROJECT).asc
+$(PROJECT).asc: $(BUILD)/$(PROJECT)-design.json pins.pcf
+	nextpnr-${FAMILY} -q -l $(BUILD)/nextpnr.log --${TYPE} --package ${PACKAGE} --top $(TOP) --json $(BUILD)/$(PROJECT)-design.json --write $(BUILD)/$(PROJECT)-place.json --report $(BUILD)/$(PROJECT)-report.json --pcf pins.pcf --asc $(BUILD)/$(PROJECT).asc --placed-svg $(BUILD)/$(PROJECT)-placed.svg
 	@echo ""
 	@grep -B 1 "%$$" $(BUILD)/nextpnr.log
 	@echo ""
