@@ -48,19 +48,19 @@ module memory (
     assign led_we        = we_a && is_led_space;
     assign io_we         = we_a && is_io_space;
     assign buzzer_we     = we_a && is_buzzer_space;
-    assign encoder_we    = we_a && is_encoder_space;
+    assign encoder_we   = we_a && is_encoder_space;
 
     // Pass down the relative/sub-address offset
-    assign led_addr      = addr_a[5:0];
-    assign io_addr       = addr_a[5:0];
-    assign buzzer_addr   = addr_a[5:0];
-    assign encoder_addr  = addr_a[5:0];
+    assign led_addr        = addr_a[5:0];
+    assign io_addr         = addr_a[5:0];
+    assign buzzer_addr     = addr_a[5:0];
+    assign encoder_addr    = addr_a[5:0];
 
     // Pass down data straight through
-    assign led_din       = din_a;
-    assign io_din        = din_a;
-    assign buzzer_din    = din_a;
-    assign encoder_din   = din_a;
+    assign led_din         = din_a;
+    assign io_din          = din_a;
+    assign buzzer_din      = din_a;
+    assign encoder_din     = din_a;
 
     // --- 2. Centralized Combinational Read Routing ---
     always @(*) begin

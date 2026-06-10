@@ -40,6 +40,7 @@ EXTRA_SRCS_wake :=
 EXTRA_SRCS_timer_mux :=
 EXTRA_SRCS_clock_out :=
 EXTRA_SRCS_quadspi := $(SRC_MAIN)/registers/memory.v
+EXTRA_SRCS_encoders := $(SRC_MAIN)/io/encoder.v
 EXTRA_SRCS_leds :=
 
 # Special / integration TBs

@@ -29,7 +29,14 @@ module core_top (
     input  wire       QUADSPI1_CLK,
     input  wire       QUADSPI1_NCS,
     // Maps to QUADSPI1_IO0, QUADSPI1_IO1,...
-    inout  wire [3:0] QUADSPI1_IO
+    inout  wire [3:0] QUADSPI1_IO,
+
+    input  wire [2:0] ENCODER_A,
+    input  wire [2:0] ENCODER_B,
+    input  wire [2:0] ENCODER_C,
+    input  wire [2:0] ENCODER_X,
+    input  wire [2:0] ENCODER_Y,
+    input  wire [2:0] ENCODER_Z
 );
 
     wire clk_100;
@@ -172,8 +179,13 @@ module core_top (
         .bus_din(encoder_din),
         .bus_dout(encoder_dout),
 
-        // TODO
-        .encoder_hardware_pins(6'b000000),
+        .abz_a(ENCODER_A),
+        .abz_b(ENCODER_B),
+        .abz_c(ENCODER_C),
+        .abz_x(ENCODER_X),
+        .abz_y(ENCODER_Y),
+        .abz_z(ENCODER_Z),
+
         .debug(encoder_debug)
     );
 

@@ -39,6 +39,14 @@ module int_core_top_tb;
     reg USER_0 = 1'b1;
     reg USER_1 = 1'b1;
 
+    // encoders
+    reg [2:0] ENCODER_A = 3'd0;
+    reg [2:0] ENCODER_B = 3'd0;
+    reg [2:0] ENCODER_C = 3'd0;
+    reg [2:0] ENCODER_X = 3'd0;
+    reg [2:0] ENCODER_Y = 3'd0;
+    reg [2:0] ENCODER_Z = 3'd0;
+
     core_top uut (
         .TCXO(TCXO),
         .QUADSPI1_CLK(clk),
@@ -48,7 +56,13 @@ module int_core_top_tb;
         .MCU_ACT(MCU_ACT),
         .BUZZER(BUZZER),
         .USER_0(USER_0),
-        .USER_1(USER_1)
+        .USER_1(USER_1),
+        .ENCODER_A(ENCODER_A),
+        .ENCODER_B(ENCODER_B),
+        .ENCODER_C(ENCODER_C),
+        .ENCODER_X(ENCODER_X),
+        .ENCODER_Y(ENCODER_Y),
+        .ENCODER_Z(ENCODER_Z)
     );
 
     // Clock generator helper - Starts from 1, pulls low, then drives high

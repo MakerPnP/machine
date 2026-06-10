@@ -58,3 +58,32 @@ set_io LA_IO[13] F2
 set_io LA_IO[14] D1
 set_io LA_IO[15] D2
 
+### Encoder A (ABZ)
+set_io ENCODER_A[2] H5
+set_io ENCODER_A[1] L5
+set_io ENCODER_A[0] K5
+
+### Encoder B (ABZ)
+set_io ENCODER_B[2] N4
+set_io ENCODER_B[1] N5
+set_io ENCODER_B[0] G5
+
+### Encoder C (ABZ)
+set_io ENCODER_C[2] L6
+set_io ENCODER_C[1] K4
+set_io ENCODER_C[0] T5
+
+### Encoder X (ABZ)
+set_io ENCODER_X[2] E5
+set_io ENCODER_X[1] J5
+set_io ENCODER_X[0] H6
+
+### Encoder Y (ABZ)
+set_io ENCODER_Y[2] N6
+set_io ENCODER_Y[1] L4
+set_io ENCODER_Y[0] F5
+
+### Encoder Z (ABZ)
+set_io ENCODER_Z[2] E2
+set_io ENCODER_Z[1] R6
+set_io ENCODER_Z[0] F4
