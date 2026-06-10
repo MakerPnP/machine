@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Morse WASM Topology</title>
+    <link data-trunk rel="rust" href="Cargo.toml" />
+</head>
+<body>
+<h1>Morse Code Trunk Pipeline</h1>
+<div id="status" style="color: #666; font-style: italic; margin-bottom: 10px;">Status: Initializing...</div>
+<div id="output">Processing compilation output...</div>
+
+<script type="module">
+    let checks = 0;
+
+    async function runPipeline() {
+        const statusEl = document.getElementById('status');
+        const outputEl = document.getElementById('output');
+
+        try {
+            checks++;
+            const wasmModule = window.wasmBindings;
+
+            if (!wasmModule) {
+                statusEl.innerText = `Status: Waiting for Trunk binding layer... (Check #${checks})`;
+                if (checks > 100) {
+                    statusEl.innerHTML = `<span style="color: orange;">Status: Polling timed out.</span>`;
+                    return;
+                }
+                setTimeout(runPipeline, 50);
+                return;
+            }
+
+            statusEl.innerText = "Status: wasmBindings found! Executing process_macro_stream()...";
+
+            // 1. Trigger the processing logic.
+            // The returned value is instantly a native JavaScript Uint8Array array!
+            const resultBytes = wasmModule.process_macro_stream();
+
+            statusEl.innerText = "Status: Decoding results...";
+
+            // 2. Decode the array payload directly into a readable browser string
+            const stringResult = new TextDecoder('utf-8').decode(resultBytes);
+
+            // 3. We read the vector length natively right here via .length
+            statusEl.innerText = `Status: Complete! Received ${resultBytes.length} bytes.`;
+            outputEl.innerText = `Result: "${stringResult}"`;
+
+        } catch (error) {
+            statusEl.innerHTML = `<span style="color: red;">Status: Crashed during execution</span>`;
+            outputEl.innerHTML = `<span style="color: red;">Error: ${error.message}</span>`;
+            console.error("Morse WASM Error:", error);
+        }
+    }
+
+    // Run the pipeline pipeline initialization check loop
+    runPipeline();
+</script>
+</body>
+</html>

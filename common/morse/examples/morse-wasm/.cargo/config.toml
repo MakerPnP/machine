@@ -1,0 +1,11 @@
+[target.wasm32-unknown-unknown]
+rustflags = [
+    # Ensure our symbols remain visible for object file analysis
+    "-C", "strip=none"
+]
+
+[build]
+target = "wasm32-unknown-unknown"
+
+[term]
+verbose = true

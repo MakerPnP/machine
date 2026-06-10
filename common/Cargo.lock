@@ -357,6 +357,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432"
 
 [[package]]
+name = "lol_alloc"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a73693618027bebe670cda59e35ca30a0897cfb52b5bbb6372c9a5c0b27c35ab"
+dependencies = [
+ "spin",
+]
+
+[[package]]
 name = "loom"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -398,6 +407,40 @@ name = "memchr"
 version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
+
+[[package]]
+name = "morse-core"
+version = "0.1.0"
+
+[[package]]
+name = "morse-macro"
+version = "0.1.0"
+dependencies = [
+ "morse-core",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "morse-tests"
+version = "0.1.0"
+dependencies = [
+ "morse-core",
+ "morse-macro",
+ "proc-macro2",
+]
+
+[[package]]
+name = "morse-wasm"
+version = "0.1.0"
+dependencies = [
+ "lol_alloc",
+ "morse-core",
+ "morse-macro",
+ "spin",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "mutex"

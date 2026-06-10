@@ -5,6 +5,9 @@ members = [
     "ioboard_shared",
     "operator_shared",
     "ergot_util",
+    "morse/morse-core",
+    "morse/morse-tests",
+    "morse/examples/morse-wasm",
 ]
 
 [workspace.dependencies]

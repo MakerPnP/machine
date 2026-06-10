@@ -1,0 +1,17 @@
+[package]
+name = "morse-wasm"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+morse-core = { path = "../../morse-core" }
+morse-macro = { path = "../../morse-macro" }
+# core support for compiling inside trunk environments
+wasm-bindgen = { version = "0.2", default-features = false }
+lol_alloc = "0.3.0"
+spin = "0.9.8"
+
+[profile.release]
+opt-level = "z"       # Optimize for size to make object inspection cleaner
+lto = true             # Link-Time Optimization to merge modules
+panic = "abort"        # Required for no_std WASM

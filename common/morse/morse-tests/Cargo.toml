@@ -1,0 +1,11 @@
+[package]
+name = "morse-tests"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+morse-macro = { path = "../morse-macro" }
+morse-core = { path = "../morse-core", features = ["std"] }
+
+[dev-dependencies]
+proc-macro2 = "1.0"
