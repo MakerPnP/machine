@@ -47,6 +47,8 @@ use ioboard_trace::tracepin::TracePins;
 use static_cell::StaticCell;
 use tmc5160::Tmc5160;
 use {defmt_rtt as _, panic_probe as _};
+#[cfg(feature = "morse_startup")]
+use morse_core::{MorseCharacter, MorseSymbol};
 use crate::fpga::FpgaCore;
 use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
 use crate::stepper::tmc5160::Tmc5160Stepper;
@@ -303,12 +305,9 @@ type FpgaInstance = FpgaCore<embassy_stm32::peripherals::OCTOSPI1>;
 #[embassy_executor::task]
 async fn fpga_task(mut fpga: FpgaInstance) -> ! {
 
-    for index in 0..4 {
-        fpga.buzzer_enable();
-        Timer::after(Duration::from_millis(80 - (20 * index))).await;
-        fpga.buzzer_disable();
-        Timer::after(Duration::from_millis(80)).await;
-    }
+    startup_beeps(&mut fpga).await;
+
+    Timer::after(Duration::from_millis(500)).await;
 
     loop {
         fpga.led_1_disable();
@@ -319,6 +318,52 @@ async fn fpga_task(mut fpga: FpgaInstance) -> ! {
         Timer::after(Duration::from_millis(250)).await;
     }
 }
+
+#[cfg(not(feature = "morse_startup"))]
+async fn startup_beeps(fpga: &mut FpgaInstance) {
+    beep_and_flash(fpga, Duration::from_millis(100), Duration::from_millis(100)).await;
+}
+
+#[cfg(feature = "morse_startup")]
+async fn startup_beeps(fpga: &mut FpgaInstance) {
+    let morse = morse_macro::morse!("MPNP");
+
+    const WORDS_PER_MINUTE: u32 = 30;
+    const DIT_TIME: u32 = 1000 / ((50 * WORDS_PER_MINUTE) / 60);
+    let dit = Duration::from_millis(DIT_TIME as u64);
+    let dah = dit * 3;
+    let inter_char = dit;
+    let inter_word = dit * 7;
+
+    for (index, symbol) in morse.iter().enumerate() {
+        match symbol {
+            MorseSymbol::IntraLetter => {
+                Timer::after(inter_char).await;
+            }
+            MorseSymbol::Dit => {
+                beep_and_flash(fpga, dit, dit).await;
+            }
+            MorseSymbol::IntraWord => {
+                Timer::after(inter_word).await;
+            }
+            MorseSymbol::Dash => {
+                beep_and_flash(fpga, dah, dit).await;
+            }
+        }
+    }
+}
+
+async fn beep_and_flash(fpga: &mut FpgaInstance, on: Duration, off: Duration) {
+    fpga.buzzer_enable();
+    fpga.led_1_enable();
+    fpga.led_2_enable();
+    Timer::after(on).await;
+    fpga.buzzer_disable();
+    fpga.led_1_disable();
+    fpga.led_2_disable();
+    Timer::after(off).await;
+}
+
 
 type Device = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
 

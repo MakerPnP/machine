@@ -806,6 +806,8 @@ dependencies = [
  "ioboard_net",
  "ioboard_trace",
  "modular-bitfield-to-value",
+ "morse-core",
+ "morse-macro",
  "panic-probe",
  "static_cell",
  "tmc5160",
@@ -993,6 +995,20 @@ version = "0.1.0"
 source = "git+https://github.com/MakerPnp/modular-bitfield-to-value?branch=makerpnp#d7b1c4b92f844f2d0841cea7fac92928cd100267"
 dependencies = [
  "modular-bitfield",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.110",
+]
+
+[[package]]
+name = "morse-core"
+version = "0.1.0"
+
+[[package]]
+name = "morse-macro"
+version = "0.1.0"
+dependencies = [
+ "morse-core",
  "proc-macro2",
  "quote",
  "syn 2.0.110",

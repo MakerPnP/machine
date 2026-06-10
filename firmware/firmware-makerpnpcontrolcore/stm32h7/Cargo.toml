@@ -5,8 +5,13 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["tracepin"]
+default = ["tracepin", "morse_startup"]
 
+# enables a morse code startup beep sequence.
+morse_startup = [
+    "morse-macro",
+    "morse-core"
+]
 tracepin = [
     "ioboard_trace/enable"
 ]
@@ -46,6 +51,9 @@ tmc5160 = { git = "https://github.com/MakerPnP/tmc5160-rs.git", features = ["def
 #tmc5160 = { path = "../../../tmc5160-rs", features = ["defmt"] }
 modular-bitfield-to-value = { git = "https://github.com/MakerPnp/modular-bitfield-to-value", branch = "makerpnp" }
 #modular-bitfield-to-value = { path = "../../../modular-bitfield-to-value" }
+
+morse-macro = { path = "../../../common/morse/morse-macro", optional = true }
+morse-core = { path = "../../../common/morse/morse-core", optional = true }
 
 # profiles - https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.release]
