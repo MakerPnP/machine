@@ -159,12 +159,25 @@ module ws2812_tb;
 
             total_bits = 24 * 4; // we only expect first few LEDs to validate
 
-            $display("WAITING FOR WS OUTPUT ACTIVITY...");
 
             // ------------------------------------------------------------
             // Wait for first rising edge
             // ------------------------------------------------------------
-            @(posedge ws_out);
+            $display("WAITING FOR WS OUTPUT ACTIVITY...");
+
+            fork
+                begin
+                    #100000;
+                    $display("TIMEOUT: WS2812 never started");
+                    $finish;
+                end
+
+                begin
+                    wait (ws_out !== 1'b0);
+                end
+            join_any
+            disable fork;
+
             $display("WS OUTPUT START DETECTED");
 
             // ------------------------------------------------------------
