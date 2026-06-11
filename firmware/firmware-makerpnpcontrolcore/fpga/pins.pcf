@@ -87,3 +87,7 @@ set_io ENCODER_Y[0] F5
 set_io ENCODER_Z[2] E2
 set_io ENCODER_Z[1] R6
 set_io ENCODER_Z[0] F4
+
+### WS2812 outputs
+set_io RGB_PORTS M11
+set_io RGB_UP_CAM D3

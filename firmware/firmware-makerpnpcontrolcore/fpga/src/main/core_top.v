@@ -8,6 +8,8 @@ module core_top (
     output wire       FPGA_ACT,      // LED 2
 
     output wire       BUZZER,        // Buzzer
+    output wire       RGB_PORTS,
+    output wire       RGB_UP_CAM,
 
     output  wire [15:0] LA_IO,
 
@@ -67,6 +69,16 @@ module core_top (
     wire [31:0] io_din;
     wire [31:0] io_dout;
     wire        io_we;
+
+    wire [5:0]  ws0_addr;
+    wire [31:0] ws0_din;
+    wire [31:0] ws0_dout;
+    wire        ws0_we;
+
+    wire [5:0]  ws1_addr;
+    wire [31:0] ws1_din;
+    wire [31:0] ws1_dout;
+    wire        ws1_we;
 
     wire [5:0]  buzzer_addr;
     wire [31:0] buzzer_din;
@@ -192,6 +204,36 @@ module core_top (
     );
 
     // ----------------------
+    // WS2812 - on-board LEDs
+    // ----------------------
+    ws2812 ws2812_0_inst (
+        .sys_clk(clk_100),
+        .reset(reset),
+
+        .bus_we(ws0_we),
+        .bus_addr(ws0_addr),
+        .bus_din(ws0_din),
+        .bus_dout(ws0_dout),
+
+        .ws_out(RGB_PORTS)
+    );
+
+    // ----------------------
+    // WS2812 - Up-camera / Head / Work LEDs
+    // ----------------------
+    ws2812 ws2812_1_inst (
+        .sys_clk(clk_100),
+        .reset(reset),
+
+        .bus_we(ws1_we),
+        .bus_addr(ws1_addr),
+        .bus_din(ws1_din),
+        .bus_dout(ws1_dout),
+
+        .ws_out(RGB_UP_CAM)
+    );
+
+    // ----------------------
     // Instantiate Central Address Decoder
     // ----------------------
     memory memory_map_inst (
@@ -218,6 +260,16 @@ module core_top (
         .io_addr(io_addr),
         .io_din(io_din),
         .io_dout(io_dout),
+
+        .ws0_we(ws0_we),
+        .ws0_addr(ws0_addr),
+        .ws0_din(ws0_din),
+        .ws0_dout(ws0_dout),
+
+        .ws1_we(ws1_we),
+        .ws1_addr(ws1_addr),
+        .ws1_din(ws1_din),
+        .ws1_dout(ws1_dout),
 
         .buzzer_we(buzzer_we),
         .buzzer_addr(buzzer_addr),
