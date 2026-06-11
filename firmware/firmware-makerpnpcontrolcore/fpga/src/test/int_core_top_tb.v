@@ -32,6 +32,12 @@ module int_core_top_tb;
     reg BUZZER;
 
     //
+    // WS2812 RGB(W) LED outputs
+    //
+    reg RGB_PORTS;
+    reg RGB_UP_CAM;
+
+    //
     // Buttons
     //
 
@@ -62,7 +68,9 @@ module int_core_top_tb;
         .ENCODER_C(ENCODER_C),
         .ENCODER_X(ENCODER_X),
         .ENCODER_Y(ENCODER_Y),
-        .ENCODER_Z(ENCODER_Z)
+        .ENCODER_Z(ENCODER_Z),
+        .RGB_PORTS(RGB_PORTS),
+        .RGB_UP_CAM(RGB_UP_CAM)
     );
 
     // Clock generator helper - Starts from 1, pulls low, then drives high
