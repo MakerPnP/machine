@@ -22,7 +22,7 @@ module ws2812 #(
     // ADDRESS MAP
     // ============================================================
     localparam WS_CTRL        = 6'h00;
-    localparam WS_CONFIG      = 6'h04;
+    localparam WS_TX_CONFIG      = 6'h04;
 
     localparam WS_DATA_1      = 6'h10;
 
@@ -73,7 +73,7 @@ module ws2812 #(
     always @(*) begin
         case (bus_addr)
             WS_CTRL:   bus_dout = {29'b0, mode, enabled};
-            WS_CONFIG: bus_dout = {23'b0, num_leds};
+            WS_TX_CONFIG: bus_dout = {23'b0, num_leds};
 
             default:   bus_dout = 32'h00000000;
         endcase
@@ -115,17 +115,17 @@ module ws2812 #(
 
         end else begin
 
-            // Arm on config write
-            if (strobe_update && sync_addr == WS_CONFIG) begin
-                num_leds <= sync_reg[7:0];
-                write_ptr <= 0;
-            end
-
-            // CTRL register
             if (strobe_update && sync_addr == WS_CTRL) begin
                 mode  <= sync_reg[2:1];
                 enabled <= sync_reg[0];
+                frame_ready <= 0;
                 $display("enabled flag: %1d, mode: 0b%02b", sync_reg[0], sync_reg[2:1]);
+            end
+
+            if (strobe_update && sync_addr == WS_TX_CONFIG) begin
+                num_leds <= sync_reg[7:0];
+                write_ptr <= 0;
+                frame_ready <= 0;
             end
 
             // DATA writes (all map to same behavior)
@@ -136,7 +136,6 @@ module ws2812 #(
                 
                 if (!streaming) begin
                     streaming <= 1;
-                    write_ptr <= 0;
                 end
 
                 if (write_ptr < MAX_LEDS) begin
@@ -149,6 +148,7 @@ module ws2812 #(
             if (streaming && write_ptr >= num_leds) begin
                 streaming <= 0;
                 frame_ready <= 1;
+                write_ptr <= 0;
             end
         end
     end
