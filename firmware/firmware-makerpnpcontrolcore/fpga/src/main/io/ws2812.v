@@ -161,53 +161,87 @@ module ws2812 #(
 
     reg [23:0] shift_reg;
 
-    localparam T0H = 20;  // ~0.4us @ 50MHz (adjust as needed)
-    localparam T1H = 40;  // ~0.8us
-    localparam T_TOTAL = 60;
+    localparam T0H = 40;  // ~0.4us @ 50MHz (adjust as needed)
+    localparam T1H = 80;  // ~0.8us
+    localparam T_TOTAL = 120;
+
+
 
     reg [7:0]  tcount;
-    reg        state; // 0 = high phase, 1 = low phase
+
+    localparam PHASE_RESET     = 2'd0;
+    localparam PHASE_PREPARE   = 2'd1;
+    localparam PHASE_TRANSMIT  = 2'd2;
+    reg [1:0]  phase;
+
+    reg [31:0] reset_counter;
 
     always @(posedge sys_clk) begin
         if (reset) begin
             ws_out    <= 0;
-            led_index <= 0;
-            bit_index <= 23;
-            tcount    <= 0;
-            shift_reg <= 0;
+            reset_counter <= 0;
+            phase     <= PHASE_RESET;
         end else if (enabled && frame_ready) begin
 
-            // Load new LED
-            if (bit_index == 23 && tcount == 0) begin
-                shift_reg <= pixel_buffer[led_index][23:0];
-            end
+            case (phase)
+                PHASE_RESET: begin
+                    reset_counter <= reset_counter + 1;
+                    if (reset_counter == 100) begin
+                        reset_counter <= 0;
 
-            // Timing engine
-            if (tcount < T_TOTAL) begin
-                tcount <= tcount + 1;
-
-                if (shift_reg[bit_index]) begin
-                    ws_out <= (tcount < T1H);
-                end else begin
-                    ws_out <= (tcount < T0H);
-                end
-            end else begin
-                tcount <= 0;
-
-                // next bit
-                if (bit_index == 0) begin
-                    bit_index <= 23;
-
-                    // next LED
-                    if (led_index == num_leds - 1) begin
                         led_index <= 0;
-                    end else begin
-                        led_index <= led_index + 1;
+
+                        phase <= PHASE_PREPARE;
                     end
-                end else begin
-                    bit_index <= bit_index - 1;
                 end
-            end
+                PHASE_PREPARE: begin
+                    shift_reg <= pixel_buffer[led_index][23:0];
+                    tcount    <= 0;
+                    bit_index <= 23;
+                    ws_out <= 1;
+                    phase <= PHASE_TRANSMIT;
+                end
+                PHASE_TRANSMIT: begin
+                    // Loaded new LED
+                    if (bit_index == 23 && tcount == 0) begin
+                        $display("led begin. index: %d, shift_reg: 0x%08h", led_index, shift_reg);
+                    end
+
+                    // Timing engine
+                    if (tcount < T_TOTAL) begin
+                        tcount <= tcount + 1;
+
+                        if (shift_reg[bit_index]) begin
+                            ws_out <= (tcount < T1H);
+                        end else begin
+                            ws_out <= (tcount < T0H);
+                        end
+                    end else begin
+                        ws_out <= 0;
+
+                        tcount <= 0;
+
+                        // next bit
+                        if (bit_index == 0) begin
+                            bit_index <= 23;
+
+                            // next LED
+                            if (led_index == num_leds - 1) begin
+                                $display("finished leds");
+                                phase <= PHASE_RESET;
+                            end else begin
+                                $display("next led. led_index: %d", led_index);
+                                led_index <= led_index + 1;
+                                phase <= PHASE_PREPARE;
+                            end
+                        end else begin
+                            bit_index <= bit_index - 1;
+                        end
+                    end
+
+                end
+            endcase
+
         end else begin
             ws_out <= 0;
         end

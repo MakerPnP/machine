@@ -63,6 +63,13 @@ module ws2812_tb;
     end
     endtask
 
+    reg [31:0] expected [0:15];
+    integer bit_count;
+    reg bitstream [0:2047]; // enough for 85 LEDs max (2048 bits safe)
+
+    integer decoded_leds;
+    reg [23:0] led_data [0:255];
+
     // ============================================================
     // TEST SEQUENCE
     // ============================================================
@@ -123,6 +130,8 @@ module ws2812_tb;
         // STREAM RGB DATA (16 LEDs total)
         // Each LED = 0xRRGGBB
         // ============================================================
+
+
         begin : STREAM_DATA_1
             integer idx;
 
@@ -130,7 +139,9 @@ module ws2812_tb;
 
 
             for (idx = 0; idx < 16; idx = idx + 1) begin
-                write(5'h10, {8'h00, idx[7:0], 8'h10, 8'h20});
+                expected[idx] = {8'h00, idx[7:0], 8'h10, 8'h20};
+                $display("index: %d, value: 0x%08h", idx, expected[idx]);
+                write(5'h10, expected[idx]);
             end
 
 
@@ -138,31 +149,23 @@ module ws2812_tb;
 
         // ============================================================
         // TEST 4:
-        // Verify WS2812 waveform is active
-        // We check that signal is NOT stuck low
+        // Decode WS2812 waveform is correct
         // ============================================================
-        begin : WS2812_WAVEFORM_TEST
+        begin : WS2812_PROTOCOL_TEST
 
             integer i;
             integer high_count;
             integer low_count;
             integer bit_index;
-            integer total_bits;
 
-            reg last_ws;
+            integer led_index;
+            integer b;
+
             reg bit_value;
 
-            last_ws = 0;
-            high_count = 0;
-            low_count = 0;
-            bit_index = 0;
+            bit_count   = 0;
+            led_index   = 0;
 
-            total_bits = 24 * 4; // we only expect first few LEDs to validate
-
-
-            // ------------------------------------------------------------
-            // Wait for first rising edge
-            // ------------------------------------------------------------
             $display("WAITING FOR WS OUTPUT ACTIVITY...");
 
             fork
@@ -173,68 +176,103 @@ module ws2812_tb;
                 end
 
                 begin
-                    wait (ws_out !== 1'b0);
+                    wait (ws_out == 1'b1);
                 end
             join_any
             disable fork;
 
             $display("WS OUTPUT START DETECTED");
 
-            // ------------------------------------------------------------
-            // Sample bits
-            // ------------------------------------------------------------
-            for (bit_index = 0; bit_index < total_bits; bit_index = bit_index + 1) begin
+            // ============================================================
+            // STEP 1: CAPTURE BITS
+            // ============================================================
+            while (led_index < 16) begin
 
                 high_count = 0;
                 low_count  = 0;
 
-                // wait for bit start (rising edge)
-                @(posedge ws_out);
+                if (led_index == 0 && bit_index == 0) begin
+                    // we already waited, above
+                    @(posedge ws_out);
+                end
 
-                // measure HIGH duration
                 while (ws_out == 1'b1) begin
                     high_count = high_count + 1;
                     #1;
                 end
 
-                // measure LOW duration
                 while (ws_out == 1'b0) begin
                     low_count = low_count + 1;
                     #1;
                 end
 
-                // --------------------------------------------------------
-                // CLASSIFY BIT BASED ON DUTY CYCLE
-                // --------------------------------------------------------
-                if (high_count > low_count) begin
+                // classify bit
+                // TODO improve this, since it doesn't check the actual timings.
+                if (high_count > low_count)
                     bit_value = 1;
-                end else begin
+                else
                     bit_value = 0;
+
+                bitstream[bit_count] = bit_value;
+                bit_count = bit_count + 1;
+
+                // once we have 24 bits → form LED
+                if (bit_count % 24 == 0) begin
+
+                    led_index = bit_count / 24 - 1;
+
+                    led_data[led_index] = {
+                        bitstream[bit_count-24],
+                        bitstream[bit_count-23],
+                        bitstream[bit_count-22],
+                        bitstream[bit_count-21],
+                        bitstream[bit_count-20],
+                        bitstream[bit_count-19],
+                        bitstream[bit_count-18],
+                        bitstream[bit_count-17],
+                        bitstream[bit_count-16],
+                        bitstream[bit_count-15],
+                        bitstream[bit_count-14],
+                        bitstream[bit_count-13],
+                        bitstream[bit_count-12],
+                        bitstream[bit_count-11],
+                        bitstream[bit_count-10],
+                        bitstream[bit_count-9],
+                        bitstream[bit_count-8],
+                        bitstream[bit_count-7],
+                        bitstream[bit_count-6],
+                        bitstream[bit_count-5],
+                        bitstream[bit_count-4],
+                        bitstream[bit_count-3],
+                        bitstream[bit_count-2],
+                        bitstream[bit_count-1]
+                    };
+
+                    $display("LED %0d decoded: %h",
+                             led_index, led_data[led_index]);
                 end
-
-                $display("BIT %0d: HIGH=%0d LOW=%0d => %b",
-                         bit_index, high_count, low_count, bit_value);
-
-                // --------------------------------------------------------
-                // TIMING ASSERTIONS (RELATIVE, NOT ABSOLUTE)
-                // --------------------------------------------------------
-
-                // sanity: WS2812 bits are never extremely short
-                `ASSERT_GT(high_count + low_count, 10,
-                    "WS2812 bit too short (timing broken)");
-
-                // sanity: high phase exists
-                `ASSERT_GT(high_count, 0,
-                    "Missing high pulse in WS2812 bit");
             end
 
-            $display("WS2812 WAVEFORM TEST COMPLETE");
+            // ============================================================
+            // STEP 2: VERIFY AGAINST EXPECTED MODEL
+            // ============================================================
+            $display("COMPARING DECODED LED DATA...");
 
+            for (i = 0; i < 16; i = i + 1) begin
+
+                // NOTE: adjust ordering if your pack_pixel differs
+                `ASSERT_EQ(led_data[i][23:0],
+                           expected[i][23:0],
+                           "%h",
+                           "LED mismatch at index");
+
+            end
         end
+
         // ============================================================
         // END
         // ============================================================
-        $display("ALL TESTS COMPLETE");
+        report();
         $finish;
     end
 
