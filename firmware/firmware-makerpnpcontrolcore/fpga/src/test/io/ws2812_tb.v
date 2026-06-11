@@ -15,7 +15,7 @@ module ws2812_tb;
     // ============================================================
     // BUS SIGNALS
     // ============================================================
-    reg  [4:0]  addr;
+    reg  [5:0]  addr;
     reg  [31:0] din;
     wire [31:0] dout;
     reg         we;
@@ -91,7 +91,7 @@ module ws2812_tb;
         begin : CONFIGURE_AND_ENABLE
             $display("TEST 1: CTRL enable + mode set");
 
-            write(5'h00, 32'b0000_0000_0000_0000_0000_0000_0000_0110);
+            write(5'h00, 32'b0000_0000_0000_0000_0000_0000_0000_0001);
             // mode = RGB (00), enable = 1
 
             #200;
