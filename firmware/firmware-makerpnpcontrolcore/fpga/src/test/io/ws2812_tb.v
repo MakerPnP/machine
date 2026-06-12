@@ -174,9 +174,6 @@ module ws2812_tb;
             fork
                 begin
                     #100000;
-                    $error("TIMEOUT: WS2812 never started");
-                    report();
-                    $finish;
                 end
 
                 begin
@@ -184,6 +181,9 @@ module ws2812_tb;
                 end
             join_any
             disable fork;
+
+            `ASSERT_EQ(ws_out, 1'b1, "%d",
+                "WS2812 never started");
 
             $display("WS OUTPUT START DETECTED");
 
@@ -303,11 +303,12 @@ module ws2812_tb;
                 @(posedge TCXO);
 
                 if (low_cycles > max_cycles) begin
-                    $error("ERROR: reset pulse exceeds expected window (or stuck low)");
-                    report();
-                    $finish;
+                    break;
                 end
             end
+
+            `ASSERT_LE(low_cycles, max_cycles, "%d",
+                "reset pulse exceeds expected window (or stuck low)");
 
             // ------------------------------------------------------------
             // Convert cycles → time check
