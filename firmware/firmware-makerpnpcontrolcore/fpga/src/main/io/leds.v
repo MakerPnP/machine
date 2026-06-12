@@ -50,7 +50,7 @@ module leds (
     always @(*) begin
         case (bus_addr)
             6'h00:   bus_dout = led_ctrl;
-            default: bus_dout = 32'hFFFFFFFF;
+            default: bus_dout = 32'h44444444;
         endcase
     end
 

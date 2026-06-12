@@ -78,7 +78,7 @@ module memory (
                 16'h0000: dout_a = IDENT;
                 16'h0004: dout_a = VERSION;
                 16'h01FC: dout_a = MARKER;
-                default: dout_a = 32'hFFFFFFFF;
+                default: dout_a = 32'hAA55AA55;
             endcase
         end
     end

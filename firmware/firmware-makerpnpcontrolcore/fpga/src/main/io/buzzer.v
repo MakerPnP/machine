@@ -49,7 +49,7 @@ module buzzer (
     always @(*) begin
         case (bus_addr)
             6'h00:   bus_dout = buzzer_ctrl;
-            default: bus_dout = 32'hFFFFFFFF;
+            default: bus_dout = 32'h11111111;
         endcase
     end
 
