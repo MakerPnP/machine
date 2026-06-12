@@ -132,24 +132,11 @@ module ws2812 #(
     // ============================================================
     // COLOR PACKING FUNCTION
     // ============================================================
-    function [31:0] pack_pixel;
-        input [31:0] in;
-        input [1:0] mode;
-        reg [7:0] r, g, b, w;
-        begin
-            r = in[23:16];
-            g = in[15:8];
-            b = in[7:0];
-            w = in[31:24];
 
-            case (mode)
-                2'b00: pack_pixel = {8'd0, r, g, b}; // RGB
-                2'b01: pack_pixel = {8'd0, r, g, b}; // RGB1 (same for now)
-                2'b10: pack_pixel = {8'd0, g, r, b}; // GRB
-                2'b11: pack_pixel = {w,    r, g, b}; // GRBW
-            endcase
-        end
-    endfunction
+    localparam MODE_RGB        = 2'b00;
+    localparam MODE_RGBW       = 2'b01;
+    localparam MODE_GRB        = 2'b10;
+    localparam MODE_GRBW       = 2'b11;
 
     // ============================================================
     // STREAMING WRITE LOGIC
@@ -197,7 +184,13 @@ module ws2812 #(
 
                 if (write_ptr < MAX_LEDS) begin
                     wr_addr <= write_ptr;
-                    wr_data <= pack_pixel(sync_reg, mode);
+                    case (mode)
+                        MODE_RGB: wr_data = {8'd0, sync_reg[23:16], sync_reg[15:8], sync_reg[7:0]};
+                        MODE_RGBW: wr_data = {sync_reg[23:16], sync_reg[15:8], sync_reg[7:0], sync_reg[31:24]};
+                        MODE_GRB: wr_data = {8'd0, sync_reg[15:8],  sync_reg[23:16], sync_reg[7:0]};
+                        MODE_GRBW: wr_data = {sync_reg[23:16], sync_reg[15:8], sync_reg[7:0], sync_reg[31:24]};
+                    endcase
+
                     write_ptr <= write_ptr + 1;
                 end
             end
