@@ -345,10 +345,10 @@ async fn fpga_task(mut fpga: FpgaInstance) -> ! {
     loop {
         fpga.led_1_disable();
         fpga.led_2_enable();
-        Timer::after(Duration::from_millis(250)).await;
+        Timer::after(Duration::from_millis(1000)).await;
         fpga.led_1_enable();
         fpga.led_2_disable();
-        Timer::after(Duration::from_millis(250)).await;
+        Timer::after(Duration::from_millis(1000)).await;
     }
 }
 
