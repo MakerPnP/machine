@@ -5,7 +5,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["tracepin", "morse_startup"]
+default = ["tracepin"]
 
 # enables a morse code startup beep sequence.
 morse_startup = [
