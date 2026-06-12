@@ -155,27 +155,27 @@ module encoders(
                     6'h08: begin
                         $display("ENC_SET_COUNT_B update. value: 0x%08h", sync_reg);
                         encoder_set_value[1] <= sync_reg;
-                        encoder_set <= encoder_set | 6'b000001;
+                        encoder_set <= encoder_set | 6'b000010;
                     end
                     6'h0C: begin
                         $display("ENC_SET_COUNT_C update. value: 0x%08h", sync_reg);
                         encoder_set_value[2] <= sync_reg;
-                        encoder_set <= encoder_set | 6'b000001;
+                        encoder_set <= encoder_set | 6'b000100;
                     end
                     6'h10: begin
                         $display("ENC_SET_COUNT_X update. value: 0x%08h", sync_reg);
                         encoder_set_value[3] <= sync_reg;
-                        encoder_set <= encoder_set | 6'b000001;
+                        encoder_set <= encoder_set | 6'b001000;
                     end
                     6'h14: begin
                         $display("ENC_SET_COUNT_Y update. value: 0x%08h", sync_reg);
                         encoder_set_value[4] <= sync_reg;
-                        encoder_set <= encoder_set | 6'b000001;
+                        encoder_set <= encoder_set | 6'b010000;
                     end
                     6'h18: begin
                         $display("ENC_SET_COUNT_Z update. value: 0x%08h", sync_reg);
                         encoder_set_value[5] <= sync_reg;
-                        encoder_set <= encoder_set | 6'b000001;
+                        encoder_set <= encoder_set | 6'b100000;
                     end
                 endcase
 

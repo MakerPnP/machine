@@ -192,21 +192,27 @@ module encoders_tb;
         `ASSERT_EQ(dout, 32'hffff_ffff, "%0d", "Count after z pulse + 1 reverse step incorrect");
 
         // ----------------------------------------
-        // Set counter
+        // Set counters
         // ----------------------------------------
 
-        addr = 6'h04;
-        din = 32'hbaad_beef;
-        we = 1'b1;
-        #10;
-        we = 1'b0;
-        #50;
+        begin : SET_COUNTERS
+            integer i;
 
-        addr = 6'h20;
-        #100;
-        $display("ENC after set counter count: %0d", dout);
+            for (i = 0; i < 6; i = i + 1) begin
+                addr = 6'h04 + (i * 4);
+                din = 32'hbaad_beef;
+                we = 1'b1;
+                #10;
+                we = 1'b0;
+                #50;
 
-        `ASSERT_EQ(dout, 32'hbaad_beef, "0x%08h", "ENC overflow produced X");
+                addr = 6'h20 + (i * 4);
+                #100;
+                $display("ENC counter after ENC_SET_VALUE_%1d: %0d", i, dout);
+
+                `ASSERT_EQ(dout, 32'hbaad_beef, "0x%08h", $sformatf("ENC_SET_VALUE_%1d failed", i));
+            end
+        end
 
         report();
         $finish;
