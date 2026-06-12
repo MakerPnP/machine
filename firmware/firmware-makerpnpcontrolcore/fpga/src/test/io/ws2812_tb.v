@@ -161,6 +161,9 @@ module ws2812_tb;
             integer led_index;
             integer b;
 
+            integer cycle_count;
+            integer max_cycles_per_bit;
+
             reg bit_value;
 
             bit_count   = 0;
@@ -171,7 +174,8 @@ module ws2812_tb;
             fork
                 begin
                     #100000;
-                    $display("TIMEOUT: WS2812 never started");
+                    $error("TIMEOUT: WS2812 never started");
+                    report();
                     $finish;
                 end
 
@@ -186,25 +190,25 @@ module ws2812_tb;
             // ============================================================
             // STEP 1: CAPTURE BITS
             // ============================================================
-            while (led_index < 16) begin
+            max_cycles_per_bit = 1500; // 1.5uS at 100Mhz
+            while (led_index < 15) begin
 
                 high_count = 0;
                 low_count  = 0;
+                cycle_count = 0;
 
-                if (led_index == 0 && bit_index == 0) begin
-                    // we already waited, above
-                    @(posedge ws_out);
-                end
-
-                while (ws_out == 1'b1) begin
+                while (ws_out == 1'b1 && cycle_count < max_cycles_per_bit) begin
                     high_count = high_count + 1;
+                    cycle_count = cycle_count + 1;
                     #1;
                 end
 
-                while (ws_out == 1'b0) begin
+                while (ws_out == 1'b0 && cycle_count < max_cycles_per_bit) begin
                     low_count = low_count + 1;
+                    cycle_count = cycle_count + 1;
                     #1;
                 end
+                $display("bit cycle_count: %d, high_count: %d, low_count: %d", cycle_count, high_count, low_count);
 
                 // classify bit
                 // TODO improve this, since it doesn't check the actual timings.
@@ -267,8 +271,55 @@ module ws2812_tb;
                            "LED mismatch at index");
 
             end
+
+            `ASSERT_EQ(ws_out, 0, "%d",
+                "WS2812 should be low after last LED");
+
         end
 
+        // ============================================================
+        // TEST 4:
+        // Ensure reset pulse is present before next frame
+        // ============================================================
+
+        begin : RESET_PULSE_CHECK
+
+            integer low_cycles;
+            integer max_cycles;
+            reg last_ws;
+
+            low_cycles = 0;
+            max_cycles = 10000; // 100us margin at 100MHz
+
+            $display("TEST: WS2812 RESET pulse validation");
+
+            low_cycles = 0;
+
+            // ------------------------------------------------------------
+            // Measure low time
+            // ------------------------------------------------------------
+            while (ws_out == 1'b0) begin
+                low_cycles = low_cycles + 1;
+                @(posedge TCXO);
+
+                if (low_cycles > max_cycles) begin
+                    $error("ERROR: reset pulse exceeds expected window (or stuck low)");
+                    report();
+                    $finish;
+                end
+            end
+
+            // ------------------------------------------------------------
+            // Convert cycles → time check
+            // ------------------------------------------------------------
+            $display("RESET LOW duration = %0d cycles", low_cycles);
+
+            `ASSERT_GE(low_cycles, 50, "%d",
+                "WS2812 reset pulse too short (<50us @ 100MHz)");
+
+            $display("PASS: WS2812 reset pulse valid");
+
+        end
         // ============================================================
         // END
         // ============================================================

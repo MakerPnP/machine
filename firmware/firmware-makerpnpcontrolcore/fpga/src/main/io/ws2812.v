@@ -161,10 +161,10 @@ module ws2812 #(
 
     reg [23:0] shift_reg;
 
-    localparam T0H = 40;  // ~0.4us @ 50MHz (adjust as needed)
+    localparam T0H = 40;  // ~0.4us @ 100MHz (adjust as needed)
     localparam T1H = 80;  // ~0.8us
     localparam T_TOTAL = 120;
-
+    localparam T_RESET = 8000; // 80us (50us min)
 
 
     reg [7:0]  tcount;
@@ -186,7 +186,7 @@ module ws2812 #(
             case (phase)
                 PHASE_RESET: begin
                     reset_counter <= reset_counter + 1;
-                    if (reset_counter == 100) begin
+                    if (reset_counter == T_RESET) begin
                         reset_counter <= 0;
 
                         led_index <= 0;
