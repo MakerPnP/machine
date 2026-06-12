@@ -224,6 +224,10 @@ module ws2812 #(
     localparam T_TOTAL = 120;
     localparam T_RESET = 8000; // 80us (50us min)
 
+    // BRAM is two-cycle delayed, after which rd_data is correct
+    // NOTE: some documentation says one-cycle, but in sim it's two-cycle...
+    localparam T_FETCH = 1; // [0,1] = [first cycle, second cycle]
+
 
     reg [7:0]  tcount;
 
@@ -234,31 +238,34 @@ module ws2812 #(
 
     reg [1:0]  phase;
 
-    reg [31:0] reset_counter;
+    reg [31:0] phase_counter;
 
     always @(posedge sys_clk) begin
         if (reset) begin
             ws_out    <= 0;
-            reset_counter <= 0;
+            phase_counter <= 0;
             phase     <= PHASE_RESET;
         end else if (enabled && frame_ready) begin
 
             case (phase)
                 PHASE_RESET: begin
-                    reset_counter <= reset_counter + 1;
-                    if (reset_counter == T_RESET) begin
-                        reset_counter <= 0;
-
+                    phase_counter <= phase_counter + 1;
+                    if (phase_counter == T_RESET) begin
                         led_index <= 0;
 
+                        phase_counter <= 0;
                         phase <= PHASE_FETCH;
                     end
                 end
                 PHASE_FETCH: begin
                     $display("fetch");
-                    // BRAM is one-cycle delayed
                     rd_addr <= led_index;   // request read
-                    phase <= PHASE_PREPARE; // wait 1 cycle
+
+                    phase_counter <= phase_counter + 1;
+                    if (phase_counter == T_FETCH) begin
+                        phase_counter <= 0;
+                        phase <= PHASE_PREPARE;
+                    end
                 end
                 PHASE_PREPARE: begin
                     $display("prepare");
