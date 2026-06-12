@@ -14,41 +14,31 @@ use defmt::*;
 use embassy_executor::SendSpawner;
 use embassy_executor::{Executor, InterruptExecutor, Spawner};
 use embassy_stm32::{spi, Peripherals};
-use embassy_stm32::eth::{PacketQueue, Sma, StationManagement};
+use embassy_stm32::eth::{PacketQueue, Sma };
 use embassy_stm32::eth::{Ethernet, GenericPhy};
 use embassy_stm32::gpio::{Level, Output, Speed, Input, Pull};
 use embassy_stm32::interrupt::{InterruptExt, Priority};
-use embassy_stm32::pac::rcc::vals::{Pllm, Plln, Pllsrc};
 use embassy_stm32::peripherals::{ETH, ETH_SMA};
-use embassy_stm32::rcc::mux::{
-    Fdcansel, Fmcsel, I2c4sel, I2c1235sel, Saisel, Sdmmcsel, Spi6sel, Spi45sel, Usart16910sel, Usart234578sel, Usbsel,
-};
-use embassy_stm32::rcc::{AHBPrescaler, APBPrescaler, LsConfig, PllDiv, Sysclk};
 use embassy_stm32::rng::Rng;
 use embassy_stm32::ospi::{
-    AddressSize, ChipSelectHighTime, FIFOThresholdLevel, Instance, MemorySize, MemoryType, Ospi, OspiWidth,
-    TransferConfig, WrapSize,
+    ChipSelectHighTime, FIFOThresholdLevel, MemorySize, MemoryType, WrapSize,
 };
-use embassy_stm32::{Config, bind_interrupts, eth, interrupt, peripherals, rcc, rng};
+use embassy_stm32::{bind_interrupts, eth, interrupt, peripherals, rng};
 use embassy_stm32::mode::Blocking;
 use embassy_stm32::spi::mode::Master;
 use embassy_stm32::spi::Spi;
 use embassy_stm32::time::mhz;
-use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
-use embassy_sync::mutex::Mutex;
 use embassy_time::{Delay, Duration, Ticker, Timer};
 use embedded_alloc::LlffHeap as Heap;
-use embedded_hal::spi::Operation::DelayNs;
 use ioboard_main::stepper::Stepper;
 #[cfg(feature = "tracepin")]
 use ioboard_trace::tracepin;
 #[cfg(feature = "tracepin")]
 use ioboard_trace::tracepin::TracePins;
 use static_cell::StaticCell;
-use tmc5160::Tmc5160;
 use {defmt_rtt as _, panic_probe as _};
 #[cfg(feature = "morse_startup")]
-use morse_core::{MorseCharacter, MorseSymbol};
+use morse_core::MorseSymbol;
 use crate::fpga::FpgaCore;
 use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
 use crate::stepper::tmc5160::Tmc5160Stepper;
@@ -159,10 +149,29 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
     let mut fpga = fpga::FpgaCore::new(ospi1).await;
     {
-        let ident = fpga.read_ident();
-        let version = fpga.read_version();
-        info!("FPGA core. ident: {:02x}, version: {}", ident, version);
+        loop {
+            Timer::after(Duration::from_millis(50)).await;
 
+            let ident = fpga.read_ident();
+            let version = fpga.read_version();
+            info!("FPGA core. ident: {:02x}, version: {}", ident, version);
+
+            if ident == [0xFF, 0xFF, 0xFF, 0xFF] {
+                defmt::error!("No response from FPGA");
+                continue;
+            }
+
+            const EXPECTED_IDENT: [u8; 4] = [0xFA, 0xCE, 0xB0, 0x0B];
+
+            if ident == EXPECTED_IDENT {
+                break
+            }
+
+            defmt::error!("Unexpected FPGA ident. received: {:02x}, expected: {:02x}", ident, EXPECTED_IDENT)
+        }
+    }
+
+    if true {
         let mut fpga_mem: [u8; 0x200] = [0x00; 0x200];
         fpga.read_block(0x0000, &mut fpga_mem);
         debug!("FPGA register map (u8):\n{:02x}", fpga_mem);
@@ -170,20 +179,21 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         let mut fpga_mem: [u32; 0x200 / 4] = [0x0000_0000; 0x200 / 4];
         fpga.read_block_u32(0x0000, &mut fpga_mem);
         debug!("FPGA register map (u32):\n{:08x}", fpga_mem);
+    }
 
-        let mut encoder_mem: [u32; 6] = [0x69b0_0b42, 0x69b0_0b42, 0x69b0_0b42, 0x69b0_0b42, 0x69b0_0b42, 0x69b0_0b42];
-        fpga.write_block_u32_chunked::<16>(0x0040, &mut encoder_mem);
-        fpga.read_block_u32(0x0040, &mut encoder_mem);
-        debug!("Encoder memory after write (u32):\n{:08x}", encoder_mem);
+    if true {
+        let mut encoder_mem: [u32; 6] = [0xdead_beef; 6];
 
-        if ident == [0xFF, 0xFF, 0xFF, 0xFF ] {
-            defmt::panic!("No response from FPGA");
-        }
+        for _ in 0..10 {
+            fpga.read_block_u32(0x0120, &mut encoder_mem);
+            debug!("Encoder values (u32):\n{:08x}", encoder_mem);
 
-        const EXPECTED_IDENT: [u8; 4] = [0xFA, 0xCE, 0xB0, 0x0B ];
-
-        if ident != EXPECTED_IDENT {
-            defmt::panic!("Unexpected FPGA ident. received: {:02x}, expected: {:02x}", ident, EXPECTED_IDENT)
+            // set encoder values
+            encoder_mem = [0x1100_0011, 0x2200_0022, 0x3300_0033, 0x4400_0044, 0x5500_0055, 0x6600_0066];
+            fpga.write_block_u32_chunked::<16>(0x0104, &mut encoder_mem);
+            // read encoder values
+            fpga.read_block_u32(0x0120, &mut encoder_mem);
+            debug!("Encoder values after explicit set (u32):\n{:08x}", encoder_mem);
         }
     }
 
@@ -335,7 +345,7 @@ async fn startup_beeps(fpga: &mut FpgaInstance) {
     let inter_char = dit;
     let inter_word = dit * 7;
 
-    for (index, symbol) in morse.iter().enumerate() {
+    for symbol in morse.iter() {
         match symbol {
             MorseSymbol::IntraLetter => {
                 Timer::after(inter_char).await;
