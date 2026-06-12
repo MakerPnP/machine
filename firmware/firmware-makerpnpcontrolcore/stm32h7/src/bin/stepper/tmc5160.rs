@@ -8,7 +8,7 @@ use modular_bitfield_to_value::ToValue;
 use defmt::*;
 use embassy_time::{Duration, Instant, Timer};
 use tmc5160::registers::*;
-use tmc5160::registers::Registers::{GLOBALSCALER, OTP_READ};
+use tmc5160::registers::Registers::{OTP_READ};
 
 pub struct Tmc5160Stepper<SPI, CS, EN, DELAY, PIN2, PIN3> {
     /// pulse width (us)

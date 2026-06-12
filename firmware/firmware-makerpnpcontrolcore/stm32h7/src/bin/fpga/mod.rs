@@ -1,8 +1,8 @@
 use byteorder::{BigEndian, ByteOrder};
 use embassy_stm32::mode::Blocking;
 use embassy_stm32::ospi::{
-    AddressSize, ChipSelectHighTime, FIFOThresholdLevel, Instance, MemorySize, MemoryType, Ospi, OspiWidth,
-    TransferConfig, WrapSize,
+    AddressSize, Instance, Ospi, OspiWidth,
+    TransferConfig, 
 };
 use embassy_stm32::ospi::enums::DummyCycles;
 use defmt::*;
@@ -162,7 +162,7 @@ impl<I: Instance> FpgaCore<I> {
     /// The buffer must be aligned to a multiple of 4 bytes.
     /// The bytes are sent in chunks of CHUNK_SIZE bytes, one transaction per chunk
     /// The bytes are sent over the wire in big-endian order.
-    pub fn write_block_u32_chunked<const CHUNK_SIZE: usize>(&mut self, address: u16, buffer: &[u32]) {
+    pub fn write_block_u32_chunked<const CHUNK_SIZE: usize>(&mut self, mut address: u16, buffer: &[u32]) {
         let mut chunk_buf = [0u8; CHUNK_SIZE]; // tune to FIFO / DMA burst size
 
         let mut i = 0;
@@ -198,6 +198,7 @@ impl<I: Instance> FpgaCore<I> {
                 .unwrap();
 
             i += chunk_words;
+            address += byte_len as u16;
         }
     }
 
