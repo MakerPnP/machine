@@ -216,7 +216,7 @@ module ws2812 #(
     reg [7:0]  led_index;
     reg [5:0]  bit_index;
 
-    reg [23:0] shift_reg;
+    reg [31:0] shift_reg;
 
     localparam T0H = 40;  // ~0.4us @ 100MHz (adjust as needed)
     localparam T1H = 80;  // ~0.8us
@@ -268,7 +268,7 @@ module ws2812 #(
                 end
                 PHASE_PREPARE: begin
                     $display("prepare");
-                    shift_reg <= rd_data[23:0];
+                    shift_reg <= rd_data[31:0];
                     tcount    <= 0;
                     bit_index <= bit_count;
                     ws_out <= 1;
