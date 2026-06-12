@@ -194,7 +194,7 @@ module ws2812 #(
                         MODE_RGB: wr_data <= {8'd0, sync_reg[23:16], sync_reg[15:8], sync_reg[7:0]};
                         MODE_RGBW: wr_data <= {sync_reg[23:16], sync_reg[15:8], sync_reg[7:0], sync_reg[31:24]};
                         MODE_GRB: wr_data <= {8'd0, sync_reg[15:8],  sync_reg[23:16], sync_reg[7:0]};
-                        MODE_GRBW: wr_data <= {sync_reg[23:16], sync_reg[15:8], sync_reg[7:0], sync_reg[31:24]};
+                        MODE_GRBW: wr_data <= {sync_reg[15:8],  sync_reg[23:16], sync_reg[7:0], sync_reg[31:24]};
                     endcase
 
                     write_ptr <= write_ptr + 1;
