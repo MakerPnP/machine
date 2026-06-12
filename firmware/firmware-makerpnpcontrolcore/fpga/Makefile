@@ -65,7 +65,7 @@ SIM_TARGETS := $(addprefix sim/,$(TB))
 
 ## all: Default target. Synthesizes the FPGA binary and builds simulations.
 all: \
-	$(PROJECT).bin \
+	$(BUILD)/$(PROJECT).bin \
 	sim
 
 # -------------------------
@@ -77,14 +77,17 @@ $(BUILD):
 $(BUILD)/$(PROJECT)-design.json: $(VERILOGS) $(BUILD) Makefile
 	yosys -q -l $(BUILD)/yosys.log -p 'synth_${FAMILY} -top $(TOP) -json $(BUILD)/$(PROJECT)-design.json' $(VERILOGS)
 
-$(PROJECT).asc: $(BUILD)/$(PROJECT)-design.json pins.pcf
+$(BUILD)/$(PROJECT).asc: $(BUILD)/$(PROJECT)-design.json pins.pcf
 	nextpnr-${FAMILY} -q -l $(BUILD)/nextpnr.log --${TYPE} --package ${PACKAGE} --top $(TOP) --json $(BUILD)/$(PROJECT)-design.json --write $(BUILD)/$(PROJECT)-place.json --report $(BUILD)/$(PROJECT)-report.json --pcf pins.pcf --asc $(BUILD)/$(PROJECT).asc --placed-svg $(BUILD)/$(PROJECT)-placed.svg
 	@echo ""
 	@grep -B 1 "%$$" $(BUILD)/nextpnr.log
 	@echo ""
 
-$(PROJECT).bin: $(PROJECT).asc
+$(BUILD)/$(PROJECT).bin: $(BUILD)/$(PROJECT).asc
 	icepack $(BUILD)/$(PROJECT).asc $(BUILD)/$(PROJECT).bin
+
+## synthesise the bitstream (binary)
+synth: $(BUILD)/$(PROJECT).bin
 
 # -------------------------
 # SIMULATION
@@ -132,7 +135,7 @@ clean:
 # -------------------------
 
 ## load: Flash the synthesized core binary onto the hardware chip target using probe-rs.
-load: $(PROJECT).bin
+load: $(BUILD)/$(PROJECT).bin
 	probe-rs download --chip makerpnpcore-w25q16jv --chip-description-path $(FLASH_ALGO_ROOT)/target/definition.yaml $(BUILD)/$(PROJECT).bin --binary-format=bin --base-address 0x70000000 --verify
 
 # -------------------------
