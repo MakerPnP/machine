@@ -19,8 +19,14 @@ module ws2812 #(
 );
 
     always @(*) begin
-        ws_out <= 1'b0;
-        bus_dout <= 32'd0;
+        if (reset) begin
+            ws_out = 1'b1;
+            bus_dout = 32'd0;
+        end
+        else begin
+            ws_out = 1'b0;
+            bus_dout = 32'd0;
+        end
     end
 
 endmodule
