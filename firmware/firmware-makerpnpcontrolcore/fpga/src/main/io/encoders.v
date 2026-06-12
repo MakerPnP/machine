@@ -121,7 +121,7 @@ module encoders(
             6'h2c: bus_dout = encoder_count[3];
             6'h30: bus_dout = encoder_count[4];
             6'h34: bus_dout = encoder_count[5];
-            default: bus_dout = 32'hFFFFFFFF;
+            default: bus_dout = 32'h22222222;
         endcase
     end
 

@@ -55,7 +55,7 @@ module io (
         case (bus_addr)
             6'h00:   bus_dout = io_ctrl;
             6'h04:   bus_dout = io_in_1;
-            default: bus_dout = 32'hFFFFFFFF;
+            default: bus_dout = 32'h33333333;
         endcase
     end
 
