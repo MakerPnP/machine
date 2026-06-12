@@ -23,7 +23,12 @@ module encoders(
     reg        strobe_encoder_reset;
 
     wire [31:0] encoder_count [6];
-    reg [31:0] encoder_set_value [6];
+    reg [31:0] encoder_set_value_a;
+    reg [31:0] encoder_set_value_b;
+    reg [31:0] encoder_set_value_c;
+    reg [31:0] encoder_set_value_x;
+    reg [31:0] encoder_set_value_y;
+    reg [31:0] encoder_set_value_z;
 
     reg [5:0] encoder_set;
 
@@ -31,7 +36,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[0]),
-        .set_value(encoder_set_value[0]),
+        .set_value(encoder_set_value_a),
         .set(encoder_set[0]),
         .abz(abz_a)
     );
@@ -39,7 +44,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[1]),
-        .set_value(encoder_set_value[1]),
+        .set_value(encoder_set_value_b),
         .set(encoder_set[1]),
         .abz(abz_b)
     );
@@ -47,7 +52,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[2]),
-        .set_value(encoder_set_value[2]),
+        .set_value(encoder_set_value_c),
         .set(encoder_set[2]),
         .abz(abz_c)
     );
@@ -55,7 +60,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[3]),
-        .set_value(encoder_set_value[3]),
+        .set_value(encoder_set_value_x),
         .set(encoder_set[3]),
         .abz(abz_x)
     );
@@ -63,7 +68,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[4]),
-        .set_value(encoder_set_value[4]),
+        .set_value(encoder_set_value_y),
         .set(encoder_set[4]),
         .abz(abz_y)
     );
@@ -71,7 +76,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[5]),
-        .set_value(encoder_set_value[5]),
+        .set_value(encoder_set_value_z),
         .set(encoder_set[5]),
         .abz(abz_z)
     );
@@ -149,32 +154,32 @@ module encoders(
                     end
                     6'h04: begin
                         $display("ENC_SET_COUNT_A update. value: 0x%08h", sync_reg);
-                        encoder_set_value[0] <= sync_reg;
+                        encoder_set_value_a <= sync_reg;
                         encoder_set <= encoder_set | 6'b000001;
                     end
                     6'h08: begin
                         $display("ENC_SET_COUNT_B update. value: 0x%08h", sync_reg);
-                        encoder_set_value[1] <= sync_reg;
+                        encoder_set_value_b <= sync_reg;
                         encoder_set <= encoder_set | 6'b000010;
                     end
                     6'h0C: begin
                         $display("ENC_SET_COUNT_C update. value: 0x%08h", sync_reg);
-                        encoder_set_value[2] <= sync_reg;
+                        encoder_set_value_c <= sync_reg;
                         encoder_set <= encoder_set | 6'b000100;
                     end
                     6'h10: begin
                         $display("ENC_SET_COUNT_X update. value: 0x%08h", sync_reg);
-                        encoder_set_value[3] <= sync_reg;
+                        encoder_set_value_x <= sync_reg;
                         encoder_set <= encoder_set | 6'b001000;
                     end
                     6'h14: begin
                         $display("ENC_SET_COUNT_Y update. value: 0x%08h", sync_reg);
-                        encoder_set_value[4] <= sync_reg;
+                        encoder_set_value_y <= sync_reg;
                         encoder_set <= encoder_set | 6'b010000;
                     end
                     6'h18: begin
                         $display("ENC_SET_COUNT_Z update. value: 0x%08h", sync_reg);
-                        encoder_set_value[5] <= sync_reg;
+                        encoder_set_value_z <= sync_reg;
                         encoder_set <= encoder_set | 6'b100000;
                     end
                 endcase
