@@ -32,6 +32,7 @@ module ws2812 #(
     reg        enabled;
     reg [1:0]  mode;
     reg [7:0]  num_leds;
+    reg [5:0]  bit_count;
 
     // ============================================================
     // STREAMING STATE
@@ -163,6 +164,11 @@ module ws2812 #(
                 mode  <= sync_reg[2:1];
                 enabled <= sync_reg[0];
                 frame_ready <= 0;
+                case (sync_reg[2:1])
+                    MODE_RGB, MODE_GRB: bit_count <= 23;
+                    MODE_RGBW, MODE_GRBW: bit_count <= 31;
+                endcase
+
                 $display("enabled flag: %1d, mode: 0b%02b", sync_reg[0], sync_reg[2:1]);
             end
 
@@ -185,10 +191,10 @@ module ws2812 #(
                 if (write_ptr < MAX_LEDS) begin
                     wr_addr <= write_ptr;
                     case (mode)
-                        MODE_RGB: wr_data = {8'd0, sync_reg[23:16], sync_reg[15:8], sync_reg[7:0]};
-                        MODE_RGBW: wr_data = {sync_reg[23:16], sync_reg[15:8], sync_reg[7:0], sync_reg[31:24]};
-                        MODE_GRB: wr_data = {8'd0, sync_reg[15:8],  sync_reg[23:16], sync_reg[7:0]};
-                        MODE_GRBW: wr_data = {sync_reg[23:16], sync_reg[15:8], sync_reg[7:0], sync_reg[31:24]};
+                        MODE_RGB: wr_data <= {8'd0, sync_reg[23:16], sync_reg[15:8], sync_reg[7:0]};
+                        MODE_RGBW: wr_data <= {sync_reg[23:16], sync_reg[15:8], sync_reg[7:0], sync_reg[31:24]};
+                        MODE_GRB: wr_data <= {8'd0, sync_reg[15:8],  sync_reg[23:16], sync_reg[7:0]};
+                        MODE_GRBW: wr_data <= {sync_reg[23:16], sync_reg[15:8], sync_reg[7:0], sync_reg[31:24]};
                     endcase
 
                     write_ptr <= write_ptr + 1;
@@ -264,13 +270,13 @@ module ws2812 #(
                     $display("prepare");
                     shift_reg <= rd_data[23:0];
                     tcount    <= 0;
-                    bit_index <= 23;
+                    bit_index <= bit_count;
                     ws_out <= 1;
                     phase <= PHASE_TRANSMIT;
                 end
                 PHASE_TRANSMIT: begin
                     // Loaded new LED
-                    if (bit_index == 23 && tcount == 0) begin
+                    if (bit_index == bit_count && tcount == 0) begin
                         $display("transmit. index: %d, shift_reg: 0x%08h", led_index, shift_reg);
                     end
 
@@ -290,7 +296,7 @@ module ws2812 #(
 
                         // next bit
                         if (bit_index == 0) begin
-                            bit_index <= 23;
+                            bit_index <= bit_count;
 
                             // next LED
                             if (led_index == num_leds - 1) begin

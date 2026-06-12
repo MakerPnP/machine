@@ -320,6 +320,9 @@ module ws2812_tb;
             $display("PASS: WS2812 reset pulse valid");
 
         end
+
+        // TODO expand to include tests for different modes (GRB, GRBW, RGBW)
+
         // ============================================================
         // END
         // ============================================================
