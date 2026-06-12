@@ -141,7 +141,7 @@ module ws2812_tb;
             for (idx = 0; idx < 16; idx = idx + 1) begin
                 expected[idx] = {8'h00, idx[7:0], 8'h10, 8'h20};
                 $display("index: %d, value: 0x%08h", idx, expected[idx]);
-                write(5'h10, expected[idx]);
+                write(5'h10 + idx, expected[idx]);
             end
 
 
