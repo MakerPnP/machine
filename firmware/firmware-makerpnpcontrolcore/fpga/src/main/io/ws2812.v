@@ -38,7 +38,6 @@ module ws2812 #(
     // STREAMING STATE
     // ============================================================
     reg [7:0] write_ptr;
-    reg [7:0] read_ptr;
 
     reg        streaming;
     reg        frame_ready;
