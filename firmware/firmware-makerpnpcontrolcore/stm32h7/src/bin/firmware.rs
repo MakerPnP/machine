@@ -110,6 +110,24 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     let mut fpga_creset_b = Output::new(p.PF15, Level::Low, Speed::Low);
     let fpga_cdone = Input::new(p.PC15, Pull::None);
 
+    // wait for CDONE signal to be low from FPGA.
+    loop {
+        let level = fpga_cdone.get_level();
+
+        // check checking, and give the FPGA some time to settle.
+        Timer::after(Duration::from_millis(50)).await;
+
+        match level {
+            Level::Low => {
+                info!("CDONE LOW");
+                break
+            }
+            Level::High => {
+                info!("Waiting for CDONE LOW");
+            }
+        }
+    }
+
     info!("Enabling FPGA");
     fpga_creset_b.set_high();
 
@@ -144,16 +162,21 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         ospi_config,
     );
 
-    // wait for CDONE signal to be high from FPGA.
-    let initial_level = fpga_cdone.get_level();
+    // wait for CDONE signal to be low from FPGA.
     loop {
-        let new_level = fpga_cdone.get_level();
-        if new_level == initial_level {
-            info!("Waiting for CDONE");
-            Timer::after(Duration::from_millis(50)).await;
-        } else {
-            info!("FPGA CDone level: {}", new_level);
-            break;
+        let level = fpga_cdone.get_level();
+
+        // check checking, and give the FPGA some time to settle.
+        Timer::after(Duration::from_millis(50)).await;
+
+        match level {
+            Level::Low => {
+                info!("Waiting for CDONE HIGH");
+            }
+            Level::High => {
+                info!("CDONE HIGH");
+                break
+            }
         }
     }
 
