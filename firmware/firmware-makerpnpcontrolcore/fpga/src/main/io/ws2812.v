@@ -42,7 +42,57 @@ module ws2812 #(
     reg        streaming;
     reg        frame_ready;
 
-    reg [31:0] pixel_buffer [0:MAX_LEDS-1];
+    localparam ADDR_WIDTH = 8;   // up to 256 entries
+    localparam DATA_WIDTH = 32;
+
+    wire [15:0] ram_rdata_lo;
+    wire [15:0] ram_rdata_hi;
+
+    reg write_en_r;
+
+    reg  [7:0]  wr_addr;
+    reg  [7:0]  rd_addr;
+
+    reg  [31:0] wr_data;
+    wire [31:0] rd_data;
+
+    assign rd_data = {ram_rdata_hi, ram_rdata_lo};
+
+    SB_RAM40_4K #(
+        .WRITE_MODE(0),
+        .READ_MODE(0)
+    ) ram_lo (
+        .RCLK(sys_clk),
+        .RCLKE(1'b1),
+        .RE(1'b1),
+        .RADDR({3'b000, rd_addr}),
+        .RDATA(ram_rdata_lo),
+
+        .WCLK(sys_clk),
+        .WCLKE(1'b1),
+        .WE(write_en_r),
+        .WADDR({3'b000, wr_addr}),
+        .WDATA(wr_data[15:0]),
+        .MASK(16'h0000)
+    );
+
+    SB_RAM40_4K #(
+        .WRITE_MODE(0),
+        .READ_MODE(0)
+    ) ram_hi (
+        .RCLK(sys_clk),
+        .RCLKE(1'b1),
+        .RE(1'b1),
+        .RADDR({3'b000, rd_addr}),
+        .RDATA(ram_rdata_hi),
+
+        .WCLK(sys_clk),
+        .WCLKE(1'b1),
+        .WE(write_en_r),
+        .WADDR({3'b000, wr_addr}),
+        .WDATA(wr_data[31:16]),
+        .MASK(16'h0000)
+    );
 
     // ============================================================
     // BUS WRITE CAPTURE (encoder-style)
@@ -106,6 +156,13 @@ module ws2812 #(
     // ============================================================
     integer i;
 
+    wire data_write_region =
+        (sync_addr >= WS_DATA_1 && sync_addr <= 6'h2C);
+
+    always @(posedge sys_clk) begin
+        write_en_r <= strobe_update && data_write_region;
+    end
+
     always @(posedge sys_clk) begin
         if (reset) begin
             write_ptr  <= 0;
@@ -139,7 +196,8 @@ module ws2812 #(
                 end
 
                 if (write_ptr < MAX_LEDS) begin
-                    pixel_buffer[write_ptr] <= pack_pixel(sync_reg, mode);
+                    wr_addr <= write_ptr;
+                    wr_data <= pack_pixel(sync_reg, mode);
                     write_ptr <= write_ptr + 1;
                 end
             end
@@ -170,8 +228,10 @@ module ws2812 #(
     reg [7:0]  tcount;
 
     localparam PHASE_RESET     = 2'd0;
-    localparam PHASE_PREPARE   = 2'd1;
-    localparam PHASE_TRANSMIT  = 2'd2;
+    localparam PHASE_FETCH     = 2'd1;
+    localparam PHASE_PREPARE   = 2'd2;
+    localparam PHASE_TRANSMIT  = 2'd3;
+
     reg [1:0]  phase;
 
     reg [31:0] reset_counter;
@@ -191,11 +251,18 @@ module ws2812 #(
 
                         led_index <= 0;
 
-                        phase <= PHASE_PREPARE;
+                        phase <= PHASE_FETCH;
                     end
                 end
+                PHASE_FETCH: begin
+                    $display("fetch");
+                    // BRAM is one-cycle delayed
+                    rd_addr <= led_index;   // request read
+                    phase <= PHASE_PREPARE; // wait 1 cycle
+                end
                 PHASE_PREPARE: begin
-                    shift_reg <= pixel_buffer[led_index][23:0];
+                    $display("prepare");
+                    shift_reg <= rd_data[23:0];
                     tcount    <= 0;
                     bit_index <= 23;
                     ws_out <= 1;
@@ -204,7 +271,7 @@ module ws2812 #(
                 PHASE_TRANSMIT: begin
                     // Loaded new LED
                     if (bit_index == 23 && tcount == 0) begin
-                        $display("led begin. index: %d, shift_reg: 0x%08h", led_index, shift_reg);
+                        $display("transmit. index: %d, shift_reg: 0x%08h", led_index, shift_reg);
                     end
 
                     // Timing engine
@@ -232,7 +299,7 @@ module ws2812 #(
                             end else begin
                                 $display("next led. led_index: %d", led_index);
                                 led_index <= led_index + 1;
-                                phase <= PHASE_PREPARE;
+                                phase <= PHASE_FETCH;
                             end
                         end else begin
                             bit_index <= bit_index - 1;
