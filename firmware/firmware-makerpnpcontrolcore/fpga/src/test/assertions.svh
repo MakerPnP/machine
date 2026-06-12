@@ -36,27 +36,110 @@ package tb_assert;
 
     $display("================================");
 
-    if (fail_count > 0) $stop;
+    if (fail_count > 0) begin
+        $finish;
+    end
   endtask
 
 endpackage
 
 import tb_assert::*;
 
-// Updated Macro with 4 arguments (2 mandatory, 2 optional)
 // FMT defaults to "%0d" for backward compatibility
 // MSG defaults to "" (an empty string)
 `define ASSERT_EQ(A, B, FMT="%0d", MSG="") \
   assert_count++; \
-  assert ((A) == (B)) success_count++; \
+  assert ((A) === (B)) success_count++; \
   else begin \
     fail_count++; \
     if (MSG == "") begin \
-      $error($sformatf("%sAssertion failed: %s == %s, actual = %s%s", \
-                       COLOR_RED, `"A`", FMT, FMT, COLOR_WHITE), (B), (A)); \
+      $error($sformatf("%sAssertion failed: '%s' (%s) == '%s' (%s) %s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, COLOR_WHITE), (A), (B)); \
     end else begin \
-      $error($sformatf("%sAssertion failed: %s == %s, actual = %s - %s%s", \
-                       COLOR_RED, `"A`", FMT, FMT, MSG, COLOR_WHITE), (B), (A)); \
+      $error($sformatf("%sAssertion failed: '%s' (%s) == '%s' (%s) - %s%s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, MSG, COLOR_WHITE), (A), (B)); \
     end \
   end
+
+// FMT defaults to "%0d" for backward compatibility
+// MSG defaults to "" (an empty string)
+`define ASSERT_NE(A, B, FMT="%0d", MSG="") \
+  assert_count++; \
+  assert ((A) != (B)) success_count++; \
+  else begin \
+    fail_count++; \
+    if (MSG == "") begin \
+      $error($sformatf("%sAssertion failed: '%s' (%s) != '%s' (%s) %s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, COLOR_WHITE), (A), (B)); \
+    end else begin \
+      $error($sformatf("%sAssertion failed: '%s' (%s) != '%s' (%s) - %s%s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, MSG, COLOR_WHITE), (A), (B)); \
+    end \
+  end
+
+// FMT defaults to "%0d" for backward compatibility
+// MSG defaults to "" (an empty string)
+`define ASSERT_GT(A, B, FMT="%0d", MSG="") \
+  assert_count++; \
+  assert ((A) > (B)) success_count++; \
+  else begin \
+    fail_count++; \
+    if (MSG == "") begin \
+      $error($sformatf("%sAssertion failed: '%s' (%s) > '%s' (%s) %s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, COLOR_WHITE), (A), (B)); \
+    end else begin \
+      $error($sformatf("%sAssertion failed: '%s' (%s) > '%s' (%s) - %s%s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, MSG, COLOR_WHITE), (A), (B)); \
+    end \
+  end
+
+// FMT defaults to "%0d" for backward compatibility
+// MSG defaults to "" (an empty string)
+`define ASSERT_LT(A, B, FMT="%0d", MSG="") \
+  assert_count++; \
+  assert ((A) < (B)) success_count++; \
+  else begin \
+    fail_count++; \
+    if (MSG == "") begin \
+      $error($sformatf("%sAssertion failed: '%s' (%s) < '%s' (%s) %s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, COLOR_WHITE), (A), (B)); \
+    end else begin \
+      $error($sformatf("%sAssertion failed: '%s' (%s) < '%s' (%s) - %s%s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, MSG, COLOR_WHITE), (A), (B)); \
+    end \
+  end
+
+// FMT defaults to "%0d" for backward compatibility
+// MSG defaults to "" (an empty string)
+`define ASSERT_GE(A, B, FMT="%0d", MSG="") \
+  assert_count++; \
+  assert ((A) >= (B)) success_count++; \
+  else begin \
+    fail_count++; \
+    if (MSG == "") begin \
+      $error($sformatf("%sAssertion failed: '%s' (%s) >= '%s' (%s) %s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, COLOR_WHITE), (A), (B)); \
+    end else begin \
+      $error($sformatf("%sAssertion failed: '%s' (%s) >= '%s' (%s) - %s%s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, MSG, COLOR_WHITE), (A), (B)); \
+    end \
+  end
+
+// FMT defaults to "%0d" for backward compatibility
+// MSG defaults to "" (an empty string)
+`define ASSERT_LE(A, B, FMT="%0d", MSG="") \
+  assert_count++; \
+  assert ((A) <= (B)) success_count++; \
+  else begin \
+    fail_count++; \
+    if (MSG == "") begin \
+      $error($sformatf("%sAssertion failed: '%s' (%s) <= '%s' (%s) %s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, COLOR_WHITE), (A), (B)); \
+    end else begin \
+      $error($sformatf("%sAssertion failed: '%s' (%s) <= '%s' (%s) - %s%s", \
+                       COLOR_RED, `"A`", FMT, `"B`", FMT, MSG, COLOR_WHITE), (A), (B)); \
+    end \
+  end
+
+
 `endif
