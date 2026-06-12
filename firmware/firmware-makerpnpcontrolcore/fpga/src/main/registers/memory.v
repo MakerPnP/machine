@@ -253,6 +253,14 @@ module memory (
                         dout_a <= encoder_dout;
                     end
 
+                    TARGET_WS0: begin
+                        dout_a <= ws0_dout;
+                    end
+
+                    TARGET_WS1: begin
+                        dout_a <= ws1_dout;
+                    end
+
                     default: begin
                         dout_a <= global_dout_r;
                     end
