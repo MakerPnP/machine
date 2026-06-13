@@ -49,7 +49,7 @@ module encoder(
     always @(posedge sys_clk) begin
         if (reset) begin
             count <= 0;
-            prev_abz <= 2'b00;
+            prev_abz <= 3'b000;
             initialized <= 1'b0;
         end else begin
             if (set) begin
