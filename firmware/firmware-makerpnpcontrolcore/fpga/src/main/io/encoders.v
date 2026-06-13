@@ -22,13 +22,13 @@ module encoders(
 
     reg        strobe_encoder_reset;
 
-    wire [31:0] encoder_count [6];
-    reg [31:0] encoder_set_value_a;
-    reg [31:0] encoder_set_value_b;
-    reg [31:0] encoder_set_value_c;
-    reg [31:0] encoder_set_value_x;
-    reg [31:0] encoder_set_value_y;
-    reg [31:0] encoder_set_value_z;
+    wire [15:0] encoder_count [6];
+    reg [15:0] encoder_set_value_a;
+    reg [15:0] encoder_set_value_b;
+    reg [15:0] encoder_set_value_c;
+    reg [15:0] encoder_set_value_x;
+    reg [15:0] encoder_set_value_y;
+    reg [15:0] encoder_set_value_z;
 
     reg [5:0] encoder_set;
 
@@ -115,12 +115,12 @@ module encoders(
         case (bus_addr)
             6'h00: bus_dout = enc_ctrl;
             // 6'h04-18 - write only (set count)
-            6'h20: bus_dout = encoder_count[0];
-            6'h24: bus_dout = encoder_count[1];
-            6'h28: bus_dout = encoder_count[2];
-            6'h2c: bus_dout = encoder_count[3];
-            6'h30: bus_dout = encoder_count[4];
-            6'h34: bus_dout = encoder_count[5];
+            6'h20: bus_dout = {16'd0, encoder_count[0]};
+            6'h24: bus_dout = {16'd0, encoder_count[1]};
+            6'h28: bus_dout = {16'd0, encoder_count[2]};
+            6'h2c: bus_dout = {16'd0, encoder_count[3]};
+            6'h30: bus_dout = {16'd0, encoder_count[4]};
+            6'h34: bus_dout = {16'd0, encoder_count[5]};
             default: bus_dout = 32'h22222222;
         endcase
     end

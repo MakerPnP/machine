@@ -189,7 +189,7 @@ module encoders_tb;
         addr = 6'h20;
         #10;
         $display("ENC value after +1 steps: %0d", dout);
-        `ASSERT_EQ(dout, 32'hffff_ffff, "%0d", "Count after z pulse + 1 reverse step incorrect");
+        `ASSERT_EQ(dout, 32'h0000_ffff, "%0d", "Count after z pulse + 1 reverse step incorrect");
 
         // ----------------------------------------
         // Set counters
@@ -210,7 +210,7 @@ module encoders_tb;
                 #100;
                 $display("ENC counter after ENC_SET_VALUE_%1d: %0d", i, dout);
 
-                `ASSERT_EQ(dout, 32'hbaad_beef, "0x%08h", $sformatf("ENC_SET_VALUE_%1d failed", i));
+                `ASSERT_EQ(dout, 32'h0000_beef, "0x%08h", $sformatf("ENC_SET_VALUE_%1d failed", i));
             end
         end
 
