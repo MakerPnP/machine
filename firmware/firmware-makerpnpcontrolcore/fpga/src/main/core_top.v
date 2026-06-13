@@ -49,7 +49,9 @@ module core_top (
     wire [15:0] mem_addr;
     wire [31:0] mem_din;
     wire [31:0] mem_dout;
+    wire        mem_en;
     wire        mem_we;
+    wire        mem_valid;
 
     wire [5:0]  led_addr;
     wire [31:0] led_din;
@@ -196,9 +198,11 @@ module core_top (
         .reset(reset),
         .clk_a(clk_100),
         .we_a(mem_we),
+        .en_a(mem_en),
         .addr_a(mem_addr),
         .din_a(mem_din),
         .dout_a(mem_dout),
+        .valid_a(mem_valid),
 
         .led_we(led_we),
         .led_addr(led_addr),
@@ -229,10 +233,12 @@ module core_top (
         .sck(QUADSPI1_CLK),
         .cs_n(QUADSPI1_NCS),
         .io(QUADSPI1_IO),
-        .mem_addr(mem_addr), // Connects to the 12-bit explicit wire
-        .mem_din(mem_din),   // Connects to the 8-bit explicit wire
-        .mem_dout(mem_dout), // Connects to the 8-bit explicit wire
-        .mem_we(mem_we)      // Connects to the 1-bit explicit wire
+        .mem_en(mem_en),
+        .mem_addr(mem_addr),
+        .mem_din(mem_din),
+        .mem_dout(mem_dout),
+        .mem_valid(mem_valid),
+        .mem_we(mem_we)
     );
 
     // ----------------------

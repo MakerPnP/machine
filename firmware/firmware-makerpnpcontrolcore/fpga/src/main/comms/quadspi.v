@@ -6,11 +6,14 @@ module quadspi (
     inout  wire [3:0] io,
 
     // Memory Interface Port A
+    output reg        mem_en    = 0,
     output reg [15:0] mem_addr,
-    output reg [31:0]  mem_din,
+    output reg [31:0] mem_din,
     input  wire [31:0] mem_dout,
+    input  wire       mem_valid,
     output reg        mem_we    = 0
 );
+
 
     // Named Localparam States
     localparam STATE_CMD     = 3'd0;
@@ -72,27 +75,13 @@ module quadspi (
 
     reg [31:0] in_buf;
     reg [31:0] out_buf;
+    reg [31:0] next_buf;
+    reg        next_buf_valid = 1'b0;
+    reg        pending_prefetch = 1'b0;
 
     reg word_complete_flag = 1'b0;
     reg commit_flag = 1'b0;
 
-    reg read_addr_updated = 1'b0;
-    reg read_data_ready   = 1'b0;
-
-    // -----------------------------------------------------------------
-    // Synchronous Output Driver Logic (Prepares data on SCK Falling Edge)
-    // -----------------------------------------------------------------
-    always @(posedge sys_clk or posedge cs_n) begin
-        if (cs_n) begin
-            io_out_reg <= 4'b0;
-        end else if (sck_falling) begin
-            if (state == STATE_DATA_R) begin
-                io_out_reg <= out_buf[31:28];
-            end else begin
-                io_out_reg <= 4'b0;
-            end
-        end
-    end
 
     // -----------------------------------------------------------------
     // Immediate disable of io_outputs
@@ -115,14 +104,28 @@ module quadspi (
     // Main SPI Protocol State Machine (Processes on SCK Rising Edge)
     // -----------------------------------------------------------------
     always @(posedge sys_clk) begin
-        if (read_addr_updated) begin
-            read_addr_updated <= 1'b0;
-            read_data_ready   <= 1'b1;
+        // mem_en is a one-cycle request strobe into the RAM-like memory port.
+        mem_en <= 1'b0;
+
+        if (cs_n) begin
+            io_out_reg <= 4'b0;
+        end else if (sck_falling) begin
+            if (state == STATE_DATA_R) begin
+                io_out_reg <= out_buf[31:28];
+            end else begin
+                io_out_reg <= 4'b0;
+            end
         end
 
-        if (read_data_ready) begin
-            read_data_ready <= 1'b0;
-            out_buf         <= mem_dout;
+        if (mem_valid) begin
+            if (pending_prefetch) begin
+                next_buf       <= mem_dout;
+                next_buf_valid <= 1'b1;
+            end else begin
+                out_buf <= mem_dout;
+            end
+
+            pending_prefetch <= 1'b0;
         end
 
         if (word_complete_flag) begin
@@ -131,6 +134,7 @@ module quadspi (
                 STATE_DATA_W: begin
                     // capture the completed input buffer
                     mem_din       <= in_buf;
+                    mem_en        <= 1'b1;
                     mem_we        <= 1'b1;
                     $display("in_buf: 0x%08h", in_buf);
                 end
@@ -141,7 +145,7 @@ module quadspi (
             // if CS goes high during a commit, we need to clear mem_we on the next clock cycle.
             // if mem_we is reset here the commit is lost.
             commit_flag <= 1'b1;
-            mem_we        <= 1'b0;
+            mem_we      <= 1'b0;
         end
 
         if (commit_flag) begin
@@ -161,9 +165,12 @@ module quadspi (
             cmd           <= 0;
             addr          <= 0;
             in_buf        <= 0;
+            mem_en        <= 1'b0;
+            mem_we        <= 1'b0;
             word_complete_flag <= 0;
-            read_addr_updated  <= 1'b0;
-            read_data_ready    <= 1'b0;
+            next_buf_valid   <= 1'b0;
+            pending_prefetch <= 1'b0;
+            word_complete_flag <= 0;
         end else begin
             // Only process state modifications on valid rising edges of sck
             if (sck_rising) begin
@@ -190,7 +197,8 @@ module quadspi (
                                 state    <= STATE_DATA_W;
                                 $strobe("write address: 0x%04h", mem_addr);
                             end else begin
-                                state    <= STATE_DUMMY;
+                                pending_prefetch <= 1'b0;
+                                state            <= STATE_DUMMY;
                                 $strobe("read address: 0x%04h", mem_addr);
                             end
                         end else begin
@@ -200,10 +208,15 @@ module quadspi (
                     end
 
                     STATE_DUMMY: begin
+                        if (phase_counter == 4'd0) begin
+                            mem_en <= 1'b1;
+                            mem_we <= 1'b0;
+                        end
+
                         if (phase_counter == 4'd7) begin
-                            // 8 full clock periods finished
+                            // 8 full clock periods finished.
+                            // out_buf is loaded by read_wait when memory dout is valid.
                             phase_counter <= 0;
-                            out_buf       <= mem_dout;
                             state         <= STATE_DATA_R;
                         end else begin
                             phase_counter <= phase_counter + 4'd1;
@@ -212,19 +225,32 @@ module quadspi (
 
                     STATE_DATA_R: begin
                         phase_counter <= phase_counter + 4'd1;
-                        out_buf <= out_buf << 4;
 
-                        // Advance address space after the last nibble phase finishes
-                        if (phase_counter == 4'd7) begin
-
-                            phase_counter <= 4'd0;
-
+                        // Continuous reads have no dummy cycles between words.
+                        // Request the next word while the current word is still
+                        // being shifted out. memory will tell us when it is ready.
+                        if (phase_counter == 4'd4) begin
                             if (mem_addr == 16'h01FC)
                                 mem_addr <= 16'h0000;
                             else
                                 mem_addr <= mem_addr + 16'd4;
 
-                            read_addr_updated <= 1'b1;
+                            mem_en <= 1'b1;
+                            mem_we <= 1'b0;
+                            pending_prefetch <= 1'b1;
+                        end
+
+                        if (phase_counter == 4'd7) begin
+                            phase_counter <= 4'd0;
+
+                            if (next_buf_valid) begin
+                                out_buf        <= next_buf;
+                                next_buf_valid <= 1'b0;
+                            end else begin
+                                io_out_reg <= 4'd0;
+                            end
+                        end else begin
+                            out_buf <= out_buf << 4;
                         end
                     end
 
