@@ -14,7 +14,9 @@ module int_leds_mem_tb;
     reg [15:0] mem_addr;
     reg [31:0] mem_din;
     reg [31:0] mem_dout;
-    reg        mem_we   = 0;
+    wire       mem_valid;
+    reg        mem_en = 0;
+    reg        mem_we = 0;
 
     reg [5:0]  led_addr;
     reg [31:0] led_din;
@@ -41,10 +43,12 @@ module int_leds_mem_tb;
     memory memory_map_inst (
         .reset(RESET),
         .clk_a(TCXO),
+        .en_a(mem_en),
         .we_a(mem_we),
         .addr_a(mem_addr),
         .din_a(mem_din),
         .dout_a(mem_dout),
+        .valid_a(mem_valid),
 
         .led_we(led_we),
         .led_addr(led_addr),
@@ -55,67 +59,64 @@ module int_leds_mem_tb;
     // Clock generation: 100 MHz simulated clock (10ns period)
     always #5 TCXO = ~TCXO;
 
+
+    task memory_write;
+        input [15:0] address;
+        input [31:0] data;
+        begin
+            @(negedge TCXO);
+            mem_addr = address;
+            mem_din  = data;
+            mem_we   = 1'b1;
+            mem_en   = 1'b1;
+
+            @(negedge TCXO);
+            mem_we   = 1'b0;
+            mem_en   = 1'b0;
+
+            // memory.v accepts the request, emits the downstream write strobe,
+            // then leds.v consumes its internal strobe and updates outputs.
+            repeat (8) @(posedge TCXO);
+        end
+    endtask
+
     // Simulation control
     initial begin
         $dumpfile("int_leds_mem_tb.vcd");
         $dumpvars(0, int_leds_mem_tb);
 
+        mem_addr = 16'd0;
+        mem_din  = 32'd0;
+        mem_en   = 1'b0;
+        mem_we   = 1'b0;
+
         // reset pulse
         RESET = 1;
-        #20;
+        repeat (4) @(posedge TCXO);
         RESET = 0;
+        repeat (4) @(posedge TCXO);
 
-        // Run simulation for some time
-        #100;
-        mem_we = 1'b1;
-        mem_addr = 12'h040;
-        mem_din = 32'd0;
+        memory_write(16'h0040, 32'd0);
 
-        // hold the write strobe for one clock cycle
-        #10;
-        mem_we = 1'b0;
-
-        // Run to let clocks sync
         #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
         `ASSERT_EQ(FPGA_ACT, 1'b0, "0b%1b", "FPGA_ACT mismatch");
         `ASSERT_EQ(MCU_ACT, 1'b0, "0b%1b", "MCU_ACT mismatch");
 
-        mem_we = 1'b1;
-        mem_din = {24'd0, 8'b0000_0001};
+        memory_write(16'h0040, {24'd0, 8'b0000_0001});
 
-        // hold the write strobe for one clock cycle
-        #10;
-        mem_we = 1'b0;
-
-        // Run to let clocks sync
-        #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
         `ASSERT_EQ(FPGA_ACT, 1'b1, "0b%1b", "FPGA_ACT mismatch");
         `ASSERT_EQ(MCU_ACT, 1'b0, "0b%1b", "MCU_ACT mismatch");
 
-        mem_we = 1'b1;
-        mem_din = {24'd0, 8'b0000_0010};
+        memory_write(16'h0040, {24'd0, 8'b0000_0010});
 
-        // hold the write strobe for one clock cycle
-        #10;
-        mem_we = 1'b0;
-
-        // Run to let clocks sync
-        #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
         `ASSERT_EQ(FPGA_ACT, 1'b0, "0b%1b", "FPGA_ACT mismatch");
         `ASSERT_EQ(MCU_ACT, 1'b1, "0b%1b", "MCU_ACT mismatch");
 
-        mem_we = 1'b1;
-        mem_din = {24'd0, 8'b0000_0011};
+        memory_write(16'h0040, {24'd0, 8'b0000_0011});
 
-        // hold the write strobe for one clock cycle
-        #10;
-        mem_we = 1'b0;
-
-        // Run to let clocks sync
-        #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
         `ASSERT_EQ(MCU_ACT, 1'b1, "0b%1b", "MCU_ACT mismatch");
         `ASSERT_EQ(FPGA_ACT, 1'b1, "0b%1b", "FPGA_ACT mismatch");
