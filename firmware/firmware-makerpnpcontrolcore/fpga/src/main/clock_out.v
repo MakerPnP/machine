@@ -1,7 +1,8 @@
 
 module clock_out
     (
-        input reset,
+        input  wire        sys_clk,
+        input  wire        reset,
         output reg clock_out1,
         output reg clock_out2,
         output reg clock_out3,
@@ -12,7 +13,7 @@ module clock_out
 // the TMC5160 says: "CLK - CLK input. Tie to GND using short wire for internal clock or supply external clock"
 // See TMC5160 Datasheet, Rev 1.18, 26.2 Using an External Clock.
 
-always @(*) begin
+always @(posedge sys_clk) begin
     if (reset) begin
         clock_out1 = 1;
         clock_out2 = 1;

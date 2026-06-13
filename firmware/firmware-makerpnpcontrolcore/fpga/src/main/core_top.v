@@ -171,8 +171,8 @@ module core_top (
     // Encoders
     // ----------------------
     encoders encoder_inst (
-        .sys_clk(clk_100),
         .reset(reset),
+        .sys_clk(clk_100),
 
         .bus_we(encoder_we),
         .bus_addr(encoder_addr),
@@ -246,6 +246,7 @@ module core_top (
 
     wake u_wake (
         .reset(reset),
+        .sys_clk(clk_100),
         .nwake_in(NWAKE_IN),
         .nwake_1(NWAKE_1),
         .nwake_2(NWAKE_2),
@@ -255,6 +256,7 @@ module core_top (
 
     timer_mux u_timer_mux (
         .reset(reset),
+        .sys_clk(clk_100),
         .mux_sel1(MUX_SEL1),
         .mux_sel2(MUX_SEL2),
         .mux_sel3(MUX_SEL3),
@@ -263,6 +265,7 @@ module core_top (
 
     clock_out u_clock_out (
         .reset(reset),
+        .sys_clk(clk_100),
         .clock_out1(FPGA_CLK_1),
         .clock_out2(FPGA_CLK_2),
         .clock_out3(FPGA_CLK_3),
