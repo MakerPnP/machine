@@ -183,6 +183,8 @@ module memory (
             io_we_r      <= 1'b0;
             buzzer_we_r  <= 1'b0;
             encoder_we_r <= 1'b0;
+            ws0_we_r     <= 1'b0;
+            ws1_we_r     <= 1'b0;
 
             // Stage 1: service the previously captured request.
             // For peripheral reads, this drives the peripheral address.
