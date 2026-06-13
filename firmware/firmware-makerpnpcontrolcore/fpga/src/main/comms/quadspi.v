@@ -36,9 +36,9 @@ module quadspi (
     // -----------------------------------------------------------------
     // Structural Synchronizers to Prevent High Fanout Global Promotion
     // -----------------------------------------------------------------
-    (* keep = 1 *) reg [1:0] cs_sync_ctrl = 2'b11;
-    (* keep = 1 *) reg [1:0] cs_sync_data = 2'b11;
-    (* keep = 1 *) reg [1:0] cs_sync_mem  = 2'b11;
+    reg [1:0] cs_sync_ctrl = 2'b11;
+    reg [1:0] cs_sync_data = 2'b11;
+    reg [1:0] cs_sync_mem  = 2'b11;
 
     always @(posedge sys_clk) begin
         cs_sync_ctrl <= {cs_sync_ctrl[0], cs_n};
