@@ -67,6 +67,7 @@ module memory (
     reg        rsp_valid_r;
     reg [15:0] rsp_addr_r;
     reg [2:0]  rsp_target_r;
+    reg [31:0] global_dout_r;
 
     assign led_we      = led_we_r;
     assign io_we       = io_we_r;
@@ -92,8 +93,8 @@ module memory (
 
     always @(posedge clk_a) begin
         if (reset) begin
-            dout_a <= 32'h00000000;
-            valid_a <= 1'b0;
+            dout_a       <= 32'h00000000;
+            valid_a      <= 1'b0;
 
             req_valid_r  <= 1'b0;
             req_we_r     <= 1'b0;
@@ -101,9 +102,10 @@ module memory (
             req_din_r    <= 32'd0;
             req_target_r <= TARGET_NONE;
 
-            rsp_valid_r  <= 1'b0;
-            rsp_addr_r   <= 16'd0;
-            rsp_target_r <= TARGET_NONE;
+            rsp_valid_r   <= 1'b0;
+            rsp_addr_r    <= 16'd0;
+            rsp_target_r  <= TARGET_NONE;
+            global_dout_r <= 32'hAA55AA55;
 
             led_we_r     <= 1'b0;
             io_we_r      <= 1'b0;
@@ -122,12 +124,20 @@ module memory (
         end else begin
             valid_a <= 1'b0;
 
-            // Stage 0: capture the incoming RAM-like port request.
+            // Stage 0: capture incoming RAM-like port request.
             req_valid_r  <= en_a;
             req_we_r     <= we_a;
             req_addr_r   <= addr_a;
             req_din_r    <= din_a;
             req_target_r <= target_a;
+
+            // Predecode global/default register data one stage before dout_a.
+            case (addr_a)
+                16'h0000: global_dout_r <= IDENT;
+                16'h0004: global_dout_r <= VERSION;
+                16'h01FC: global_dout_r <= MARKER;
+                default:  global_dout_r <= 32'hAA55AA55;
+            endcase
 
             // Stage 2 defaults.
             rsp_valid_r  <= 1'b0;
@@ -139,7 +149,6 @@ module memory (
             io_we_r      <= 1'b0;
             buzzer_we_r  <= 1'b0;
             encoder_we_r <= 1'b0;
-
 
             // Stage 1: service the previously captured request.
             // For peripheral reads, this drives the peripheral address.
@@ -199,12 +208,7 @@ module memory (
                     end
 
                     default: begin
-                        case (rsp_addr_r)
-                            16'h0000: dout_a <= IDENT;
-                            16'h0004: dout_a <= VERSION;
-                            16'h01FC: dout_a <= MARKER;
-                            default:  dout_a <= 32'hAA55AA55;
-                        endcase
+                        dout_a <= global_dout_r;
                     end
                 endcase
             end
