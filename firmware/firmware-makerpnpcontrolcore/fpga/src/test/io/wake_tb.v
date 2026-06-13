@@ -5,16 +5,22 @@
 module wake_tb;
 
     // Testbench signals
+    reg RESET;
+    reg TCXO = 0;
+
     reg NWAKE_IN;
     wire NWAKE_1;
-    reg RESET;
 
     // Instantiate the DUT (DUT = Device Under Test)
     wake dut (
+        .sys_clk(TCXO),
         .reset(RESET),
         .nwake_in(NWAKE_IN),
         .nwake_1(NWAKE_1)
     );
+
+    // Clock generation: 100 MHz simulated clock (10ns period)
+    always #5 TCXO = ~TCXO;
 
     // Simulation control
     initial begin
@@ -32,7 +38,7 @@ module wake_tb;
         #9;
         RESET = 0;
 
-        #1;
+        #10;
         `ASSERT_EQ(NWAKE_1, 1'd0);
 
         // Run simulation for some time

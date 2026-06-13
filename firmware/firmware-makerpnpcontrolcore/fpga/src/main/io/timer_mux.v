@@ -1,14 +1,15 @@
 
 module timer_mux
     (
-        input reset,
+        input  wire        sys_clk,
+        input  wire        reset,
         output reg mux_sel1,
         output reg mux_sel2,
         output reg mux_sel3,
         output reg mux_sel4
     );
 
-always @(*) begin
+always @(posedge sys_clk) begin
     if (reset) begin
         mux_sel1 = 1;
         mux_sel2 = 1;
