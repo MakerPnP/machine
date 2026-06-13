@@ -292,7 +292,7 @@ module ws2812 #(
 
                     // Timing engine
                     if (tcount < T_TOTAL) begin
-                        tcount <= tcount + 1;
+                        tcount <= tcount + 1'b1;
 
                         if (shift_reg[bit_index]) begin
                             ws_out <= (tcount < T1H);
@@ -300,8 +300,7 @@ module ws2812 #(
                             ws_out <= (tcount < T0H);
                         end
                     end else begin
-                        ws_out <= 0;
-
+                        ws_out <= 1'b0;
                         tcount <= 0;
 
                         // next bit
@@ -314,11 +313,11 @@ module ws2812 #(
                                 phase <= PHASE_RESET;
                             end else begin
                                 $display("next led. led_index: %d", led_index);
-                                led_index <= led_index + 1;
+                                led_index <= led_index + 1'b1;
                                 phase <= PHASE_FETCH;
                             end
                         end else begin
-                            bit_index <= bit_index - 1;
+                            bit_index <= bit_index - 1'b1;
                         end
                     end
 
