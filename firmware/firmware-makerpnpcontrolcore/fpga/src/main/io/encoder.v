@@ -63,8 +63,11 @@ module encoder(
                     if (z_rise) begin
                         count <= 0;
                     end else begin
-                        // wraps naturally (no extra logic needed)
-                        count <= count + inc - dec;
+                        if (inc) begin
+                            count <= count + 1;
+                        end else if (dec) begin
+                            count <= count - 1;
+                        end
                     end
                 end
             end
