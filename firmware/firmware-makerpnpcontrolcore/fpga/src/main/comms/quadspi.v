@@ -1,6 +1,6 @@
 // QuadSPI handling engine
 module quadspi (
-    input  wire       clk_sys,
+    input  wire       sys_clk,
     input  wire       sck,
     input  wire       cs_n,
     inout  wire [3:0] io,
@@ -33,7 +33,7 @@ module quadspi (
     // Synchronous Edge Detection for Bursty MCU SCK
     // -----------------------------------------------------------------
     reg [1:0] sck_sync = 2'b00;
-    always @(posedge clk_sys or posedge cs_n) begin
+    always @(posedge sys_clk or posedge cs_n) begin
         if (cs_n) begin
             sck_sync <= 2'b00;
         end else begin
@@ -41,7 +41,7 @@ module quadspi (
         end
     end
 
-    // High for exactly 1 clk_sys period when sck transitions
+    // High for exactly 1 sys_clk period when sck transitions
     wire sck_rising  = (sck_sync == 2'b01);
     wire sck_falling = (sck_sync == 2'b10); // FIXED: Corrected from 2'b00 to 2'b10
 
@@ -82,7 +82,7 @@ module quadspi (
     // -----------------------------------------------------------------
     // Synchronous Output Driver Logic (Prepares data on SCK Falling Edge)
     // -----------------------------------------------------------------
-    always @(posedge clk_sys or posedge cs_n) begin
+    always @(posedge sys_clk or posedge cs_n) begin
         if (cs_n) begin
             io_out_reg <= 4'b0;
         end else if (sck_falling) begin
@@ -97,7 +97,7 @@ module quadspi (
     // -----------------------------------------------------------------
     // Immediate disable of io_outputs
     // -----------------------------------------------------------------
-    always @(posedge clk_sys or posedge cs_n) begin
+    always @(posedge sys_clk or posedge cs_n) begin
         if (cs_n) begin
             if (io_out_en) begin
                 $display("disabling quadspi outputs");
@@ -114,7 +114,7 @@ module quadspi (
     // -----------------------------------------------------------------
     // Main SPI Protocol State Machine (Processes on SCK Rising Edge)
     // -----------------------------------------------------------------
-    always @(posedge clk_sys) begin
+    always @(posedge sys_clk) begin
         if (read_addr_updated) begin
             read_addr_updated <= 1'b0;
             read_data_ready   <= 1'b1;

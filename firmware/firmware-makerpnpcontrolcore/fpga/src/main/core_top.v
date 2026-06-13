@@ -225,7 +225,7 @@ module core_top (
     // Connect QUADSPI1 interface engine to Memory Port A
     // ----------------------
     quadspi qspi_inst (
-        .clk_sys(clk_100),
+        .sys_clk(clk_100),
         .sck(QUADSPI1_CLK),
         .cs_n(QUADSPI1_NCS),
         .io(QUADSPI1_IO),

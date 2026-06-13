@@ -29,7 +29,7 @@ module quadspi_tb;
 
     // Direct instantiation of your isolated modules under test (UUT)
     quadspi qspi_uut (
-        .clk_sys(TCXO),
+        .sys_clk(TCXO),
         .sck(clk),
         .cs_n(cs_n),
         .io(io),
