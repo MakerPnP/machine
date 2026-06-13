@@ -238,6 +238,17 @@ module ws2812 #(
 
     reg [31:0] phase_counter;
 
+    reg is_last_led;
+
+    always @(posedge sys_clk) begin
+        if (reset) begin
+            is_last_led <= 1'b0;
+        end else begin
+            // Pre-evaluate the condition for the NEXT led_index update
+            is_last_led <= (led_index + 1'b1 == num_leds);
+        end
+    end
+
     always @(posedge sys_clk) begin
         if (reset) begin
             ws_out    <= 0;
@@ -298,7 +309,7 @@ module ws2812 #(
                             bit_index <= bit_count;
 
                             // next LED
-                            if (led_index == num_leds - 1) begin
+                            if (is_last_led) begin
                                 $display("finished leds");
                                 phase <= PHASE_RESET;
                             end else begin
