@@ -197,8 +197,6 @@ module quadspi (
                                 state    <= STATE_DATA_W;
                                 $strobe("write address: 0x%04h", mem_addr);
                             end else begin
-                                mem_en           <= 1'b1;
-                                mem_we           <= 1'b0;
                                 pending_prefetch <= 1'b0;
                                 state            <= STATE_DUMMY;
                                 $strobe("read address: 0x%04h", mem_addr);
@@ -210,6 +208,11 @@ module quadspi (
                     end
 
                     STATE_DUMMY: begin
+                        if (phase_counter == 4'd0) begin
+                            mem_en <= 1'b1;
+                            mem_we <= 1'b0;
+                        end
+
                         if (phase_counter == 4'd7) begin
                             // 8 full clock periods finished.
                             // out_buf is loaded by read_wait when memory dout is valid.
@@ -222,7 +225,6 @@ module quadspi (
 
                     STATE_DATA_R: begin
                         phase_counter <= phase_counter + 4'd1;
-                        out_buf <= out_buf << 4;
 
                         // Continuous reads have no dummy cycles between words.
                         // Request the next word while the current word is still
@@ -233,8 +235,8 @@ module quadspi (
                             else
                                 mem_addr <= mem_addr + 16'd4;
 
-                            mem_en           <= 1'b1;
-                            mem_we           <= 1'b0;
+                            mem_en <= 1'b1;
+                            mem_we <= 1'b0;
                             pending_prefetch <= 1'b1;
                         end
 
@@ -243,10 +245,8 @@ module quadspi (
 
                             if (next_buf_valid) begin
                                 out_buf        <= next_buf;
-                                io_out_reg     <= next_buf[31:28];
                                 next_buf_valid <= 1'b0;
                             end else begin
-                                out_buf    <= 32'd0;
                                 io_out_reg <= 4'd0;
                             end
                         end else begin
