@@ -76,6 +76,9 @@ module quadspi (
     reg word_complete_flag = 1'b0;
     reg commit_flag = 1'b0;
 
+    reg read_addr_updated = 1'b0;
+    reg read_data_ready   = 1'b0;
+
     // -----------------------------------------------------------------
     // Synchronous Output Driver Logic (Prepares data on SCK Falling Edge)
     // -----------------------------------------------------------------
@@ -112,12 +115,19 @@ module quadspi (
     // Main SPI Protocol State Machine (Processes on SCK Rising Edge)
     // -----------------------------------------------------------------
     always @(posedge clk_sys) begin
+        if (read_addr_updated) begin
+            read_addr_updated <= 1'b0;
+            read_data_ready   <= 1'b1;
+        end
+
+        if (read_data_ready) begin
+            read_data_ready <= 1'b0;
+            out_buf         <= mem_dout;
+        end
+
         if (word_complete_flag) begin
             word_complete_flag <= 0;
             case (state)
-                STATE_DATA_R: begin
-                    out_buf       <= mem_dout;
-                end
                 STATE_DATA_W: begin
                     // capture the completed input buffer
                     mem_din       <= in_buf;
@@ -152,6 +162,8 @@ module quadspi (
             addr          <= 0;
             in_buf        <= 0;
             word_complete_flag <= 0;
+            read_addr_updated  <= 1'b0;
+            read_data_ready    <= 1'b0;
         end else begin
             // Only process state modifications on valid rising edges of sck
             if (sck_rising) begin
@@ -207,11 +219,12 @@ module quadspi (
 
                             phase_counter <= 4'd0;
 
-                            word_complete_flag <= 1;
                             if (mem_addr == 16'h01FC)
                                 mem_addr <= 16'h0000;
                             else
                                 mem_addr <= mem_addr + 16'd4;
+
+                            read_addr_updated <= 1'b1;
                         end
                     end
 
