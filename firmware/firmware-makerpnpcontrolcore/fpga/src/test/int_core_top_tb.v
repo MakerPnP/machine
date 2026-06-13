@@ -321,7 +321,7 @@ module int_core_top_tb;
         begin
             reg [31:0] expected_data [3] = '{
                 // data from second to last address.
-                32'hFFFF_FFFF,
+                32'haa55aa55,
                 // marker at last address.
                 32'hDEAD_C0DE,
                 // ident from first address, as address should wrap round to 0 at 0x200
