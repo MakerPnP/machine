@@ -65,8 +65,8 @@ SIM_TARGETS := $(addprefix sim/,$(TB))
 
 ## all: Default target. Synthesizes the FPGA binary and builds simulations.
 all: \
+	sim \
 	$(BUILD)/$(PROJECT).bin \
-	sim
 
 # -------------------------
 # SYNTHESIS (FPGA build)
