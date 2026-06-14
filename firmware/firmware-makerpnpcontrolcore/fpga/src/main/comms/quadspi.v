@@ -185,7 +185,7 @@ module quadspi (
                     STATE_CMD: begin
                         cmd <= {cmd[3:0], io_in};
                         if (phase_counter == 4'd1) begin
-                            $strobe("command received: 0x%02h", {cmd[3:0], io_in});
+                            $strobe("command received: 0x%1h%1h", cmd[3:0], io_in);
                         end
                     end
 
