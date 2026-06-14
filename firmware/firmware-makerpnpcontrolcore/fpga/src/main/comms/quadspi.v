@@ -18,15 +18,32 @@ module quadspi (
 
     // Named Localparam States
     localparam STATE_CMD     = 3'd0;
-    localparam STATE_ADDR    = 3'd1;
-    localparam STATE_DUMMY   = 3'd2;
-    localparam STATE_DATA_R  = 3'd3;
-    localparam STATE_DATA_W  = 3'd4;
+    localparam STATE_PROCESS = 3'd1;
+    localparam STATE_ADDR    = 3'd2;
+    localparam STATE_DUMMY   = 3'd3;
+    localparam STATE_DATA_R  = 3'd4;
+    localparam STATE_DATA_W  = 3'd5;
+    localparam STATE_IGNORE  = 3'd6;
+
+    localparam CMD_READ_U32_BE  = 8'h10;
+    localparam CMD_READ_U32_LE  = 8'h11;
+    localparam CMD_WRITE_U32_BE = 8'h90;
+    localparam CMD_WRITE_U32_LE = 8'h91;
 
     reg [2:0]  state;
     reg [3:0]  phase_counter;
     reg [7:0]  cmd;
     reg [15:0] addr;
+
+    wire       cmd_is_read =
+        cmd == CMD_READ_U32_BE ||
+        cmd == CMD_READ_U32_LE;
+    wire       cmd_is_write =
+        cmd == CMD_WRITE_U32_BE ||
+        cmd == CMD_WRITE_U32_LE;
+    wire       cmd_is_le =
+        cmd == CMD_READ_U32_LE ||
+        cmd == CMD_WRITE_U32_LE;
 
     // Tri-state buffer logic
     reg        io_out_en;
@@ -117,24 +134,34 @@ module quadspi (
             phase_counter      <= 0;
             word_complete_flag <= 0;
         end else begin
+            case (state)
+                STATE_PROCESS: begin
+                    if (cmd_is_read || cmd_is_write) begin
+                        $display("command received: 0x%02h", cmd);
+                        state <= STATE_ADDR;
+                    end else begin
+                        $display("unknown command ignored: 0x%02h", cmd);
+                        state <= STATE_IGNORE;
+                    end
+                end
+            endcase
             if (sck_rising) begin
                 case (state)
                     STATE_CMD: begin
                         if (phase_counter == 4'd1) begin
                             phase_counter <= 0;
-                            state         <= STATE_ADDR;
+                            state <= STATE_PROCESS;
                         end else begin
                             phase_counter <= phase_counter + 4'd1;
                         end
                     end
-
                     STATE_ADDR: begin
                         if (phase_counter == 4'd3) begin
                             phase_counter <= 0;
-                            if (cmd[7] == 1'b1) begin
-                                state    <= STATE_DATA_W;
+                            if (cmd_is_write) begin
+                                state <= STATE_DATA_W;
                             end else begin
-                                state    <= STATE_DUMMY;
+                                state <= STATE_DUMMY;
                             end
                         end else begin
                             phase_counter <= phase_counter + 4'd1;
@@ -164,6 +191,9 @@ module quadspi (
                             phase_counter      <= 4'd0;
                         end
                     end
+
+                    STATE_IGNORE: begin
+                    end
                 endcase
             end else if (word_complete_flag) begin
                 word_complete_flag <= 0;
@@ -184,18 +214,15 @@ module quadspi (
                 case (state)
                     STATE_CMD: begin
                         cmd <= {cmd[3:0], io_in};
-                        if (phase_counter == 4'd1) begin
-                            $strobe("command received: 0x%1h%1h", cmd[3:0], io_in);
-                        end
                     end
 
                     STATE_ADDR: begin
                         addr <= {addr[11:0], io_in};
                         if (phase_counter == 4'd3) begin
-                            if (cmd[7] == 1'b1) begin
-                                $strobe("write address: 0x%04h", mem_addr);
+                            if (cmd_is_write) begin
+                                $strobe("write address: 0x%04h", addr);
                             end else begin
-                                $strobe("read address: 0x%04h", mem_addr);
+                                $strobe("read address: 0x%04h", addr);
                             end
                         end
                     end
@@ -209,6 +236,10 @@ module quadspi (
                                 $display("in_buf: 0x%08h", (in_buf << 4 | io_in));
                             end
                         end
+                    end
+
+                    STATE_IGNORE: begin
+                        in_buf <= in_buf;
                     end
                 endcase
             end
@@ -247,7 +278,7 @@ module quadspi (
                     STATE_ADDR: begin
                         if (phase_counter == 4'd3) begin
                             mem_addr <= {addr[11:0], io_in};
-                            if (cmd[7] != 1'b1) begin
+                            if (cmd_is_read) begin
                                 pending_prefetch <= 1'b0;
                             end
                         end
@@ -274,7 +305,17 @@ module quadspi (
 
                         if (phase_counter == 4'd7) begin
                             if (next_buf_valid) begin
-                                out_buf        <= next_buf;
+                                if (cmd_is_le) begin
+                                    out_buf <= {
+                                        next_buf[7:0],
+                                        next_buf[15:8],
+                                        next_buf[23:16],
+                                        next_buf[31:24]
+                                    };
+                                end else begin
+                                    out_buf <= next_buf;
+                                end
+
                                 next_buf_valid <= 1'b0;
                             end else begin
                                 io_out_reg <= 4'd0;
@@ -289,16 +330,46 @@ module quadspi (
             // Internal FPGA Clock Domain Memory Transactions
             if (mem_valid) begin
                 if (pending_prefetch) begin
-                    next_buf       <= mem_dout;
+                    if (cmd_is_le) begin
+                        next_buf <= {
+                            mem_dout[7:0],
+                            mem_dout[15:8],
+                            mem_dout[23:16],
+                            mem_dout[31:24]
+                        };
+                    end else begin
+                        next_buf <= mem_dout;
+                    end
+
                     next_buf_valid <= 1'b1;
                 end else begin
-                    out_buf <= mem_dout;
+                    if (cmd_is_le) begin
+                        out_buf <= {
+                            mem_dout[7:0],
+                            mem_dout[15:8],
+                            mem_dout[23:16],
+                            mem_dout[31:24]
+                        };
+                    end else begin
+                        out_buf <= mem_dout;
+                    end
                 end
+
                 pending_prefetch <= 1'b0;
             end
 
             if (word_complete_flag && state == STATE_DATA_W) begin
-                mem_din <= in_buf;
+                if (cmd_is_le) begin
+                    mem_din <= {
+                        in_buf[7:0],
+                        in_buf[15:8],
+                        in_buf[23:16],
+                        in_buf[31:24]
+                    };
+                end else begin
+                    mem_din <= in_buf;
+                end
+
                 mem_en  <= 1'b1;
                 mem_we  <= 1'b1;
             end

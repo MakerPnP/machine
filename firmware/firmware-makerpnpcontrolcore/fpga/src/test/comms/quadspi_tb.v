@@ -1,4 +1,3 @@
-// NOTE: addresses are incremented after reads/writes, tests assert the NEXT address
 `timescale 1ns / 1ps
 
 `include "src/test/assertions.svh"
@@ -7,8 +6,8 @@ module quadspi_tb;
 
     reg RESET;
     reg TCXO = 0;
-    // Clock generation: 50 MHz simulated clock (10ns period)
-    always #10 TCXO = ~TCXO;
+    // Clock generation: 100 MHz simulated clock (10ns period)
+    always #5 TCXO = ~TCXO;
 
     // Testbench MCU Emulation Wires
     reg clk = 0;
@@ -24,8 +23,11 @@ module quadspi_tb;
     // Interconnect Wires between isolated QuadSPI Core and Memory Map Decoder
     wire [15:0] mem_addr;
     wire [31:0] mem_din;
-    wire [31:0] mem_dout;
+    reg  [31:0] mem_dout;
     wire        mem_we;
+    reg         mem_en;
+    reg         mem_valid;
+
 
     // Direct instantiation of your isolated modules under test (UUT)
     quadspi qspi_uut (
@@ -36,16 +38,18 @@ module quadspi_tb;
         .mem_addr(mem_addr),
         .mem_din(mem_din),
         .mem_dout(mem_dout),
-        .mem_we(mem_we)
+        .mem_we(mem_we),
+        .mem_en(mem_en),
+        .mem_valid(mem_valid)
     );
 
     // Clock generator helper - Starts from 1, pulls low, then drives high
     task clock_tick;
         begin
             clk = 0;
-            #50;
+            #100;
             clk = 1;
-            #50;
+            #100;
         end
     endtask
 
@@ -76,6 +80,17 @@ module quadspi_tb;
             send_byte(value[7:0]);
         end
     endtask
+
+    task send_long_word_le;
+        input [31:0] value;
+        begin
+            send_byte(value[7:0]);
+            send_byte(value[15:8]);
+            send_byte(value[23:16]);
+            send_byte(value[31:24]);
+        end
+    endtask
+
 
     // Drives high nibble, ticks clock, drives low nibble, ticks clock
     task send_command_byte;
@@ -128,6 +143,22 @@ module quadspi_tb;
         end
     endtask
 
+    task read_long_word_data_le;
+        output [31:0] r_data;
+        reg [7:0] b0;
+        reg [7:0] b1;
+        reg [7:0] b2;
+        reg [7:0] b3;
+        begin
+            read_byte_data(b0);
+            read_byte_data(b1);
+            read_byte_data(b2);
+            read_byte_data(b3);
+            r_data = {b3, b2, b1, b0};
+        end
+    endtask
+
+
     task dummy_phase;
         integer d;
         begin
@@ -162,56 +193,194 @@ module quadspi_tb;
         #500;
 
         // -------------------------------------------------------------
-        // TEST 1: Sequential Read
+        $display("--- Test 1: Sequential READ_U32_BE ---");
         // -------------------------------------------------------------
-        $display("--- Test 1: Sequential Read ---");
+
+        @(posedge TCXO);
+
+        // TODO wait for mem_en, then enable mem_valid in parallel with the test
+        mem_valid = 1'b1;
+        mem_dout = 32'h1234_5678;
+
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h10);
-        send_address_word(16'h0000);
+        send_address_word(16'h1234);
+
+
         dummy_phase();
 
         read_long_word_data(read_word);
-        `ASSERT_EQ(mem_addr, 16'h0004, "0x%08h", "address mismatch");
+        `ASSERT_EQ(mem_addr, 16'h1238, "0x%08h", "address mismatch");
+        `ASSERT_EQ(mem_dout, 32'h1234_5678, "0x%08h", "data mismatch");
+
         read_long_word_data(read_word);
-        `ASSERT_EQ(mem_addr, 16'h0008, "0x%08h", "address mismatch");
+        `ASSERT_EQ(mem_addr, 16'h123c, "0x%08h", "address mismatch");
+        `ASSERT_EQ(mem_dout, 32'h1234_5678, "0x%08h", "data mismatch");
 
         cs_n = 1;
+        mem_valid = 1'b0;
+
 
         #100;
 
         // -------------------------------------------------------------
-        // TEST 2: Sequential Write
+        $display("--- Test 2: Sequential READ_U32_LE ---");
         // -------------------------------------------------------------
-        $display("--- Test 3: Sequential Write ---");
+
+        // TODO wait for mem_en, then enable mem_valid in parallel with the test
+        mem_valid = 1'b1;
+        mem_dout = 32'h1234_5678;
 
         cs_n  = 0;
         io_en = 1;
-        send_command_byte(8'h90);
+        send_command_byte(8'h11);
         send_address_word(16'h1234);
-        send_long_word(32'ha1b2_c3d4);
+        dummy_phase();
 
-        `ASSERT_EQ(mem_addr, 16'h1234, "0x%04h", "address mismatch");
-        `ASSERT_EQ(mem_din, 32'ha1b2_c3d4, "0x%08h", "data mismatch");
+        read_long_word_data_le(read_word);
+        `ASSERT_EQ(mem_addr, 16'h1238, "0x%08h", "address mismatch");
+        `ASSERT_EQ(mem_dout, 32'h1234_5678, "0x%08h", "data mismatch");
 
-        send_long_word(32'he5f6_0718);
-
-        `ASSERT_EQ(mem_addr, 16'h1238, "0x%04h", "address mismatch");
-        `ASSERT_EQ(mem_din, 32'he5f6_0718, "0x%08h", "data mismatch");
+        read_long_word_data_le(read_word);
+        `ASSERT_EQ(mem_addr, 16'h123c, "0x%08h", "address mismatch");
+        `ASSERT_EQ(mem_dout, 32'h1234_5678, "0x%08h", "data mismatch");
 
         cs_n = 1;
-
-        // Minimum sys_clk domain cycles to flush out the write
-        repeat (3) @(posedge TCXO);
-
-        `ASSERT_EQ(mem_addr, 16'h123C, "0x%04h", "address mismatch");
+        mem_valid = 1'b0;
 
         #100;
 
         // -------------------------------------------------------------
-        // TEST 3: Wrap around and register map boundary
+        $display("--- Test 3: Sequential WRITE_U32_BE ---");
         // -------------------------------------------------------------
-        $display("--- Test 3: Wrap around and register map boundary ---");
+
+        begin
+            integer write_count = 0;
+
+            @(posedge TCXO);
+
+            cs_n  = 0;
+            io_en = 1;
+            send_command_byte(8'h90);
+            send_address_word(16'h1234);
+
+            fork
+                begin
+                    send_long_word(32'ha1b2_c3d4);
+                    send_long_word(32'he5f6_0718);
+                end
+                begin
+                    wait (mem_we == 1'b1);
+                    $display("mem_we: %d, mem_addr: 0x%04h, mem_din: 0x%08h", mem_we, mem_addr, mem_din);
+                    `ASSERT_EQ(mem_we, 1'b1, "%d", "no memory write");
+                    `ASSERT_EQ(mem_addr, 16'h1234, "0x%04h", "address mismatch");
+                    `ASSERT_EQ(mem_din, 32'ha1b2_c3d4, "0x%08h", "data mismatch");
+                    wait (mem_we == 1'b0);
+                    write_count += 1;
+
+                    wait (mem_we == 1'b1);
+                    $display("mem_we: %d, mem_addr: 0x%04h, mem_din: 0x%08h", mem_we, mem_addr, mem_din);
+                    `ASSERT_EQ(mem_we, 1'b1, "%d", "no memory write");
+                    `ASSERT_EQ(mem_addr, 16'h1238, "0x%04h", "address mismatch");
+                    `ASSERT_EQ(mem_din, 32'he5f6_0718, "0x%08h", "data mismatch");
+                    wait (mem_we == 1'b0);
+                    write_count += 1;
+
+                    #1000;
+                end
+            join_any
+            disable fork;
+
+            `ASSERT_EQ(write_count, 2, "%d", "write count mismatch");
+
+            cs_n = 1;
+
+            // Minimum sys_clk domain cycles to flush out the write
+            repeat (3) @(posedge TCXO);
+
+            `ASSERT_EQ(mem_addr, 16'h123C, "0x%04h", "address mismatch");
+
+            #100;
+        end
+
+        // -------------------------------------------------------------
+        $display("--- Test 4: Sequential WRITE_U32_LE ---");
+        // -------------------------------------------------------------
+
+        begin
+            integer write_count = 0;
+
+            @(posedge TCXO);
+
+            cs_n  = 0;
+            io_en = 1;
+            send_command_byte(8'h91);
+            send_address_word(16'h1234);
+
+            fork
+                begin
+                    send_long_word_le(32'ha1b2_c3d4);
+                    send_long_word_le(32'he5f6_0718);
+                end
+                begin
+                    wait (mem_we == 1'b1);
+                    $display("mem_we: %d, mem_addr: 0x%04h, mem_din: 0x%08h", mem_we, mem_addr, mem_din);
+                    `ASSERT_EQ(mem_we, 1'b1, "%d", "no memory write");
+                    `ASSERT_EQ(mem_addr, 16'h1234, "0x%04h", "address mismatch");
+                    `ASSERT_EQ(mem_din, 32'ha1b2_c3d4, "0x%08h", "data mismatch");
+                    wait (mem_we == 1'b0);
+                    write_count += 1;
+
+                    wait (mem_we == 1'b1);
+                    $display("mem_we: %d, mem_addr: 0x%04h, mem_din: 0x%08h", mem_we, mem_addr, mem_din);
+                    `ASSERT_EQ(mem_we, 1'b1, "%d", "no memory write");
+                    `ASSERT_EQ(mem_addr, 16'h1238, "0x%04h", "address mismatch");
+                    `ASSERT_EQ(mem_din, 32'he5f6_0718, "0x%08h", "data mismatch");
+                    wait (mem_we == 1'b0);
+                    write_count += 1;
+
+                    #1000;
+                end
+            join_any
+            disable fork;
+
+            `ASSERT_EQ(write_count, 2, "%d", "write count mismatch");
+
+            cs_n = 1;
+
+            repeat (3) @(posedge TCXO);
+
+            `ASSERT_EQ(mem_addr, 16'h123C, "0x%04h", "address mismatch");
+
+            #100;
+        end
+
+        // -------------------------------------------------------------
+        $display("--- Test 5: Unknown command ignored ---");
+        // -------------------------------------------------------------
+
+        @(posedge TCXO);
+
+        cs_n  = 0;
+        io_en = 1;
+        send_command_byte(8'h55);
+        send_address_word(16'h2222);
+        send_long_word(32'hdead_beef);
+        send_long_word(32'hcafe_babe);
+
+        repeat (3) @(posedge TCXO);
+
+        `ASSERT_EQ(mem_we, 1'b0, "0x%01h", "unexpected write enable for unknown command");
+
+        cs_n = 1;
+
+        #100;
+
+        // -------------------------------------------------------------
+        $display("--- Test 6: Wrap around and register map boundary ---");
+        // -------------------------------------------------------------
+
         begin
             reg [15:0] address = 16'h01f8;
             reg [15:0] expected_addresses[4] = '{
@@ -220,6 +389,8 @@ module quadspi_tb;
                 16'h0004,
                 16'h0008
             };
+
+            @(posedge TCXO);
 
             cs_n  = 0;
             io_en = 1;
