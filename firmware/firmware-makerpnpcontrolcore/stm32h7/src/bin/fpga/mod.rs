@@ -21,18 +21,29 @@ mod registers {
 }
 pub use registers::*;
 
+const FPGA_REG_SIZE: usize = 0x80;
+/// Memory mapped FPGA registers. 16-bit address space, 32-bit registers.
+#[unsafe(link_section = ".octospi1")]
+static mut MAPPED_REGISTERS: [u32; FPGA_REG_SIZE] = [0; FPGA_REG_SIZE];  // 0x80 * 4 = 512 (0x200) bytes
+
 pub struct FpgaCore<I: Instance> {
     ospi: Ospi<'static, I, Blocking>,
+    memory_mapped_mode_enabled: bool,
 }
 
 impl<I: Instance> FpgaCore<I> {
     pub async fn new(ospi: Ospi<'static, I, Blocking>) -> Self {
-        let memory = Self { ospi };
+        let memory = Self {
+            ospi,
+            memory_mapped_mode_enabled: false,
+        };
 
         memory
     }
 
     pub fn read_ident(&mut self) -> [u8; 4] {
+        defmt::assert!(!self.memory_mapped_mode_enabled);
+
         let mut buffer = [0; 4];
         let transaction: TransferConfig = TransferConfig {
             instruction: Some(CMD_READ_16 as u32),
@@ -53,6 +64,8 @@ impl<I: Instance> FpgaCore<I> {
     }
 
     pub fn read_version(&mut self) -> FpgaVersion {
+        defmt::assert!(!self.memory_mapped_mode_enabled);
+
         let mut buffer = [0; 4];
         let transaction: TransferConfig = TransferConfig {
             instruction: Some(CMD_READ_16 as u32),
@@ -74,12 +87,16 @@ impl<I: Instance> FpgaCore<I> {
     }
 
     pub fn read_buttons(&mut self) -> u8 {
+        defmt::assert!(!self.memory_mapped_mode_enabled);
+
         let mut buffer = [0; 1];
         self.read_block(REG_IO_IN_1, &mut buffer);
         buffer[0]
     }
 
     pub fn read_block(&mut self, address: u16, buffer: &mut [u8]) {
+        defmt::assert!(!self.memory_mapped_mode_enabled);
+
         let transaction: TransferConfig = TransferConfig {
             instruction: Some(CMD_READ_16 as u32),
             isize: AddressSize::_8Bit,
@@ -99,6 +116,8 @@ impl<I: Instance> FpgaCore<I> {
     }
 
     pub fn read_block_u32(&mut self, address: u16, buffer: &mut [u32]) {
+        defmt::assert!(!self.memory_mapped_mode_enabled);
+
         let byte_len = buffer.len() * 4;
 
         let byte_buf: &mut [u8] = unsafe {
@@ -113,6 +132,8 @@ impl<I: Instance> FpgaCore<I> {
     }
 
     pub fn read_u32(&mut self, address: u16) -> u32 {
+        defmt::assert!(!self.memory_mapped_mode_enabled);
+
         let mut buffer = [0; 4];
         let transaction: TransferConfig = TransferConfig {
             instruction: Some(CMD_READ_16 as u32),
@@ -140,6 +161,8 @@ impl<I: Instance> FpgaCore<I> {
     /// The buffer must be aligned to a multiple of 4 bytes.
     /// The bytes are sent over the wire in big-endian order.
     pub fn write_block(&mut self, address: u16, buffer: &[u32]) {
+        defmt::assert!(!self.memory_mapped_mode_enabled);
+
         trace!("FPGA block write. address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", address, buffer.len(), buffer);
         let transaction: TransferConfig = TransferConfig {
             instruction: Some(CMD_WRITE_16 as u32),
@@ -163,6 +186,8 @@ impl<I: Instance> FpgaCore<I> {
     /// The bytes are sent in chunks of CHUNK_SIZE bytes, one transaction per chunk
     /// The bytes are sent over the wire in big-endian order.
     pub fn write_block_u32_chunked<const CHUNK_SIZE: usize>(&mut self, mut address: u16, buffer: &[u32]) {
+        defmt::assert!(!self.memory_mapped_mode_enabled);
+
         let mut chunk_buf = [0u8; CHUNK_SIZE]; // tune to FIFO / DMA burst size
 
         let mut i = 0;
@@ -206,6 +231,8 @@ impl<I: Instance> FpgaCore<I> {
     }
 
     pub fn write_u32(&mut self, address: u16, value: u32) {
+        defmt::assert!(!self.memory_mapped_mode_enabled);
+
         let buffer = &mut [0; 4];
         <BigEndian as ByteOrder>::write_u32(buffer, value);
         trace!("FPGA block write. address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", address, buffer.len(), buffer);
@@ -224,6 +251,48 @@ impl<I: Instance> FpgaCore<I> {
             ..Default::default()
         };
         self.ospi.blocking_write(buffer, transaction).unwrap();
+    }
+
+    pub fn enable_memory_mapped_mode(&mut self) {
+        defmt::assert!(!self.memory_mapped_mode_enabled);
+
+        let read_config: TransferConfig = TransferConfig {
+            instruction: Some(CMD_READ_16 as u32),
+            isize: AddressSize::_8Bit,
+            iwidth: OspiWidth::QUAD,
+
+            adsize: AddressSize::_16Bit,
+            adwidth: OspiWidth::QUAD,
+
+            dummy: DummyCycles::_8,
+
+            dwidth: OspiWidth::QUAD,
+            ..Default::default()
+        };
+
+        let write_config: TransferConfig = TransferConfig {
+            instruction: Some(CMD_WRITE_16 as u32),
+            isize: AddressSize::_8Bit,
+            iwidth: OspiWidth::QUAD,
+
+            adsize: AddressSize::_16Bit,
+            adwidth: OspiWidth::QUAD,
+
+            dummy: DummyCycles::_0,
+
+            dwidth: OspiWidth::QUAD,
+            ..Default::default()
+        };
+
+        self.ospi.enable_memory_mapped_mode(read_config, write_config).unwrap();
+        self.memory_mapped_mode_enabled = true;
+    }
+
+    pub fn disable_memory_mapped_mode(&mut self) {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        self.ospi.disable_memory_mapped_mode();
+        self.memory_mapped_mode_enabled = false;
     }
 
     pub fn led_1_enable(&mut self) {
@@ -260,6 +329,17 @@ impl<I: Instance> FpgaCore<I> {
         let mut buffer = self.read_u32(REG_BUZZER_CTRL);
         buffer &= !0b0000_0001;
         self.write_u32(REG_BUZZER_CTRL, buffer);
+    }
+
+    pub fn dump_registers(&mut self) {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+        defmt::debug!("FPGA register map (u32):");
+        let base = unsafe { core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *const u32 };
+
+        for i in 0..FPGA_REG_SIZE {
+            let val = unsafe { core::ptr::read_volatile(base.add(i)) };
+            defmt::info!("{:03x}: {:08x}", i, val);
+        }
     }
 }
 
