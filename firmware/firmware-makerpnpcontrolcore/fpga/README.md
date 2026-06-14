@@ -16,6 +16,7 @@ There are two FPGA controllable LED outputs.
 ## Build Pre-requisites:
 
 A working icestorm toolchain, using yosys, nextpnr-ice40, icepack, iverilog.
+Other build tools: make, jq
 
 ## Building
 

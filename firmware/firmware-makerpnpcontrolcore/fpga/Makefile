@@ -63,6 +63,7 @@ endef
 # Simulation targets match the relative paths: sim/test/bar1/foo and sim_int/test/bar1/int_foo
 SIM_TARGETS := $(addprefix sim/,$(TB))
 
+
 ## all: Default target. Synthesizes the FPGA binary and builds simulations.
 all: \
 	sim \
@@ -82,6 +83,7 @@ $(BUILD)/$(PROJECT).asc: $(BUILD)/$(PROJECT)-design.json pins.pcf
 	@echo ""
 	@grep -B 1 "%$$" $(BUILD)/nextpnr.log
 	@echo ""
+	@echo "$$(jq -r '.fmax[] .achieved' $(BUILD)/$(PROJECT)-report.json) MHz"
 
 $(BUILD)/$(PROJECT).bin: $(BUILD)/$(PROJECT).asc
 	icepack $(BUILD)/$(PROJECT).asc $(BUILD)/$(PROJECT).bin
