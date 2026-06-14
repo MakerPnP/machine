@@ -377,13 +377,19 @@ async fn fpga_task(mut fpga: FpgaInstance) -> ! {
 
     Timer::after(Duration::from_millis(500)).await;
 
+    let mut port_rgb_leds = [0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF];
+
     loop {
         fpga.led_1_disable();
         fpga.led_2_enable();
-        Timer::after(Duration::from_millis(1000)).await;
+        Timer::after(Duration::from_millis(500)).await;
         fpga.led_1_enable();
         fpga.led_2_disable();
-        Timer::after(Duration::from_millis(1000)).await;
+        Timer::after(Duration::from_millis(500)).await;
+
+        port_rgb_leds.rotate_left(1);
+
+        fpga.write_block_u32_chunked::<16>(0x150, &port_rgb_leds);
     }
 }
 
