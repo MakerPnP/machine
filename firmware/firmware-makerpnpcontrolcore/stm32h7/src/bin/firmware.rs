@@ -130,8 +130,10 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         clock_mode: false,
         wrap_size: WrapSize::None,
         // TODO increase this speed as much as possible
-        //clock_prescaler: 5, // 133.33Mhz / (5+1) = 22.22Mhz
-        clock_prescaler: 132, // 133.33Mhz / (132+1) = 9.5Mhz
+        clock_prescaler: 5, // 133.33Mhz / (5+1) = 22.22Mhz
+        // clock_prescaler: 13, // 133.33Mhz / (13+1) = 9.5Mhz
+        // clock_prescaler: 132, // 133.33Mhz / (132+1) = 1.0Mhz
+        // clock_prescaler: 254, // 133.33Mhz / (254+1) = 0.522Mhz
         sample_shifting: true,
         delay_hold_quarter_cycle: false,
         chip_select_boundary: 0,
@@ -217,6 +219,39 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
             // read encoder values
             fpga.read_block_u32(0x0120, &mut encoder_mem);
             debug!("Encoder values after explicit set (u32):\n{:08x}", encoder_mem);
+        }
+    }
+
+    if true {
+        for _ in 0..10 {
+            let mut ctrl_and_tx_config = [0x0000_0000; 2];
+
+            // 4x WS2812 leds with GRB color order.
+            fpga.write_u32(0x140, 0b00000000000000000000000000000101);
+            fpga.write_u32(0x144, 4);
+            // Red, green, blue, white
+            fpga.write_block_u32_chunked::<16>(0x150, &[0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF]);
+            fpga.read_block_u32(0x140, &mut ctrl_and_tx_config);
+            debug!("CTRL: 0x{:08x}, TX_CONFIG: 0x{:08x}", ctrl_and_tx_config[0], ctrl_and_tx_config[1]);
+
+            // External LED strip - 32 leds
+            fpga.write_u32(0x180, 0b00000000000000000000000000000101);
+            fpga.write_u32(0x184, 32);
+            fpga.write_block_u32_chunked::<16>(0x190, &[
+                0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+                0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+
+                0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+                0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+
+                0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+                0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+
+                0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+                0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+            ]);
+            fpga.read_block_u32(0x140, &mut ctrl_and_tx_config);
+            debug!("CTRL: 0x{:08x}, TX_CONFIG: 0x{:08x}", ctrl_and_tx_config[0], ctrl_and_tx_config[1]);
         }
     }
 
@@ -342,13 +377,19 @@ async fn fpga_task(mut fpga: FpgaInstance) -> ! {
 
     Timer::after(Duration::from_millis(500)).await;
 
+    let mut port_rgb_leds = [0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF];
+
     loop {
         fpga.led_1_disable();
         fpga.led_2_enable();
-        Timer::after(Duration::from_millis(1000)).await;
+        Timer::after(Duration::from_millis(500)).await;
         fpga.led_1_enable();
         fpga.led_2_disable();
-        Timer::after(Duration::from_millis(1000)).await;
+        Timer::after(Duration::from_millis(500)).await;
+
+        port_rgb_leds.rotate_left(1);
+
+        fpga.write_block_u32_chunked::<16>(0x150, &port_rgb_leds);
     }
 }
 

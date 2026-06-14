@@ -179,6 +179,9 @@ impl<I: Instance> FpgaCore<I> {
                 BigEndian::write_u32(out, word);
             }
 
+            let buffer = &chunk_buf[..byte_len];
+            trace!("FPGA block write chunked ({}). address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", CHUNK_SIZE, address, buffer.len(), buffer);
+
             let transaction = TransferConfig {
                 instruction: Some(CMD_WRITE_16 as u32),
                 isize: AddressSize::_8Bit,
@@ -194,7 +197,7 @@ impl<I: Instance> FpgaCore<I> {
             };
 
             self.ospi
-                .blocking_write(&chunk_buf[..byte_len], transaction)
+                .blocking_write(buffer, transaction)
                 .unwrap();
 
             i += chunk_words;
