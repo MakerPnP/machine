@@ -33,7 +33,7 @@ module encoder(
 
     // Look-ahead wires for the current clock cycle's evaluation
     wire [3:0] transition = {prev_abz[2:1], abz_sync_1[2:1]};
-    wire       z_rise     = (abz_sync_1[0] == 1'b1) && (prev_abz[0] == 1'b0);
+    wire       z_rise     = abz_sync_1[0] & ~prev_abz[0];
 
     wire inc = (transition == 4'b0001) |
                (transition == 4'b0111) |
