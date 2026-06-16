@@ -346,6 +346,31 @@ impl<I: Instance> FpgaCore<I> {
             defmt::info!("{:03x}: {:08x}", i * 4, val);
         }
     }
+    
+    pub fn buzzer_enable_mm(&mut self) {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        let base = unsafe { core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *mut u32 };
+        let buzzer_ctrl_reg =
+            unsafe { base.add((REG_BUZZER_CTRL as usize) / 4) };
+        let buzzer_ctrl = unsafe { core::ptr::read_volatile(buzzer_ctrl_reg) };
+        let new_buzzer_ctrl = buzzer_ctrl | 0b0000_0001;
+        defmt::debug!("buzzer_ctrl_reg: {:08x}: 0x{:08x}, writing: 0x{:08x}", buzzer_ctrl_reg, buzzer_ctrl, new_buzzer_ctrl);
+        unsafe { core::ptr::write_volatile(buzzer_ctrl_reg, new_buzzer_ctrl) };
+    }
+
+    pub fn buzzer_disable_mm(&mut self) {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        let base = unsafe { core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *mut u32 };
+        let buzzer_ctrl_reg =
+            unsafe { base.add((REG_BUZZER_CTRL as usize) / 4) };
+
+        let buzzer_ctrl = unsafe { core::ptr::read_volatile(buzzer_ctrl_reg) };
+        let new_buzzer_ctrl = buzzer_ctrl & !0b0000_0001;
+        defmt::debug!("buzzer_ctrl_reg: {:08x}: 0x{:08x}, writing: 0x{:08x}", buzzer_ctrl_reg, buzzer_ctrl, new_buzzer_ctrl);
+        unsafe { core::ptr::write_volatile(buzzer_ctrl_reg, new_buzzer_ctrl) };
+    }
 }
 
 #[derive(defmt::Format)]
