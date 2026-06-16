@@ -206,8 +206,13 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         fpga.enable_memory_mapped_mode();
         fpga.dump_registers();
         fpga.buzzer_enable_mm();
-        Timer::after(Duration::from_millis(500)).await;
+        Timer::after(Duration::from_millis(250)).await;
         fpga.buzzer_disable_mm();
+        Timer::after(Duration::from_millis(250)).await;
+        fpga.buzzer_enable_mm();
+        Timer::after(Duration::from_millis(250)).await;
+        fpga.buzzer_disable_mm();
+        Timer::after(Duration::from_millis(250)).await;
         fpga.disable_memory_mapped_mode();
     }
 
