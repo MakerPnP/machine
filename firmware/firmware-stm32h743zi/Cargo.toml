@@ -1,6 +1,6 @@
 # cargo manifest format - https://doc.rust-lang.org/cargo/reference/manifest.html
 [package]
-name = "ioboard_firmware-stm32h743zi"
+name = "firmware-stm32h743zi"
 version = "0.1.0"
 edition = "2024"
 
@@ -59,9 +59,9 @@ build = [
 ]
 
 [patch.crates-io]
-embassy-stm32 = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
-embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
-embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
-embassy-net-driver = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
+embassy-stm32 = { path = "../../libs/embassy/embassy-stm32" }
+embassy-executor = { path = "../../libs/embassy/embassy-executor" }
+embassy-time = { path = "../../libs/embassy/embassy-time" }
+embassy-sync = { path = "../../libs/embassy/embassy-sync" }
+embassy-net = { path = "../../libs/embassy/embassy-net" }
+embassy-net-driver = { path = "../../libs/embassy/embassy-net-driver" }

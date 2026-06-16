@@ -30,8 +30,8 @@ embedded-nal-async = { version = "0.9.0" }
 embedded-io-async  = { version = "0.7.0" }
 
 [patch.crates-io]
-embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
-embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
-embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "f1c6bb7df80e592b7a7edc709f546771506806d3"}
+embassy-net = { path = "../libs/embassy/embassy-net" }
+embassy-time = { path = "../libs/embassy/embassy-time" }
+embassy-executor = { path = "../libs/embassy/embassy-executor" }
+embassy-sync = { path = "../libs/embassy/embassy-sync" }
+embassy-futures = { path = "../libs/embassy/embassy-futures" }
