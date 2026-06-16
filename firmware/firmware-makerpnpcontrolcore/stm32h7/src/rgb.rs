@@ -20,7 +20,7 @@ pub(crate) fn hsv_to_rgb(h: f32, s: f32, v: f32) -> u32 {
     (r << 16) | (g << 8) | b
 }
 
-pub(crate) fn rainbow_wave(rgb_leds: &mut [u32], t: u32) {
+pub fn rainbow_wave(rgb_leds: &mut [u32], t: u32) {
     for (i, value) in rgb_leds.iter_mut().enumerate() {
         // phase offset per LED + time
         let h = ((t as f32 * 0.01) + (i as f32 * 0.25)) % 1.0;

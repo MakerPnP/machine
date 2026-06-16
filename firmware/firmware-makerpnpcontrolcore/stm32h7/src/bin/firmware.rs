@@ -6,6 +6,7 @@
 #![no_std]
 #![no_main]
 extern crate alloc;
+extern crate firmware_makerpnpcontrolcore;
 
 use core::ptr;
 
@@ -39,20 +40,13 @@ use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 #[cfg(feature = "morse_startup")]
 use morse_core::MorseSymbol;
-use crate::fpga::FpgaCore;
-use crate::rgb::rainbow_wave;
-use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
-use crate::stepper::tmc5160::Tmc5160Stepper;
+use firmware_makerpnpcontrolcore::fpga::FpgaCore;
+use firmware_makerpnpcontrolcore::rgb::rainbow_wave;
+use firmware_makerpnpcontrolcore::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
+use firmware_makerpnpcontrolcore::stepper::tmc5160::Tmc5160Stepper;
 #[cfg(feature = "tracepin")]
-use crate::trace::TracePinsService;
+use firmware_makerpnpcontrolcore::trace::TracePinsService;
 
-mod stepper;
-#[cfg(feature = "tracepin")]
-mod trace;
-
-mod fpga;
-
-mod rgb;
 //
 // Heap/Allocator configuration
 //
@@ -174,7 +168,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         }
     }
 
-    let mut fpga = fpga::FpgaCore::new(ospi1).await;
+    let mut fpga = FpgaCore::new(ospi1).await;
     {
         loop {
             Timer::after(Duration::from_millis(50)).await;

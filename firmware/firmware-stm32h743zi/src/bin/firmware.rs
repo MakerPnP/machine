@@ -38,13 +38,9 @@ use ioboard_trace::tracepin::TracePins;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
-use crate::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
+use firmware_stm32h743zi::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
 #[cfg(feature = "tracepin")]
-use crate::trace::TracePinsService;
-
-mod stepper;
-#[cfg(feature = "tracepin")]
-mod trace;
+use firmware_stm32h743zi::trace::TracePinsService;
 
 //
 // Heap/Allocator configuration

@@ -339,7 +339,7 @@ impl<I: Instance> FpgaCore<I> {
     pub fn dump_registers(&mut self) {
         defmt::assert!(self.memory_mapped_mode_enabled);
         defmt::debug!("FPGA register map (u32):");
-        let base = unsafe { core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *const u32 };
+        let base = core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *const u32;
 
         for i in 0..FPGA_REG_SIZE {
             let val = unsafe { core::ptr::read_volatile(base.add(i)) };
@@ -350,7 +350,7 @@ impl<I: Instance> FpgaCore<I> {
     pub fn buzzer_enable_mm(&mut self) {
         defmt::assert!(self.memory_mapped_mode_enabled);
 
-        let base = unsafe { core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *mut u32 };
+        let base = core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *mut u32;
         let buzzer_ctrl_reg =
             unsafe { base.add((REG_BUZZER_CTRL as usize) / 4) };
         let buzzer_ctrl = unsafe { core::ptr::read_volatile(buzzer_ctrl_reg) };
@@ -362,7 +362,7 @@ impl<I: Instance> FpgaCore<I> {
     pub fn buzzer_disable_mm(&mut self) {
         defmt::assert!(self.memory_mapped_mode_enabled);
 
-        let base = unsafe { core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *mut u32 };
+        let base = core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *mut u32;
         let buzzer_ctrl_reg =
             unsafe { base.add((REG_BUZZER_CTRL as usize) / 4) };
 
