@@ -8,8 +8,10 @@ use embassy_stm32::ospi::enums::DummyCycles;
 use defmt::*;
 
 mod commands {
-    pub const CMD_READ_16: u8 = 0x10;
-    pub const CMD_WRITE_16: u8 = 0x90;
+    pub const CMD_READ_U32_BE: u8 = 0x10;
+    pub const CMD_READ_U32_LE: u8 = 0x11;
+    pub const CMD_WRITE_U32_BE: u8 = 0x90;
+    pub const CMD_WRITE_U32_LE: u8 = 0x91;
 }
 pub use commands::*;
 
@@ -23,6 +25,7 @@ pub use registers::*;
 
 const FPGA_REG_SIZE: usize = 0x80;
 /// Memory mapped FPGA registers. 16-bit address space, 32-bit registers.
+/// The linker section will cause this to be located at 0x90000000 which is the memory mapped address for OCTOSPI1
 #[unsafe(link_section = ".octospi1")]
 static mut MAPPED_REGISTERS: [u32; FPGA_REG_SIZE] = [0; FPGA_REG_SIZE];  // 0x80 * 4 = 512 (0x200) bytes
 
@@ -46,7 +49,7 @@ impl<I: Instance> FpgaCore<I> {
 
         let mut buffer = [0; 4];
         let transaction: TransferConfig = TransferConfig {
-            instruction: Some(CMD_READ_16 as u32),
+            instruction: Some(CMD_READ_U32_BE as u32),
             isize: AddressSize::_8Bit,
             iwidth: OspiWidth::QUAD,
 
@@ -68,7 +71,7 @@ impl<I: Instance> FpgaCore<I> {
 
         let mut buffer = [0; 4];
         let transaction: TransferConfig = TransferConfig {
-            instruction: Some(CMD_READ_16 as u32),
+            instruction: Some(CMD_READ_U32_BE as u32),
             iwidth: OspiWidth::QUAD,
             isize: AddressSize::_8Bit,
 
@@ -98,7 +101,7 @@ impl<I: Instance> FpgaCore<I> {
         defmt::assert!(!self.memory_mapped_mode_enabled);
 
         let transaction: TransferConfig = TransferConfig {
-            instruction: Some(CMD_READ_16 as u32),
+            instruction: Some(CMD_READ_U32_BE as u32),
             isize: AddressSize::_8Bit,
             iwidth: OspiWidth::QUAD,
 
@@ -136,7 +139,7 @@ impl<I: Instance> FpgaCore<I> {
 
         let mut buffer = [0; 4];
         let transaction: TransferConfig = TransferConfig {
-            instruction: Some(CMD_READ_16 as u32),
+            instruction: Some(CMD_READ_U32_BE as u32),
             isize: AddressSize::_8Bit,
             iwidth: OspiWidth::QUAD,
 
@@ -165,7 +168,7 @@ impl<I: Instance> FpgaCore<I> {
 
         trace!("FPGA block write. address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", address, buffer.len(), buffer);
         let transaction: TransferConfig = TransferConfig {
-            instruction: Some(CMD_WRITE_16 as u32),
+            instruction: Some(CMD_WRITE_U32_BE as u32),
             isize: AddressSize::_8Bit,
             iwidth: OspiWidth::QUAD,
 
@@ -208,7 +211,7 @@ impl<I: Instance> FpgaCore<I> {
             trace!("FPGA block write chunked ({}). address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", CHUNK_SIZE, address, buffer.len(), buffer);
 
             let transaction = TransferConfig {
-                instruction: Some(CMD_WRITE_16 as u32),
+                instruction: Some(CMD_WRITE_U32_BE as u32),
                 isize: AddressSize::_8Bit,
                 iwidth: OspiWidth::QUAD,
 
@@ -237,7 +240,7 @@ impl<I: Instance> FpgaCore<I> {
         <BigEndian as ByteOrder>::write_u32(buffer, value);
         trace!("FPGA block write. address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", address, buffer.len(), buffer);
         let transaction: TransferConfig = TransferConfig {
-            instruction: Some(CMD_WRITE_16 as u32),
+            instruction: Some(CMD_WRITE_U32_BE as u32),
             isize: AddressSize::_8Bit,
             iwidth: OspiWidth::QUAD,
 
@@ -257,7 +260,7 @@ impl<I: Instance> FpgaCore<I> {
         defmt::assert!(!self.memory_mapped_mode_enabled);
 
         let read_config: TransferConfig = TransferConfig {
-            instruction: Some(CMD_READ_16 as u32),
+            instruction: Some(CMD_READ_U32_LE as u32),
             isize: AddressSize::_8Bit,
             iwidth: OspiWidth::QUAD,
 
@@ -267,11 +270,12 @@ impl<I: Instance> FpgaCore<I> {
             dummy: DummyCycles::_8,
 
             dwidth: OspiWidth::QUAD,
+            sioo: false,
             ..Default::default()
         };
 
         let write_config: TransferConfig = TransferConfig {
-            instruction: Some(CMD_WRITE_16 as u32),
+            instruction: Some(CMD_WRITE_U32_LE as u32),
             isize: AddressSize::_8Bit,
             iwidth: OspiWidth::QUAD,
 
@@ -281,6 +285,7 @@ impl<I: Instance> FpgaCore<I> {
             dummy: DummyCycles::_0,
 
             dwidth: OspiWidth::QUAD,
+            sioo: false,
             ..Default::default()
         };
 
@@ -338,7 +343,7 @@ impl<I: Instance> FpgaCore<I> {
 
         for i in 0..FPGA_REG_SIZE {
             let val = unsafe { core::ptr::read_volatile(base.add(i)) };
-            defmt::info!("{:03x}: {:08x}", i, val);
+            defmt::info!("{:03x}: {:08x}", i * 4, val);
         }
     }
 }
