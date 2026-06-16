@@ -17,7 +17,7 @@ Cross-platform Pick-and-Place machine software, for Makers!
 
 ## Machine Operations
 
-This repository is for the machine operations software which will include a GUI and control board firmware.
+This repository is for the machine operations software, which will include a GUI and control board firmware.
 
 Other repositories in the MakerPnP organization contain GUI and CLI tools for pcb assembly planning, gerber viewer
 and related libraries.
