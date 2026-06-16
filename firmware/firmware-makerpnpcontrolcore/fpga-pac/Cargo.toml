@@ -1,0 +1,8 @@
+[package]
+name = "fpga-pac"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# only required due to chiptool generating interrupts, which we don't need and can't turn off, yet...
+cortex-m           = {version = "0.7.7"}

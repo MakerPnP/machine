@@ -17,6 +17,8 @@ tracepin = [
 ]
 
 [dependencies]
+fpga-pac           = { path = "../fpga-pac" }
+
 ioboard_main       = { path = "../../../ioboard/ioboard_main" }
 ioboard_net        = { path = "../../../ioboard/ioboard_net" }
 ioboard_trace      = { path = "../../../ioboard/ioboard_trace" }

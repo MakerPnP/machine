@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance">
+  <name>fpga</name>
+  <version>1.0</version>
+  <description>memory-mapped fpga registers over qspi/ospi</description>
+  <addressUnitBits>8</addressUnitBits>
+  <width>32</width>
+
+  <peripherals>
+
+    <!-- system1 block (0x0000 - 0x003f) -->
+    <peripheral>
+      <name>system1</name>
+      <description>system block 1</description>
+      <baseAddress>0x90000000</baseAddress>
+      <addressBlock>
+        <offset>0x0</offset>
+        <size>0x40</size>
+        <usage>registers</usage>
+      </addressBlock>
+
+      <registers>
+
+        <register>
+          <name>ident</name>
+          <description>device identifier</description>
+          <addressOffset>0x0000</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0xFACEB00B</resetValue>
+          <fields>
+            <field>
+              <name>ident</name>
+              <description>device identifier</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>version</name>
+          <description>version information</description>
+          <addressOffset>0x0004</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x01020304</resetValue>
+          <fields>
+
+            <field>
+              <name>major</name>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>minor</name>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>patch</name>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>build</name>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+      </registers>
+    </peripheral>
+
+
+    <!-- led block (0x0040 - 0x007f) -->
+    <peripheral>
+      <name>led</name>
+      <description>led control block</description>
+      <baseAddress>0x90000040</baseAddress>
+      <addressBlock>
+        <offset>0x0</offset>
+        <size>0x40</size>
+        <usage>registers</usage>
+      </addressBlock>
+
+      <registers>
+
+        <register>
+          <name>led_ctrl</name>
+          <description>led control register</description>
+          <addressOffset>0x00</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>fpga_led</name>
+              <description>fpga activity led (0 = off)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>mcu_led</name>
+              <description>mcu activity led (0 = off)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>30</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+      </registers>
+    </peripheral>
+
+
+    <!-- buzzer block (0x00c0 - 0x00ff) -->
+    <peripheral>
+      <name>buzzer</name>
+      <description>buzzer control block</description>
+      <baseAddress>0x900000c0</baseAddress>
+      <addressBlock>
+        <offset>0x0</offset>
+        <size>0x40</size>
+        <usage>registers</usage>
+      </addressBlock>
+
+      <registers>
+
+        <register>
+          <name>buzzer_ctrl</name>
+          <description>buzzer control register</description>
+          <addressOffset>0x00</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>buzzer</name>
+              <description>buzzer control (0 = off)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+      </registers>
+    </peripheral>
+
+
+    <!-- system2 block (0x01c0 - 0x01ff) -->
+    <peripheral>
+      <name>system2</name>
+      <description>system block 2</description>
+      <baseAddress>0x900001c0</baseAddress>
+      <addressBlock>
+        <offset>0x0</offset>
+        <size>0x40</size>
+        <usage>registers</usage>
+      </addressBlock>
+
+      <registers>
+
+        <register>
+          <name>marker</name>
+          <description>fixed marker value</description>
+          <addressOffset>0x3c</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0xdeadc0de</resetValue>
+          <fields>
+            <field>
+              <name>marker</name>
+              <description>fixed marker</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+      </registers>
+    </peripheral>
+
+
+  </peripherals>
+</device>

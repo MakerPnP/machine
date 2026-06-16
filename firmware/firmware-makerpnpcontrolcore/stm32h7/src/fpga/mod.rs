@@ -23,12 +23,6 @@ mod registers {
 }
 pub use registers::*;
 
-const FPGA_REG_SIZE: usize = 0x80;
-/// Memory mapped FPGA registers. 16-bit address space, 32-bit registers.
-/// The linker section will cause this to be located at 0x90000000 which is the memory mapped address for OCTOSPI1
-#[unsafe(link_section = ".octospi1")]
-static mut MAPPED_REGISTERS: [u32; FPGA_REG_SIZE] = [0; FPGA_REG_SIZE];  // 0x80 * 4 = 512 (0x200) bytes
-
 pub struct FpgaCore<I: Instance> {
     ospi: Ospi<'static, I, Blocking>,
     memory_mapped_mode_enabled: bool,
@@ -339,8 +333,10 @@ impl<I: Instance> FpgaCore<I> {
     pub fn dump_registers(&mut self) {
         defmt::assert!(self.memory_mapped_mode_enabled);
         defmt::debug!("FPGA register map (u32):");
-        let base = core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *const u32;
+        let base = 0x9000_0000 as *const u32;
 
+        const FPGA_REG_SIZE: usize = 0x80;
+        
         for i in 0..FPGA_REG_SIZE {
             let val = unsafe { core::ptr::read_volatile(base.add(i)) };
             defmt::info!("{:03x}: {:08x}", i * 4, val);
@@ -350,26 +346,17 @@ impl<I: Instance> FpgaCore<I> {
     pub fn buzzer_enable_mm(&mut self) {
         defmt::assert!(self.memory_mapped_mode_enabled);
 
-        let base = core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *mut u32;
-        let buzzer_ctrl_reg =
-            unsafe { base.add((REG_BUZZER_CTRL as usize) / 4) };
-        let buzzer_ctrl = unsafe { core::ptr::read_volatile(buzzer_ctrl_reg) };
-        let new_buzzer_ctrl = buzzer_ctrl | 0b0000_0001;
-        defmt::debug!("buzzer_ctrl_reg: {:08x}: 0x{:08x}, writing: 0x{:08x}", buzzer_ctrl_reg, buzzer_ctrl, new_buzzer_ctrl);
-        unsafe { core::ptr::write_volatile(buzzer_ctrl_reg, new_buzzer_ctrl) };
+        fpga_pac::BUZZER.buzzer_ctrl().modify(|w| {
+            w.set_buzzer(true);
+        });
     }
 
     pub fn buzzer_disable_mm(&mut self) {
         defmt::assert!(self.memory_mapped_mode_enabled);
 
-        let base = core::ptr::addr_of_mut!(MAPPED_REGISTERS) as *mut u32;
-        let buzzer_ctrl_reg =
-            unsafe { base.add((REG_BUZZER_CTRL as usize) / 4) };
-
-        let buzzer_ctrl = unsafe { core::ptr::read_volatile(buzzer_ctrl_reg) };
-        let new_buzzer_ctrl = buzzer_ctrl & !0b0000_0001;
-        defmt::debug!("buzzer_ctrl_reg: {:08x}: 0x{:08x}, writing: 0x{:08x}", buzzer_ctrl_reg, buzzer_ctrl, new_buzzer_ctrl);
-        unsafe { core::ptr::write_volatile(buzzer_ctrl_reg, new_buzzer_ctrl) };
+        fpga_pac::BUZZER.buzzer_ctrl().modify(|w| {
+            w.set_buzzer(false);
+        });
     }
 }
 

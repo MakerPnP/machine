@@ -26,14 +26,3 @@ SECTIONS
         *(.ram_d2)
     } > RAM_D2
 }
-
-SECTIONS
-{
-    .octospi1 (NOLOAD) :
-    {
-      . = ALIGN(4);
-      *(.octo1)
-      *(.octo1*)
-      . = ALIGN(4);
-    } > OCTOSPI1
-}
