@@ -94,7 +94,7 @@
         <register>
           <name>led_ctrl</name>
           <description>led control register</description>
-          <addressOffset>0x00</addressOffset>
+          <addressOffset>0x0000</addressOffset>
           <size>32</size>
           <access>read-write</access>
           <resetValue>0x00000000</resetValue>
@@ -110,6 +110,73 @@
             <field>
               <name>mcu_led</name>
               <description>mcu activity led (0 = off)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>30</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+      </registers>
+    </peripheral>
+
+    <!-- io block (0x0080 - 0x00bf) -->
+    <peripheral>
+      <name>io</name>
+      <description>io control block</description>
+      <baseAddress>0x90000080</baseAddress>
+      <addressBlock>
+        <offset>0x0</offset>
+        <size>0x40</size>
+        <usage>registers</usage>
+      </addressBlock>
+
+      <registers>
+
+        <register>
+          <name>io_ctrl</name>
+          <description>io control register</description>
+          <addressOffset>0x0000</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>io_in_1</name>
+          <description>io in 1 register</description>
+          <addressOffset>0x0004</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>user0</name>
+              <description>user 0 button (1 = pressed)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>user1</name>
+              <description>user 1 button (1 = pressed)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -144,7 +211,7 @@
         <register>
           <name>buzzer_ctrl</name>
           <description>buzzer control register</description>
-          <addressOffset>0x00</addressOffset>
+          <addressOffset>0x0000</addressOffset>
           <size>32</size>
           <access>read-write</access>
           <resetValue>0x00000000</resetValue>
@@ -187,7 +254,7 @@
         <register>
           <name>marker</name>
           <description>fixed marker value</description>
-          <addressOffset>0x3c</addressOffset>
+          <addressOffset>0x003c</addressOffset>
           <size>32</size>
           <access>read-only</access>
           <resetValue>0xdeadc0de</resetValue>
@@ -203,7 +270,6 @@
 
       </registers>
     </peripheral>
-
 
   </peripherals>
 </device>

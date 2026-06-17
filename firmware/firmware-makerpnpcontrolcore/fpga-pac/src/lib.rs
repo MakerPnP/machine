@@ -27,6 +27,8 @@ mod _vectors {
 pub const SYSTEM1: system1::system1 = unsafe { system1::system1::from_ptr(0x9000_0000usize as _) };
 #[doc = "led control block"]
 pub const LED: led::led = unsafe { led::led::from_ptr(0x9000_0040usize as _) };
+#[doc = "io control block"]
+pub const IO: io::io = unsafe { io::io::from_ptr(0x9000_0080usize as _) };
 #[doc = "buzzer control block"]
 pub const BUZZER: buzzer::buzzer = unsafe { buzzer::buzzer::from_ptr(0x9000_00c0usize as _) };
 #[doc = "system block 2"]
@@ -189,6 +191,145 @@ pub mod common {
             let mut val = self.read();
             f(&mut val);
             self.write_value(val);
+        }
+    }
+}
+pub mod io {
+    #[doc = "io control block."]
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    pub struct io {
+        ptr: *mut u8,
+    }
+    unsafe impl Send for io {}
+    unsafe impl Sync for io {}
+    impl io {
+        #[inline(always)]
+        pub const unsafe fn from_ptr(ptr: *mut ()) -> Self {
+            Self { ptr: ptr as _ }
+        }
+        #[inline(always)]
+        pub const fn as_ptr(&self) -> *mut () {
+            self.ptr as _
+        }
+        #[doc = "io control register."]
+        #[inline(always)]
+        pub const fn io_ctrl(self) -> crate::common::Reg<regs::io_ctrl, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x0usize) as _) }
+        }
+        #[doc = "io in 1 register."]
+        #[inline(always)]
+        pub const fn io_in_1(self) -> crate::common::Reg<regs::io_in_1, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x04usize) as _) }
+        }
+    }
+    pub mod regs {
+        #[doc = "io control register."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct io_ctrl(pub u32);
+        impl io_ctrl {
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0xffff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0xffff_ffff << 0usize)) | (((val as u32) & 0xffff_ffff) << 0usize);
+            }
+        }
+        impl Default for io_ctrl {
+            #[inline(always)]
+            fn default() -> io_ctrl {
+                io_ctrl(0)
+            }
+        }
+        impl core::fmt::Debug for io_ctrl {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("io_ctrl")
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for io_ctrl {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(f, "io_ctrl {{ reserved: {=u32:?} }}", self.reserved())
+            }
+        }
+        #[doc = "io in 1 register."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct io_in_1(pub u32);
+        impl io_in_1 {
+            #[doc = "user 0 button (1 = pressed)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn user0(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "user 0 button (1 = pressed)."]
+            #[inline(always)]
+            pub const fn set_user0(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "user 1 button (1 = pressed)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn user1(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "user 1 button (1 = pressed)."]
+            #[inline(always)]
+            pub const fn set_user1(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 2usize) & 0x3fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x3fff_ffff << 2usize)) | (((val as u32) & 0x3fff_ffff) << 2usize);
+            }
+        }
+        impl Default for io_in_1 {
+            #[inline(always)]
+            fn default() -> io_in_1 {
+                io_in_1(0)
+            }
+        }
+        impl core::fmt::Debug for io_in_1 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("io_in_1")
+                    .field("user0", &self.user0())
+                    .field("user1", &self.user1())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for io_in_1 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "io_in_1 {{ user0: {=bool:?}, user1: {=bool:?}, reserved: {=u32:?} }}",
+                    self.user0(),
+                    self.user1(),
+                    self.reserved()
+                )
+            }
         }
     }
 }
