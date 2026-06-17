@@ -727,6 +727,7 @@ name = "fpga-pac"
 version = "0.1.0"
 dependencies = [
  "cortex-m",
+ "defmt 1.1.0",
 ]
 
 [[package]]

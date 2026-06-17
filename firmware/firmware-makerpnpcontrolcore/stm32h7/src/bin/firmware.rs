@@ -169,6 +169,8 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     }
 
     let mut fpga = FpgaCore::new(ospi1).await;
+    fpga.enable_memory_mapped_mode();
+
     {
         loop {
             Timer::after(Duration::from_millis(50)).await;
@@ -177,12 +179,12 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
             let version = fpga.read_version();
             info!("FPGA core. ident: {:02x}, version: {}", ident, version);
 
-            if ident == [0xFF, 0xFF, 0xFF, 0xFF] {
+            if ident == 0xffffffff {
                 defmt::error!("No response from FPGA");
                 continue;
             }
 
-            const EXPECTED_IDENT: [u8; 4] = [0xFA, 0xCE, 0xB0, 0x0B];
+            const EXPECTED_IDENT: u32 = 0xFACEB00B;
 
             if ident == EXPECTED_IDENT {
                 break
@@ -192,6 +194,10 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         }
     }
 
+    Timer::after(Duration::from_millis(10)).await;
+
+    fpga.disable_memory_mapped_mode();
+
     if true {
         let mut fpga_mem: [u8; 0x200] = [0x00; 0x200];
         fpga.read_block(0x0000, &mut fpga_mem);
@@ -200,20 +206,6 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         let mut fpga_mem: [u32; 0x200 / 4] = [0x0000_0000; 0x200 / 4];
         fpga.read_block_u32(0x0000, &mut fpga_mem);
         debug!("FPGA register map (u32):\n{:08x}", fpga_mem);
-    }
-
-    if true {
-        fpga.enable_memory_mapped_mode();
-        fpga.dump_registers();
-        fpga.buzzer_enable_mm();
-        Timer::after(Duration::from_millis(250)).await;
-        fpga.buzzer_disable_mm();
-        Timer::after(Duration::from_millis(250)).await;
-        fpga.buzzer_enable_mm();
-        Timer::after(Duration::from_millis(250)).await;
-        fpga.buzzer_disable_mm();
-        Timer::after(Duration::from_millis(250)).await;
-        fpga.disable_memory_mapped_mode();
     }
 
     if true {
@@ -265,7 +257,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         }
     }
 
-    if false {
+    if true {
         info!("Waiting for either button to be pressed.");
         let initial_buttons = fpga.read_buttons();
         loop {
@@ -274,8 +266,37 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
             if new_buttons != initial_buttons {
                 break
             }
+            Timer::after(Duration::from_millis(100)).await;
         }
     }
+
+    fpga.enable_memory_mapped_mode();
+
+    if true {
+        fpga.dump_registers();
+        fpga.buzzer_enable();
+        Timer::after(Duration::from_millis(250)).await;
+        fpga.buzzer_disable();
+        Timer::after(Duration::from_millis(250)).await;
+        fpga.buzzer_enable();
+        Timer::after(Duration::from_millis(250)).await;
+        fpga.buzzer_disable();
+        Timer::after(Duration::from_millis(250)).await;
+    }
+
+    if true {
+        info!("Waiting for either button to be pressed.");
+        let initial_buttons = fpga.read_buttons_mm();
+        loop {
+            let new_buttons = fpga.read_buttons_mm();
+
+            if new_buttons != initial_buttons {
+                break
+            }
+            Timer::after(Duration::from_millis(100)).await;
+        }
+    }
+
 
     lp_spawner.spawn(unwrap!(fpga_task(fpga)));
 

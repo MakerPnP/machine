@@ -38,49 +38,16 @@ impl<I: Instance> FpgaCore<I> {
         memory
     }
 
-    pub fn read_ident(&mut self) -> [u8; 4] {
-        defmt::assert!(!self.memory_mapped_mode_enabled);
+    pub fn read_ident(&mut self) -> u32 {
+        defmt::assert!(self.memory_mapped_mode_enabled);
 
-        let mut buffer = [0; 4];
-        let transaction: TransferConfig = TransferConfig {
-            instruction: Some(CMD_READ_U32_BE as u32),
-            isize: AddressSize::_8Bit,
-            iwidth: OspiWidth::QUAD,
-
-            address: Some(0x0000),
-            adsize: AddressSize::_16Bit,
-            adwidth: OspiWidth::QUAD,
-
-            dummy: DummyCycles::_8,
-
-            dwidth: OspiWidth::QUAD,
-            ..Default::default()
-        };
-        self.ospi.blocking_read(&mut buffer, transaction).unwrap();
-        buffer
+        fpga_pac::SYSTEM1.ident().read().0
     }
 
     pub fn read_version(&mut self) -> FpgaVersion {
-        defmt::assert!(!self.memory_mapped_mode_enabled);
+        defmt::assert!(self.memory_mapped_mode_enabled);
 
-        let mut buffer = [0; 4];
-        let transaction: TransferConfig = TransferConfig {
-            instruction: Some(CMD_READ_U32_BE as u32),
-            iwidth: OspiWidth::QUAD,
-            isize: AddressSize::_8Bit,
-
-            address: Some(0x0004),
-            adsize: AddressSize::_16Bit,
-            adwidth: OspiWidth::QUAD,
-
-            dummy: DummyCycles::_8,
-
-            dwidth: OspiWidth::QUAD,
-            ..Default::default()
-        };
-        self.ospi.blocking_read(&mut buffer, transaction).unwrap();
-
-        FpgaVersion::from_bytes(buffer)
+        FpgaVersion::from_u32(fpga_pac::SYSTEM1.version().read().0)
     }
 
     pub fn read_buttons(&mut self) -> u8 {
@@ -89,6 +56,20 @@ impl<I: Instance> FpgaCore<I> {
         let mut buffer = [0; 1];
         self.read_block(REG_IO_IN_1, &mut buffer);
         buffer[0]
+    }
+
+    /// Returns a bitfield of the FPGA buttons.
+    /// bit 0 = USER 0 button
+    /// bit 1 = USER 1 button
+    /// 1 indicates pressed
+    pub fn read_buttons_mm(&mut self) -> u8 {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        let value = fpga_pac::IO.io_in_1().read();
+        let buttons = (value.user0() as u8) | ((value.user1() as u8) << 1);
+        defmt::debug!("FPGA value: 0x{:08x}, buttons: 0b{:02b}", value.0, buttons);
+
+        buttons
     }
 
     pub fn read_block(&mut self, address: u16, buffer: &mut [u8]) {
@@ -295,68 +276,64 @@ impl<I: Instance> FpgaCore<I> {
     }
 
     pub fn led_1_enable(&mut self) {
-        let mut buffer = self.read_u32(REG_LED_CTRL);
-        buffer |= 0b0000_0001;
-        self.write_u32(REG_LED_CTRL, buffer);
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        fpga_pac::LED.led_ctrl().modify(|w| {
+            w.set_mcu_led(true);
+        });
     }
 
     pub fn led_1_disable(&mut self) {
-        let mut buffer = self.read_u32(REG_LED_CTRL);
-        buffer &= !0b0000_0001;
-        self.write_u32(REG_LED_CTRL, buffer);
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        fpga_pac::LED.led_ctrl().modify(|w| {
+            w.set_mcu_led(false);
+        });
     }
 
     pub fn led_2_enable(&mut self) {
-        let mut buffer = self.read_u32(REG_LED_CTRL);
-        buffer |= 0b0000_0010;
-        self.write_u32(REG_LED_CTRL, buffer);
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        fpga_pac::LED.led_ctrl().modify(|w| {
+            w.set_fpga_led(true);
+        });
     }
 
     pub fn led_2_disable(&mut self) {
-        let mut buffer = self.read_u32(REG_LED_CTRL);
-        buffer &= !0b0000_0010;
-        self.write_u32(REG_LED_CTRL, buffer);
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        fpga_pac::LED.led_ctrl().modify(|w| {
+            w.set_fpga_led(false);
+        });
     }
 
     pub fn buzzer_enable(&mut self) {
-        let mut buffer = self.read_u32(REG_BUZZER_CTRL);
-        buffer |= 0b0000_0001;
-        self.write_u32(REG_BUZZER_CTRL, buffer);
-    }
-
-    pub fn buzzer_disable(&mut self) {
-        let mut buffer = self.read_u32(REG_BUZZER_CTRL);
-        buffer &= !0b0000_0001;
-        self.write_u32(REG_BUZZER_CTRL, buffer);
-    }
-
-    pub fn dump_registers(&mut self) {
-        defmt::assert!(self.memory_mapped_mode_enabled);
-        defmt::debug!("FPGA register map (u32):");
-        let base = 0x9000_0000 as *const u32;
-
-        const FPGA_REG_SIZE: usize = 0x80;
-        
-        for i in 0..FPGA_REG_SIZE {
-            let val = unsafe { core::ptr::read_volatile(base.add(i)) };
-            defmt::info!("{:03x}: {:08x}", i * 4, val);
-        }
-    }
-    
-    pub fn buzzer_enable_mm(&mut self) {
         defmt::assert!(self.memory_mapped_mode_enabled);
 
         fpga_pac::BUZZER.buzzer_ctrl().modify(|w| {
             w.set_buzzer(true);
-        });
-    }
+        });    }
 
-    pub fn buzzer_disable_mm(&mut self) {
+    pub fn buzzer_disable(&mut self) {
         defmt::assert!(self.memory_mapped_mode_enabled);
 
         fpga_pac::BUZZER.buzzer_ctrl().modify(|w| {
             w.set_buzzer(false);
         });
+    }
+
+    pub fn dump_registers(&mut self) {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        defmt::debug!("FPGA register map (u32):");
+        let base = 0x9000_0000 as *const u32;
+
+        const FPGA_REG_SIZE: usize = 0x80;
+
+        for i in 0..FPGA_REG_SIZE {
+            let val = unsafe { core::ptr::read_volatile(base.add(i)) };
+            defmt::info!("{:03x}: {:08x}", i * 4, val);
+        }
     }
 }
 
@@ -371,6 +348,16 @@ pub struct FpgaVersion {
 
 impl FpgaVersion {
     pub fn from_bytes(bytes: [u8; 4]) -> Self {
+        Self {
+            major: bytes[0],
+            minor: bytes[1],
+            patch: bytes[2],
+            build: bytes[3],
+        }
+    }
+
+    pub fn from_u32(value: u32) -> Self {
+        let bytes: [u8; 4] = value.to_le_bytes();
         Self {
             major: bytes[0],
             minor: bytes[1],
