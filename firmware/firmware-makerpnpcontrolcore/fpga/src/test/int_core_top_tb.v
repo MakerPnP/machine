@@ -152,13 +152,23 @@ module int_core_top_tb;
         end
     endtask
 
-    task read_long_word_data;
+    task read_long_word_data_be;
         output [31:0] r_data;
         begin
             read_byte_data(r_data[31:24]);
             read_byte_data(r_data[23:16]);
             read_byte_data(r_data[15:8]);
             read_byte_data(r_data[7:0]);
+        end
+    endtask
+
+    task read_long_word_data_le;
+        output [31:0] r_data;
+        begin
+            read_byte_data(r_data[7:0]);
+            read_byte_data(r_data[15:8]);
+            read_byte_data(r_data[23:16]);
+            read_byte_data(r_data[31:24]);
         end
     endtask
 
@@ -200,13 +210,30 @@ module int_core_top_tb;
         send_address_word(16'h0000);
         dummy_phase();
 
-        read_long_word_data(read_word);
+        read_long_word_data_be(read_word);
         $display("IDENT Reg Data: 0x%08h", read_word);
-        `ASSERT_EQ(read_word, 32'hfaceb00b, "0x%08h", "Ident mismatch");
+        `ASSERT_EQ(read_word, 32'hfaceb00b, "0x%08h", "Ident mismatch (BE)");
 
-        read_long_word_data(read_word);
+        read_long_word_data_be(read_word);
         $display("VERSION Reg Data: 0x%08h", read_word);
-        `ASSERT_EQ(read_word, 32'h01020304, "0x%08h", "Version mismatch");
+        `ASSERT_EQ(read_word, 32'h01020304, "0x%08h", "Version mismatch (BE)");
+        cs_n = 1;
+
+        #100;
+
+        cs_n  = 0;
+        io_en = 1;
+        send_command_byte(8'h11);
+        send_address_word(16'h0000);
+        dummy_phase();
+
+        read_long_word_data_le(read_word);
+        $display("IDENT Reg Data: 0x%08h", read_word);
+        `ASSERT_EQ(read_word, 32'hfaceb00b, "0x%08h", "Ident mismatch (LE)");
+
+        read_long_word_data_le(read_word);
+        $display("VERSION Reg Data: 0x%08h", read_word);
+        `ASSERT_EQ(read_word, 32'h01020304, "0x%08h", "Version mismatch (LE)");
         cs_n = 1;
 
         #100;
@@ -225,7 +252,7 @@ module int_core_top_tb;
         send_command_byte(8'h10);
         send_address_word(16'h0084);
         dummy_phase();
-        read_long_word_data(read_word);
+        read_long_word_data_be(read_word);
         cs_n = 1;
 
         `ASSERT_EQ(read_word, 32'h0000_0003, "0x%08h", "IO_IN_1 Readout mismatch");
@@ -282,7 +309,7 @@ module int_core_top_tb;
         dummy_phase();
 
         for (i = 0; i <= 5; i = i + 1) begin
-            read_long_word_data(read_word);
+            read_long_word_data_be(read_word);
             $display("Encoder %0d value: 0x%08h", i + 1, read_word);
             `ASSERT_EQ(read_word, 32'h0, "0x%08h", $sformatf("Encoder %0d mismatch", i));
         end
@@ -314,7 +341,7 @@ module int_core_top_tb;
         dummy_phase();
 
         for (i = 0; i <= 5; i = i + 1) begin
-            read_long_word_data(read_word);
+            read_long_word_data_be(read_word);
             $display("Encoder %0d value: 0x%08h", i + 1, read_word);
             `ASSERT_EQ(read_word, 32'h0, "0x%08h", $sformatf("Encoder %0d not reset", i));
         end
@@ -345,7 +372,7 @@ module int_core_top_tb;
 
 
             for (i = 0; i < 3; i = i + 1) begin
-                read_long_word_data(read_word);
+                read_long_word_data_be(read_word);
 
                 $display("Address: 0x%3h, Value:  0x%h", address, read_word);
                 `ASSERT_EQ(read_word, expected_data[i], "0x%02h", "Value mismatch");

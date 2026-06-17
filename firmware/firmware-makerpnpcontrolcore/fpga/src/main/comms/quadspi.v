@@ -305,16 +305,7 @@ module quadspi (
 
                         if (phase_counter == 4'd7) begin
                             if (next_buf_valid) begin
-                                if (cmd_is_le) begin
-                                    out_buf <= {
-                                        next_buf[7:0],
-                                        next_buf[15:8],
-                                        next_buf[23:16],
-                                        next_buf[31:24]
-                                    };
-                                end else begin
-                                    out_buf <= next_buf;
-                                end
+                                out_buf <= next_buf;
 
                                 next_buf_valid <= 1'b0;
                             end else begin
@@ -331,6 +322,7 @@ module quadspi (
             if (mem_valid) begin
                 if (pending_prefetch) begin
                     if (cmd_is_le) begin
+                        $display("le pending_prefetch");
                         next_buf <= {
                             mem_dout[7:0],
                             mem_dout[15:8],
@@ -338,12 +330,14 @@ module quadspi (
                             mem_dout[31:24]
                         };
                     end else begin
+                        $display("be pending_prefetch");
                         next_buf <= mem_dout;
                     end
 
                     next_buf_valid <= 1'b1;
                 end else begin
                     if (cmd_is_le) begin
+                        $display("le !pending_prefetch");
                         out_buf <= {
                             mem_dout[7:0],
                             mem_dout[15:8],
@@ -351,6 +345,7 @@ module quadspi (
                             mem_dout[31:24]
                         };
                     end else begin
+                        $display("be !pending_prefetch");
                         out_buf <= mem_dout;
                     end
                 end
