@@ -56,35 +56,35 @@ module io_tb;
         #10;
 
         $display("Buttons. user_0: %d, user_1: %d", (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
-        `ASSERT_EQ(dout, {30'd0, 2'b00}, "0x%08h", "IO_STATUS not updated");
+        `ASSERT_EQ(dout, {30'd0, 2'b00}, "0x%08h", "IO_IN_1 not updated");
 
         $display("simulate button 0 press (active low)");
         USER_0 = 0;
         #20;
 
         $display("Buttons. user_0: %d, user_1: %d", (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
-        `ASSERT_EQ(dout, {30'd0, 2'b01}, "0x%08h", "IO_STATUS not updated");
+        `ASSERT_EQ(dout, {30'd0, 2'b01}, "0x%08h", "IO_IN_1 not updated");
 
         $display("simulate button 0 release (active low)");
         USER_0 = 1;
         #20;
 
         $display("Buttons. user_0: %d, user_1: %d", (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
-        `ASSERT_EQ(dout, {30'd0, 2'b00}, "0x%08h", "IO_STATUS not updated");
+        `ASSERT_EQ(dout, {30'd0, 2'b00}, "0x%08h", "IO_IN_1 not updated");
 
         $display("simulate button 1 press (active low)");
         USER_1 = 0;
         #20;
 
         $display("Buttons. user_0: %d, user_1: %d", (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
-        `ASSERT_EQ(dout, {30'd0, 2'b10}, "0x%08h", "IO_STATUS not updated");
+        `ASSERT_EQ(dout, {30'd0, 2'b10}, "0x%08h", "IO_IN_1 not updated");
 
         $display("simulate button 1 release (active low)");
         USER_1 = 1;
         #20;
 
         $display("Buttons. user_0: %d, user_1: %d", (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
-        `ASSERT_EQ(dout, {30'd0, 2'b00}, "0x%08h", "IO_STATUS not updated");
+        `ASSERT_EQ(dout, {30'd0, 2'b00}, "0x%08h", "IO_IN_1 not updated");
 
         report();
         $finish;
