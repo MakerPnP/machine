@@ -1,5 +1,5 @@
 [target.thumbv7em-none-eabihf]
-runner = 'probe-rs run --chip STM32H735IGKx --preverify'
+runner = 'probe-rs run --chip STM32H735IGKx'
 
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 linker = "flip-link"
@@ -12,8 +12,8 @@ rustflags = [
 ]
 
 [env]
-DEFMT_LOG = "debug"
-#DEFMT_LOG = "debug,firmware::fpga=trace"
+#DEFMT_LOG = "debug"
+DEFMT_LOG = "debug,firmware_makerpnpcontrolcore::fpga=trace"
 
 [profile.release]
 # Allows defmt to display log locations even in release
