@@ -259,6 +259,23 @@ module int_core_top_tb;
 
         #100;
 
+        // Simulate buttons being released
+        USER_0 = 1;
+        USER_1 = 1;
+        #100;
+
+        cs_n  = 0;
+        io_en = 1;
+        send_command_byte(8'h10);
+        send_address_word(16'h0084);
+        dummy_phase();
+        read_long_word_data_be(read_word);
+        cs_n = 1;
+
+        `ASSERT_EQ(read_word, 32'h0000_0000, "0x%08h", "IO_IN_1 Readout mismatch");
+
+        #100;
+
         // -------------------------------------------------------------
         $display("--- Test 3: Writing LED ---");
         // -------------------------------------------------------------
