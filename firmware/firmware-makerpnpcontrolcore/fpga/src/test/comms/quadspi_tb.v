@@ -29,7 +29,6 @@ module quadspi_tb;
     reg         mem_valid;
 
 
-    // Direct instantiation of your isolated modules under test (UUT)
     quadspi qspi_uut (
         .sys_clk(TCXO),
         .sck(clk),
@@ -91,8 +90,6 @@ module quadspi_tb;
         end
     endtask
 
-
-    // Drives high nibble, ticks clock, drives low nibble, ticks clock
     task send_command_byte;
         input [7:0] cmd_val;
         begin
@@ -100,7 +97,7 @@ module quadspi_tb;
         end
     endtask
 
-    task send_address_word;
+    task send_address_word_be;
         input [15:0] address;
         begin
             send_byte(address[15:8]);
@@ -205,7 +202,7 @@ module quadspi_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h10);
-        send_address_word(16'h1234);
+        send_address_word_be(16'h1234);
 
 
         dummy_phase();
@@ -235,7 +232,7 @@ module quadspi_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h11);
-        send_address_word(16'h1234);
+        send_address_word_be(16'h1234);
         dummy_phase();
 
         read_long_word_data_le(read_word);
@@ -263,7 +260,7 @@ module quadspi_tb;
             cs_n  = 0;
             io_en = 1;
             send_command_byte(8'h90);
-            send_address_word(16'h1234);
+            send_address_word_be(16'h1234);
 
             fork
                 begin
@@ -316,7 +313,7 @@ module quadspi_tb;
             cs_n  = 0;
             io_en = 1;
             send_command_byte(8'h91);
-            send_address_word(16'h1234);
+            send_address_word_be(16'h1234);
 
             fork
                 begin
@@ -365,7 +362,7 @@ module quadspi_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h55);
-        send_address_word(16'h2222);
+        send_address_word_be(16'h2222);
         send_long_word(32'hdead_beef);
         send_long_word(32'hcafe_babe);
 
@@ -395,7 +392,7 @@ module quadspi_tb;
             cs_n  = 0;
             io_en = 1;
             send_command_byte(8'h10);
-            send_address_word(address);
+            send_address_word_be(address);
             dummy_phase();
 
             for (i = 0; i < 4; i = i + 1) begin
