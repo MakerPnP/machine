@@ -83,7 +83,8 @@ module io (
 
             //debug <= 16'hffff;
             debug <= {
-                io_in_1[7:0],
+//                io_ctrl[7:0],
+                8'd0,
                 reset,
                 sys_clk,
                 io_in_1[1:0],
