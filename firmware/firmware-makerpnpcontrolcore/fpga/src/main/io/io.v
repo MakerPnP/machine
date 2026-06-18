@@ -76,7 +76,7 @@ module io (
                 $display("IO_CTRL: 0x%08h", io_ctrl);
             end
 
-            btn_sync_m <= {30'd0, user_1, user_0};
+            btn_sync_m <= {user_1, user_0};
             btn_sync_s <= btn_sync_m;
 
             activity_flag <= ~activity_flag;
