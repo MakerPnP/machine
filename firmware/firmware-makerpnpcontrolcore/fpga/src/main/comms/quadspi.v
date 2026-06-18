@@ -322,7 +322,6 @@ module quadspi (
             if (mem_valid) begin
                 if (pending_prefetch) begin
                     if (cmd_is_le) begin
-                        $display("le pending_prefetch");
                         next_buf <= {
                             mem_dout[7:0],
                             mem_dout[15:8],
@@ -330,14 +329,12 @@ module quadspi (
                             mem_dout[31:24]
                         };
                     end else begin
-                        $display("be pending_prefetch");
                         next_buf <= mem_dout;
                     end
 
                     next_buf_valid <= 1'b1;
                 end else begin
                     if (cmd_is_le) begin
-                        $display("le !pending_prefetch");
                         out_buf <= {
                             mem_dout[7:0],
                             mem_dout[15:8],
@@ -345,7 +342,6 @@ module quadspi (
                             mem_dout[31:24]
                         };
                     end else begin
-                        $display("be !pending_prefetch");
                         out_buf <= mem_dout;
                     end
                 end
