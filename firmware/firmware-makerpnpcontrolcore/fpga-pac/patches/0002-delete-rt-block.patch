@@ -1,0 +1,34 @@
+From 83463f0a54a091f1c9157c3cb2cf55b87d1a68eb Mon Sep 17 00:00:00 2001
+From: Dominic Clifton <me@dominicclifton.name>
+Date: Thu, 18 Jun 2026 12:19:11 +0200
+Subject: [PATCH 2/3] delete-rt-block
+
+---
+ .../firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs  | 11 -----------
+ 1 file changed, 11 deletions(-)
+
+diff --git a/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs b/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
+index f262e9a..175c9d0 100644
+--- a/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
++++ b/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
+@@ -3,17 +3,6 @@
+ #![allow(non_upper_case_globals)]
+ #![doc = "Peripheral access API (generated using chiptool v0.1.0 (bcf538a 2026-05-18))"]
+ #![no_std]
+-#[cfg(feature = "rt")]
+-mod _vectors {
+-    unsafe extern "C" {}
+-    pub union Vector {
+-        _handler: unsafe extern "C" fn(),
+-        _reserved: u32,
+-    }
+-    #[unsafe(link_section = ".vector_table.interrupts")]
+-    #[unsafe(no_mangle)]
+-    pub static __INTERRUPTS: [Vector; 0] = [];
+-}
+ #[doc = "system block 1"]
+ pub const SYSTEM1: system1::system1 = unsafe { system1::system1::from_ptr(0x9000_0000usize as _) };
+ #[doc = "led control block"]
+-- 
+2.53.0.windows.2
+
