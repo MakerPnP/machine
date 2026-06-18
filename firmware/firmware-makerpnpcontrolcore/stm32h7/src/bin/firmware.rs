@@ -393,39 +393,6 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     }
 
 
-    if true {
-        // 4x WS2812 leds with GRB color order.
-        let mut led_controller_0 = fpga.led_controller_0()
-            .with_led_count(4)
-            .with_mode(ColorOrdering::GRB)
-            .enable();
-
-        led_controller_0.update_leds(&[
-            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF
-        ]);
-
-        // External LED strip - 32 leds
-        let mut led_controller_1 = fpga.led_controller_1()
-            .with_led_count(32)
-            .with_mode(ColorOrdering::GRB)
-            .enable();
-
-        led_controller_1.update_leds(&[
-            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
-            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
-
-            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
-            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
-
-            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
-            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
-
-            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
-            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
-        ]);
-    }
-
-
     lp_spawner.spawn(unwrap!(fpga_task(fpga)));
 
     #[cfg(feature = "tracepin")]
@@ -536,7 +503,36 @@ async fn fpga_task(mut fpga: FpgaInstance) -> ! {
 
     Timer::after(Duration::from_millis(500)).await;
 
+    // 4x WS2812 leds with GRB color order.
+    let mut led_controller_0 = fpga.led_controller_0()
+        .with_led_count(4)
+        .with_mode(ColorOrdering::GRB)
+        .enable();
+
     let mut port_rgb_leds = [0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF];
+    led_controller_0.update_leds(&port_rgb_leds);
+
+    // External LED strip - 32 leds
+    let mut led_controller_1 = fpga.led_controller_1()
+        .with_led_count(32)
+        .with_mode(ColorOrdering::GRB)
+        .enable();
+
+    let mut external_leds = [
+        0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+        0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+
+        0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+        0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+
+        0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+        0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+
+        0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+        0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+    ];
+    led_controller_1.update_leds(&external_leds);
+
 
     let mut led_frame_counter = 0;
     let mut toggle = true;
@@ -553,7 +549,10 @@ async fn fpga_task(mut fpga: FpgaInstance) -> ! {
         }
 
         rainbow_wave(&mut port_rgb_leds, led_frame_counter);
-        fpga.write_block_u32_chunked::<16>(0x150, &port_rgb_leds);
+        led_controller_0.update_leds(&port_rgb_leds);
+
+        rainbow_wave(&mut external_leds, led_frame_counter);
+        led_controller_1.update_leds(&external_leds);
 
         led_frame_counter = led_frame_counter.wrapping_add(5);
         Timer::after(Duration::from_millis(100)).await;
