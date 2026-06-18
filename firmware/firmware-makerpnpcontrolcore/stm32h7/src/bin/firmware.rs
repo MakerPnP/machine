@@ -499,9 +499,13 @@ type FpgaInstance = FpgaCore<embassy_stm32::peripherals::OCTOSPI1>;
 #[embassy_executor::task]
 async fn fpga_task(mut fpga: FpgaInstance) -> ! {
 
+    let mut encoders: [u16; 6] = [0x0000; 6];
+
     startup_beeps(&mut fpga).await;
 
     Timer::after(Duration::from_millis(500)).await;
+
+    fpga.reset_encoders();
 
     // 4x WS2812 leds with GRB color order.
     let mut led_controller_0 = fpga.led_controller_0()
@@ -533,7 +537,6 @@ async fn fpga_task(mut fpga: FpgaInstance) -> ! {
     ];
     led_controller_1.update_leds(&external_leds);
 
-
     let mut led_frame_counter = 0;
     let mut toggle = true;
     loop {
@@ -546,6 +549,11 @@ async fn fpga_task(mut fpga: FpgaInstance) -> ! {
                 fpga.led_2_disable();
             }
             toggle = !toggle;
+        }
+
+        if led_frame_counter % 100 == 0 {
+            fpga.read_encoders(&mut encoders);
+            debug!("Encoder values (u16):\n{:04x}", encoders);
         }
 
         rainbow_wave(&mut port_rgb_leds, led_frame_counter);
