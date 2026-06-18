@@ -111,11 +111,17 @@ module memory (
     assign ws1_din     = ws1_din_r;
 
     wire [2:0] target_a =
+        // 0x0040
         (addr_a[15:6] == 10'h001) ? TARGET_LED :
+        // 0x0080
         (addr_a[15:6] == 10'h002) ? TARGET_IO :
+        // 0x00C0
         (addr_a[15:6] == 10'h003) ? TARGET_BUZZER :
+        // 0x0100
         (addr_a[15:6] == 10'h004) ? TARGET_ENCODER :
+        // 0x0140
         (addr_a[15:6] == 10'h005) ? TARGET_WS0 :
+        // 0x0180
         (addr_a[15:6] == 10'h006) ? TARGET_WS1 :
                                     TARGET_NONE;
 
