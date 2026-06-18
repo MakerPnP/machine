@@ -337,6 +337,31 @@ impl<I: Instance> FpgaCore<I> {
             defmt::info!("{:03x}: {:08x}", i * 4, val);
         }
     }
+    
+    pub fn reset_encoders(&mut self) {
+        fpga_pac::ENCODERS.enc_ctrl().modify(|w| {
+            w.set_reset(true);
+        });
+    }
+
+    /// ordering: a,b,c,x,y,z
+    pub fn read_encoders(&self, values: &mut [u16; 6]) {
+        values[0] = fpga_pac::ENCODERS.enc_count_a().read().value();
+        values[1] = fpga_pac::ENCODERS.enc_count_b().read().value();
+        values[2] = fpga_pac::ENCODERS.enc_count_c().read().value();
+        values[3] = fpga_pac::ENCODERS.enc_count_x().read().value();
+        values[4] = fpga_pac::ENCODERS.enc_count_y().read().value();
+        values[5] = fpga_pac::ENCODERS.enc_count_z().read().value();
+    }
+
+    pub fn set_encoders(&self, values: &[u16; 6]) {
+        fpga_pac::ENCODERS.enc_set_count_a().write(|w| { w.set_value(values[0])});
+        fpga_pac::ENCODERS.enc_set_count_b().write(|w| { w.set_value(values[1])});
+        fpga_pac::ENCODERS.enc_set_count_c().write(|w| { w.set_value(values[2])});
+        fpga_pac::ENCODERS.enc_set_count_x().write(|w| { w.set_value(values[3])});
+        fpga_pac::ENCODERS.enc_set_count_y().write(|w| { w.set_value(values[4])});
+        fpga_pac::ENCODERS.enc_set_count_z().write(|w| { w.set_value(values[5])});
+    }
 }
 
 #[derive(defmt::Format)]

@@ -376,6 +376,21 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         }
     }
 
+    if true {
+        let mut encoder_mem: [u16; 6] = [0xc0de; 6];
+
+        fpga.reset_encoders();
+        fpga.read_encoders(&mut encoder_mem);
+        debug!("Encoder values (u32):\n{:08x}", encoder_mem);
+
+        // set encoder values
+        encoder_mem = [0x0011, 0x0022, 0x0033, 0x0044, 0x0055, 0x0066];
+        fpga.set_encoders(&mut encoder_mem);
+        // read encoder values
+        fpga.read_encoders(&mut encoder_mem);
+        debug!("Encoder values after explicit set (u32):\n{:08x}", encoder_mem);
+    }
+
 
     lp_spawner.spawn(unwrap!(fpga_task(fpga)));
 
