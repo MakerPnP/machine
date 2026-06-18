@@ -67,7 +67,6 @@ impl<I: Instance> FpgaCore<I> {
         defmt::assert!(self.memory_mapped_mode_enabled);
 
         let value = fpga_pac::IO.io_in_1().read();
-        let dummy = fpga_pac::SYSTEM1.ident().read();
 
         let buttons = (value.user0() as u8) | ((value.user1() as u8) << 1);
         defmt::debug!("FPGA value: 0x{:08x}, buttons: 0b{:02b}", value.0, buttons);
