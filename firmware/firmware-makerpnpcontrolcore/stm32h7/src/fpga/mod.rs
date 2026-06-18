@@ -53,9 +53,10 @@ impl<I: Instance> FpgaCore<I> {
     pub fn read_buttons(&mut self) -> u8 {
         defmt::assert!(!self.memory_mapped_mode_enabled);
 
-        let mut buffer = [0; 1];
-        self.read_block(REG_IO_IN_1, &mut buffer);
-        buffer[0]
+
+        let value = self.read_u32(REG_IO_IN_1);
+
+        value as u8 & 0x03
     }
 
     /// Returns a bitfield of the FPGA buttons.
