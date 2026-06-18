@@ -3,17 +3,6 @@
 #![allow(non_upper_case_globals)]
 #![doc = "Peripheral access API (generated using chiptool v0.1.0 (bcf538a 2026-05-18))"]
 #![no_std]
-#[cfg(feature = "rt")]
-mod _vectors {
-    unsafe extern "C" {}
-    pub union Vector {
-        _handler: unsafe extern "C" fn(),
-        _reserved: u32,
-    }
-    #[unsafe(link_section = ".vector_table.interrupts")]
-    #[unsafe(no_mangle)]
-    pub static __INTERRUPTS: [Vector; 0] = [];
-}
 #[doc = "system block 0"]
 pub const SYSTEM0: system0::system0 = unsafe { system0::system0::from_ptr(0x9000_0000usize as _) };
 #[doc = "led control block"]
