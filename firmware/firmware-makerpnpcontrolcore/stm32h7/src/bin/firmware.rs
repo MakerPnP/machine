@@ -117,6 +117,85 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     info!("Enabling FPGA");
     fpga_creset_b.set_high();
 
+    let mut core_peri = cortex_m::Peripherals::take().unwrap();
+
+    let octospi_size = 256 * 1024 * 1024;
+
+    {
+        let mpu = core_peri.MPU;
+        let scb = &mut core_peri.SCB;
+        let size = octospi_size;
+        // Refer to ARM®v7-M Architecture Reference Manual ARM DDI 0403
+        // Version E.b Section B3.5
+        const MEMFAULTENA: u32 = 1 << 16;
+
+        unsafe {
+            /* Make sure outstanding transfers are done */
+            cortex_m::asm::dmb();
+
+            scb.shcsr.modify(|r| r & !MEMFAULTENA);
+
+            /* Disable the MPU and clear the control register*/
+            mpu.ctrl.write(0);
+        }
+
+        const REGION_NUMBER0: u32 = 0x00;
+        const REGION_BASE_ADDRESS: u32 = 0x9000_0000;
+
+        const REGION_EXECUTE_NEVER: u32 = 0x01;
+        const REGION_FULL_ACCESS: u32 = 0x03;
+        const REGION_NON_CACHEABLE: u32 = 0x00;
+        const REGION_NON_SHARABLE: u32 = 0x00;
+        const REGION_NON_BUFFERABLE: u32 = 0x00;
+        const REGION_ENABLE: u32 = 0x01;
+
+        const TEX: u32 = 0x00;
+
+        fn log2minus1(sz: u32) -> u32 {
+            for i in 5..=31 {
+                if sz == (1 << i) {
+                    return i - 1;
+                }
+            }
+            crate::panic!("Unknown memory region size!");
+        }
+
+        defmt::info!("OctoSPI region size value: 0x{:x}", log2minus1(size as u32));
+
+        // Configure region 0
+        unsafe {
+            mpu.rnr.write(REGION_NUMBER0);
+            mpu.rbar.write(REGION_BASE_ADDRESS);
+            let rasr_value =
+                0
+                    | (TEX << 19)
+                    | (REGION_NON_SHARABLE << 18)
+                    | (REGION_NON_CACHEABLE << 17)
+                    | (REGION_NON_BUFFERABLE << 16)
+                    | (REGION_FULL_ACCESS << 24)
+                    | (REGION_EXECUTE_NEVER << 28)
+                    | (log2minus1(size as u32) << 1)
+                    | REGION_ENABLE;
+            defmt::info!("OctoSPI rasr value: 0x{:x}", rasr_value);
+            mpu.rasr.write(rasr_value);
+        }
+
+        const MPU_ENABLE: u32 = 0x01;
+        const MPU_DEFAULT_MMAP_FOR_PRIVILEGED: u32 = 0x04;
+
+        // Enable
+        unsafe {
+            mpu.ctrl.modify(|r| r | MPU_DEFAULT_MMAP_FOR_PRIVILEGED | MPU_ENABLE);
+
+            scb.shcsr.modify(|r| r | MEMFAULTENA);
+
+            // Ensure MPU settings take effect
+            cortex_m::asm::dsb();
+            cortex_m::asm::isb();
+        }
+    }
+
+
     let ospi_config = embassy_stm32::ospi::Config {
         fifo_threshold: FIFOThresholdLevel::_16Bytes,
         memory_type: MemoryType::Standard,
