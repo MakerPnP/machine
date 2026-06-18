@@ -14,6 +14,12 @@ pub const BUZZER: buzzer::buzzer = unsafe { buzzer::buzzer::from_ptr(0x9000_00c0
 #[doc = "encoders control block"]
 pub const ENCODERS: encoders::encoders =
     unsafe { encoders::encoders::from_ptr(0x9000_0100usize as _) };
+#[doc = "ws2812 RGB LED block"]
+pub const WS2812_1: ws2812_1::ws2812_1 =
+    unsafe { ws2812_1::ws2812_1::from_ptr(0x9000_0140usize as _) };
+#[doc = "ws2812 RGB LED block"]
+pub const WS2812_2: ws2812_1::ws2812_1 =
+    unsafe { ws2812_1::ws2812_1::from_ptr(0x9000_0180usize as _) };
 #[doc = "system block 2"]
 pub const SYSTEM2: system2::system2 = unsafe { system2::system2::from_ptr(0x9000_01c0usize as _) };
 #[cfg(feature = "rt")]
@@ -1486,6 +1492,840 @@ pub mod system2 {
         impl defmt::Format for marker {
             fn format(&self, f: defmt::Formatter) {
                 defmt::write!(f, "marker {{ marker: {=u32:?} }}", self.marker())
+            }
+        }
+    }
+}
+pub mod ws2812_1 {
+    #[doc = "ws2812 RGB LED block."]
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    pub struct ws2812_1 {
+        ptr: *mut u8,
+    }
+    unsafe impl Send for ws2812_1 {}
+    unsafe impl Sync for ws2812_1 {}
+    impl ws2812_1 {
+        #[inline(always)]
+        pub const unsafe fn from_ptr(ptr: *mut ()) -> Self {
+            Self { ptr: ptr as _ }
+        }
+        #[inline(always)]
+        pub const fn as_ptr(&self) -> *mut () {
+            self.ptr as _
+        }
+        #[doc = "led control register."]
+        #[inline(always)]
+        pub const fn ws_ctrl(self) -> crate::common::Reg<regs::ws_ctrl, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x0usize) as _) }
+        }
+        #[doc = "ws2812 transmit configuration."]
+        #[inline(always)]
+        pub const fn ws_tx_config(
+            self,
+        ) -> crate::common::Reg<regs::ws_tx_config, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x04usize) as _) }
+        }
+        #[doc = "rgb(w) input."]
+        #[inline(always)]
+        pub const fn ws_data_0(self) -> crate::common::Reg<regs::ws_data_0, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x10usize) as _) }
+        }
+        #[doc = "rgb(w) input."]
+        #[inline(always)]
+        pub const fn ws_data_1(self) -> crate::common::Reg<regs::ws_data_1, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x14usize) as _) }
+        }
+        #[doc = "rgb(w) input."]
+        #[inline(always)]
+        pub const fn ws_data_2(self) -> crate::common::Reg<regs::ws_data_2, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x18usize) as _) }
+        }
+        #[doc = "rgb(w) input."]
+        #[inline(always)]
+        pub const fn ws_data_3(self) -> crate::common::Reg<regs::ws_data_3, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x1cusize) as _) }
+        }
+        #[doc = "rgb(w) input."]
+        #[inline(always)]
+        pub const fn ws_data_4(self) -> crate::common::Reg<regs::ws_data_4, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x20usize) as _) }
+        }
+        #[doc = "rgb(w) input."]
+        #[inline(always)]
+        pub const fn ws_data_5(self) -> crate::common::Reg<regs::ws_data_5, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x24usize) as _) }
+        }
+        #[doc = "rgb(w) input."]
+        #[inline(always)]
+        pub const fn ws_data_6(self) -> crate::common::Reg<regs::ws_data_6, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x28usize) as _) }
+        }
+        #[doc = "rgb(w) input."]
+        #[inline(always)]
+        pub const fn ws_data_7(self) -> crate::common::Reg<regs::ws_data_7, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x2cusize) as _) }
+        }
+    }
+    pub mod regs {
+        #[doc = "led control register."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct ws_ctrl(pub u32);
+        impl ws_ctrl {
+            #[doc = "enable led output (1 = on)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enabled(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "enable led output (1 = on)."]
+            #[inline(always)]
+            pub const fn set_enabled(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "ws2812 color mode."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn mode(&self) -> super::vals::mode {
+                let val = (self.0 >> 1usize) & 0x03;
+                super::vals::mode::from_bits(val as u8)
+            }
+            #[doc = "ws2812 color mode."]
+            #[inline(always)]
+            pub const fn set_mode(&mut self, val: super::vals::mode) {
+                self.0 = (self.0 & !(0x03 << 1usize)) | (((val.to_bits() as u32) & 0x03) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 3usize) & 0x1fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x1fff_ffff << 3usize)) | (((val as u32) & 0x1fff_ffff) << 3usize);
+            }
+        }
+        impl Default for ws_ctrl {
+            #[inline(always)]
+            fn default() -> ws_ctrl {
+                ws_ctrl(0)
+            }
+        }
+        impl core::fmt::Debug for ws_ctrl {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("ws_ctrl")
+                    .field("enabled", &self.enabled())
+                    .field("mode", &self.mode())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for ws_ctrl {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "ws_ctrl {{ enabled: {=bool:?}, mode: {:?}, reserved: {=u32:?} }}",
+                    self.enabled(),
+                    self.mode(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "rgb(w) input."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct ws_data_0(pub u32);
+        impl ws_data_0 {
+            #[must_use]
+            #[inline(always)]
+            pub const fn b(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_b(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn g(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_g(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn r(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_r(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 16usize)) | (((val as u32) & 0xff) << 16usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn w(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_w(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 24usize)) | (((val as u32) & 0xff) << 24usize);
+            }
+        }
+        impl Default for ws_data_0 {
+            #[inline(always)]
+            fn default() -> ws_data_0 {
+                ws_data_0(0)
+            }
+        }
+        impl core::fmt::Debug for ws_data_0 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("ws_data_0")
+                    .field("b", &self.b())
+                    .field("g", &self.g())
+                    .field("r", &self.r())
+                    .field("w", &self.w())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for ws_data_0 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "ws_data_0 {{ b: {=u8:?}, g: {=u8:?}, r: {=u8:?}, w: {=u8:?} }}",
+                    self.b(),
+                    self.g(),
+                    self.r(),
+                    self.w()
+                )
+            }
+        }
+        #[doc = "rgb(w) input."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct ws_data_1(pub u32);
+        impl ws_data_1 {
+            #[must_use]
+            #[inline(always)]
+            pub const fn b(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_b(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn g(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_g(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn r(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_r(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 16usize)) | (((val as u32) & 0xff) << 16usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn w(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_w(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 24usize)) | (((val as u32) & 0xff) << 24usize);
+            }
+        }
+        impl Default for ws_data_1 {
+            #[inline(always)]
+            fn default() -> ws_data_1 {
+                ws_data_1(0)
+            }
+        }
+        impl core::fmt::Debug for ws_data_1 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("ws_data_1")
+                    .field("b", &self.b())
+                    .field("g", &self.g())
+                    .field("r", &self.r())
+                    .field("w", &self.w())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for ws_data_1 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "ws_data_1 {{ b: {=u8:?}, g: {=u8:?}, r: {=u8:?}, w: {=u8:?} }}",
+                    self.b(),
+                    self.g(),
+                    self.r(),
+                    self.w()
+                )
+            }
+        }
+        #[doc = "rgb(w) input."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct ws_data_2(pub u32);
+        impl ws_data_2 {
+            #[must_use]
+            #[inline(always)]
+            pub const fn b(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_b(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn g(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_g(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn r(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_r(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 16usize)) | (((val as u32) & 0xff) << 16usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn w(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_w(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 24usize)) | (((val as u32) & 0xff) << 24usize);
+            }
+        }
+        impl Default for ws_data_2 {
+            #[inline(always)]
+            fn default() -> ws_data_2 {
+                ws_data_2(0)
+            }
+        }
+        impl core::fmt::Debug for ws_data_2 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("ws_data_2")
+                    .field("b", &self.b())
+                    .field("g", &self.g())
+                    .field("r", &self.r())
+                    .field("w", &self.w())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for ws_data_2 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "ws_data_2 {{ b: {=u8:?}, g: {=u8:?}, r: {=u8:?}, w: {=u8:?} }}",
+                    self.b(),
+                    self.g(),
+                    self.r(),
+                    self.w()
+                )
+            }
+        }
+        #[doc = "rgb(w) input."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct ws_data_3(pub u32);
+        impl ws_data_3 {
+            #[must_use]
+            #[inline(always)]
+            pub const fn b(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_b(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn g(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_g(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn r(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_r(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 16usize)) | (((val as u32) & 0xff) << 16usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn w(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_w(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 24usize)) | (((val as u32) & 0xff) << 24usize);
+            }
+        }
+        impl Default for ws_data_3 {
+            #[inline(always)]
+            fn default() -> ws_data_3 {
+                ws_data_3(0)
+            }
+        }
+        impl core::fmt::Debug for ws_data_3 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("ws_data_3")
+                    .field("b", &self.b())
+                    .field("g", &self.g())
+                    .field("r", &self.r())
+                    .field("w", &self.w())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for ws_data_3 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "ws_data_3 {{ b: {=u8:?}, g: {=u8:?}, r: {=u8:?}, w: {=u8:?} }}",
+                    self.b(),
+                    self.g(),
+                    self.r(),
+                    self.w()
+                )
+            }
+        }
+        #[doc = "rgb(w) input."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct ws_data_4(pub u32);
+        impl ws_data_4 {
+            #[must_use]
+            #[inline(always)]
+            pub const fn b(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_b(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn g(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_g(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn r(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_r(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 16usize)) | (((val as u32) & 0xff) << 16usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn w(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_w(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 24usize)) | (((val as u32) & 0xff) << 24usize);
+            }
+        }
+        impl Default for ws_data_4 {
+            #[inline(always)]
+            fn default() -> ws_data_4 {
+                ws_data_4(0)
+            }
+        }
+        impl core::fmt::Debug for ws_data_4 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("ws_data_4")
+                    .field("b", &self.b())
+                    .field("g", &self.g())
+                    .field("r", &self.r())
+                    .field("w", &self.w())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for ws_data_4 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "ws_data_4 {{ b: {=u8:?}, g: {=u8:?}, r: {=u8:?}, w: {=u8:?} }}",
+                    self.b(),
+                    self.g(),
+                    self.r(),
+                    self.w()
+                )
+            }
+        }
+        #[doc = "rgb(w) input."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct ws_data_5(pub u32);
+        impl ws_data_5 {
+            #[must_use]
+            #[inline(always)]
+            pub const fn b(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_b(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn g(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_g(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn r(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_r(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 16usize)) | (((val as u32) & 0xff) << 16usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn w(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_w(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 24usize)) | (((val as u32) & 0xff) << 24usize);
+            }
+        }
+        impl Default for ws_data_5 {
+            #[inline(always)]
+            fn default() -> ws_data_5 {
+                ws_data_5(0)
+            }
+        }
+        impl core::fmt::Debug for ws_data_5 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("ws_data_5")
+                    .field("b", &self.b())
+                    .field("g", &self.g())
+                    .field("r", &self.r())
+                    .field("w", &self.w())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for ws_data_5 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "ws_data_5 {{ b: {=u8:?}, g: {=u8:?}, r: {=u8:?}, w: {=u8:?} }}",
+                    self.b(),
+                    self.g(),
+                    self.r(),
+                    self.w()
+                )
+            }
+        }
+        #[doc = "rgb(w) input."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct ws_data_6(pub u32);
+        impl ws_data_6 {
+            #[must_use]
+            #[inline(always)]
+            pub const fn b(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_b(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn g(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_g(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn r(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_r(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 16usize)) | (((val as u32) & 0xff) << 16usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn w(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_w(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 24usize)) | (((val as u32) & 0xff) << 24usize);
+            }
+        }
+        impl Default for ws_data_6 {
+            #[inline(always)]
+            fn default() -> ws_data_6 {
+                ws_data_6(0)
+            }
+        }
+        impl core::fmt::Debug for ws_data_6 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("ws_data_6")
+                    .field("b", &self.b())
+                    .field("g", &self.g())
+                    .field("r", &self.r())
+                    .field("w", &self.w())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for ws_data_6 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "ws_data_6 {{ b: {=u8:?}, g: {=u8:?}, r: {=u8:?}, w: {=u8:?} }}",
+                    self.b(),
+                    self.g(),
+                    self.r(),
+                    self.w()
+                )
+            }
+        }
+        #[doc = "rgb(w) input."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct ws_data_7(pub u32);
+        impl ws_data_7 {
+            #[must_use]
+            #[inline(always)]
+            pub const fn b(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_b(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn g(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_g(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn r(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_r(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 16usize)) | (((val as u32) & 0xff) << 16usize);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn w(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_w(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 24usize)) | (((val as u32) & 0xff) << 24usize);
+            }
+        }
+        impl Default for ws_data_7 {
+            #[inline(always)]
+            fn default() -> ws_data_7 {
+                ws_data_7(0)
+            }
+        }
+        impl core::fmt::Debug for ws_data_7 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("ws_data_7")
+                    .field("b", &self.b())
+                    .field("g", &self.g())
+                    .field("r", &self.r())
+                    .field("w", &self.w())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for ws_data_7 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "ws_data_7 {{ b: {=u8:?}, g: {=u8:?}, r: {=u8:?}, w: {=u8:?} }}",
+                    self.b(),
+                    self.g(),
+                    self.r(),
+                    self.w()
+                )
+            }
+        }
+        #[doc = "ws2812 transmit configuration."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct ws_tx_config(pub u32);
+        impl ws_tx_config {
+            #[must_use]
+            #[inline(always)]
+            pub const fn leds_count(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[inline(always)]
+            pub const fn set_leds_count(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for ws_tx_config {
+            #[inline(always)]
+            fn default() -> ws_tx_config {
+                ws_tx_config(0)
+            }
+        }
+        impl core::fmt::Debug for ws_tx_config {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("ws_tx_config")
+                    .field("leds_count", &self.leds_count())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for ws_tx_config {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "ws_tx_config {{ leds_count: {=u8:?}, reserved: {=u32:?} }}",
+                    self.leds_count(),
+                    self.reserved()
+                )
+            }
+        }
+    }
+    pub mod vals {
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum mode {
+            #[doc = "rgb ordering."]
+            RGB = 0x0,
+            #[doc = "rgbw ordering."]
+            RGBW = 0x01,
+            #[doc = "grb ordering."]
+            GRB = 0x02,
+            #[doc = "grbw ordering."]
+            GRBW = 0x03,
+        }
+        impl mode {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> mode {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for mode {
+            #[inline(always)]
+            fn from(val: u8) -> mode {
+                mode::from_bits(val)
+            }
+        }
+        impl From<mode> for u8 {
+            #[inline(always)]
+            fn from(val: mode) -> u8 {
+                mode::to_bits(val)
             }
         }
     }
