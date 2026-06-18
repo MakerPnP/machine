@@ -41,6 +41,7 @@ use {defmt_rtt as _, panic_probe as _};
 #[cfg(feature = "morse_startup")]
 use morse_core::MorseSymbol;
 use firmware_makerpnpcontrolcore::fpga::FpgaCore;
+use firmware_makerpnpcontrolcore::fpga::ws2812::ColorOrdering;
 use firmware_makerpnpcontrolcore::rgb::rainbow_wave;
 use firmware_makerpnpcontrolcore::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
 use firmware_makerpnpcontrolcore::stepper::tmc5160::Tmc5160Stepper;
@@ -389,6 +390,39 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         // read encoder values
         fpga.read_encoders(&mut encoder_mem);
         debug!("Encoder values after explicit set (u32):\n{:08x}", encoder_mem);
+    }
+
+
+    if true {
+        // 4x WS2812 leds with GRB color order.
+        let mut led_controller_0 = fpga.led_controller_0()
+            .with_led_count(4)
+            .with_mode(ColorOrdering::GRB)
+            .enable();
+
+        led_controller_0.update_leds(&[
+            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF
+        ]);
+
+        // External LED strip - 32 leds
+        let mut led_controller_1 = fpga.led_controller_1()
+            .with_led_count(32)
+            .with_mode(ColorOrdering::GRB)
+            .enable();
+
+        led_controller_1.update_leds(&[
+            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+
+            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+
+            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+
+            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+            0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
+        ]);
     }
 
 

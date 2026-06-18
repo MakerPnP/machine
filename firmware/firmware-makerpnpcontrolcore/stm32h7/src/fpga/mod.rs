@@ -22,6 +22,7 @@ mod registers {
     pub const REG_BUZZER_CTRL: u16 = 0x00C0;
 }
 pub use registers::*;
+use crate::fpga::ws2812::Ws2812LedControllerBuilder;
 
 pub struct FpgaCore<I: Instance> {
     ospi: Ospi<'static, I, Blocking>,
@@ -337,7 +338,7 @@ impl<I: Instance> FpgaCore<I> {
             defmt::info!("{:03x}: {:08x}", i * 4, val);
         }
     }
-    
+
     pub fn reset_encoders(&mut self) {
         fpga_pac::ENCODERS.enc_ctrl().modify(|w| {
             w.set_reset(true);
@@ -361,6 +362,14 @@ impl<I: Instance> FpgaCore<I> {
         fpga_pac::ENCODERS.enc_set_count_x().write(|w| { w.set_value(values[3])});
         fpga_pac::ENCODERS.enc_set_count_y().write(|w| { w.set_value(values[4])});
         fpga_pac::ENCODERS.enc_set_count_z().write(|w| { w.set_value(values[5])});
+    }
+
+    pub fn led_controller_0(&self) -> Ws2812LedControllerBuilder {
+        Ws2812LedControllerBuilder::new(0)
+    }
+
+    pub fn led_controller_1(&self) -> Ws2812LedControllerBuilder {
+        Ws2812LedControllerBuilder::new(1)
     }
 }
 
@@ -390,6 +399,95 @@ impl FpgaVersion {
             minor: bytes[1],
             patch: bytes[2],
             build: bytes[3],
+        }
+    }
+}
+
+pub mod ws2812 {
+    pub struct Ws2812LedController {
+        instance: fpga_pac::ws2812_1::ws2812_1,
+    }
+
+    impl Ws2812LedController {
+        pub fn update_leds(&mut self, wrgb: &[u32]) {
+            for wrgb in wrgb.iter() {
+                self.instance.ws_data_0().write(|w| {
+                    w.0 = *wrgb;
+                });
+            }
+        }
+    }
+
+    impl Ws2812LedController {
+
+        /// use the builder to create a configured instance
+        fn new(instance: fpga_pac::ws2812_1::ws2812_1) -> Self {
+            Self {
+                instance
+            }
+        }
+    }
+
+    pub struct Ws2812LedControllerBuilder {
+        instance: usize,
+        led_count: u8,
+        color_ordering: ColorOrdering,
+    }
+
+    impl Ws2812LedControllerBuilder {
+        pub fn new(instance: usize) -> Self {
+            Self {
+                instance,
+                led_count: 0,
+                color_ordering: ColorOrdering::RGB,
+            }
+        }
+
+        pub fn with_led_count(mut self, led_count: u8) -> Self {
+            self.led_count = led_count;
+            self
+        }
+
+        pub fn with_mode(mut self, color_ordering: ColorOrdering) -> Self {
+            self.color_ordering = color_ordering;
+            self
+        }
+
+        pub fn enable(self) -> Ws2812LedController {
+            let instance = match self.instance {
+                0 => fpga_pac::WS2812_1,
+                1 => fpga_pac::WS2812_2,
+                _ => panic!("Invalid instance"),
+            };
+
+            instance.ws_ctrl().modify(|w| {
+                w.set_enabled(true);
+                w.set_mode(self.color_ordering.into());
+            });
+            instance.ws_tx_config().write(|w| {
+                w.set_leds_count(self.led_count);
+            });
+
+            Ws2812LedController::new(instance)
+        }
+    }
+
+    #[repr(u8)]
+    pub enum ColorOrdering {
+        RGB,
+        RGBW,
+        GRB,
+        GRBW,
+    }
+
+    impl Into<fpga_pac::ws2812_1::vals::mode> for ColorOrdering {
+        fn into(self) -> fpga_pac::ws2812_1::vals::mode {
+            match self {
+                ColorOrdering::RGB => fpga_pac::ws2812_1::vals::mode::RGB,
+                ColorOrdering::RGBW => fpga_pac::ws2812_1::vals::mode::RGBW,
+                ColorOrdering::GRB => fpga_pac::ws2812_1::vals::mode::GRB,
+                ColorOrdering::GRBW => fpga_pac::ws2812_1::vals::mode::GRBW,
+            }
         }
     }
 }
