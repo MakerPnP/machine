@@ -287,7 +287,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         debug!("FPGA register map (u32):\n{:08x}", fpga_mem);
     }
 
-    if true {
+    if false {
         let mut encoder_mem: [u32; 6] = [0xdead_beef; 6];
 
         for _ in 0..10 {
@@ -303,7 +303,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         }
     }
 
-    if true {
+    if false {
         for _ in 0..10 {
             let mut ctrl_and_tx_config = [0x0000_0000; 2];
 
@@ -336,7 +336,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         }
     }
 
-    if true {
+    if false {
         info!("Waiting for either button to be pressed.");
         let initial_buttons = fpga.read_buttons();
         loop {
