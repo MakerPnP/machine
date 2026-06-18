@@ -91,7 +91,7 @@ impl<I: Instance> FpgaCore<I> {
             ..Default::default()
         };
         self.ospi.blocking_read(buffer, transaction).unwrap();
-        trace!("FPGA block read. address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", address, buffer.len(), buffer);
+        defmt::trace!("FPGA block read. address: 0x{:04x}, length: 0x{:04x} data: \n{:02x}", address, buffer.len(), buffer);
     }
 
     pub fn read_block_u32(&mut self, address: u16, buffer: &mut [u32]) {
@@ -130,7 +130,7 @@ impl<I: Instance> FpgaCore<I> {
         };
         self.ospi.blocking_read(&mut buffer, transaction).unwrap();
         let value = BigEndian::read_u32(&buffer);
-        trace!("FPGA read_u32. address: 0x{:04x}, length: 0x{:04x} value: {:04x}", address, buffer.len(), buffer);
+        trace!("FPGA read_u32. address: 0x{:04x}, length: 0x{:04x} value: {:02x}", address, buffer.len(), buffer);
 
         value
     }
