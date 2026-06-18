@@ -9,10 +9,6 @@ default = ["defmt"]
 defmt = [
     "dep:defmt"
 ]
-# remove this once chiptool doesn't emit RT stuf.
-rt = []
 
 [dependencies]
-# only required due to chiptool generating interrupts, which we don't need and can't turn off, yet...
-cortex-m           = { version = "0.7.7"}
 defmt              = { version = "1.0.1", optional = true }
