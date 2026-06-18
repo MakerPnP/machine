@@ -238,6 +238,333 @@
     </peripheral>
 
 
+    <!-- encoders block (0x0100 - 0x013f) -->
+    <peripheral>
+      <name>encoders</name>
+      <description>encoders control block</description>
+      <baseAddress>0x90000100</baseAddress>
+      <addressBlock>
+        <offset>0x0</offset>
+        <size>0x40</size>
+        <usage>registers</usage>
+      </addressBlock>
+
+      <registers>
+
+        <register>
+          <name>enc_ctrl</name>
+          <description>encoders control register</description>
+          <addressOffset>0x0000</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>reset</name>
+              <description>reset encoders (1 = reset)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>enc_set_count_a</name>
+          <description>set encoder a counter</description>
+          <addressOffset>0x0004</addressOffset>
+          <size>32</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>enc_set_count_b</name>
+          <description>set encoder b counter</description>
+          <addressOffset>0x0008</addressOffset>
+          <size>32</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>enc_set_count_c</name>
+          <description>set encoder c counter</description>
+          <addressOffset>0x000c</addressOffset>
+          <size>32</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>enc_set_count_x</name>
+          <description>set encoder x counter</description>
+          <addressOffset>0x0010</addressOffset>
+          <size>32</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>enc_set_count_y</name>
+          <description>set encoder y counter</description>
+          <addressOffset>0x0014</addressOffset>
+          <size>32</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>enc_set_count_z</name>
+          <description>set encoder z counter</description>
+          <addressOffset>0x0018</addressOffset>
+          <size>32</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>enc_count_a</name>
+          <description>encoder a counter</description>
+          <addressOffset>0x0020</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>enc_count_b</name>
+          <description>encoder b counter</description>
+          <addressOffset>0x0024</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>enc_count_c</name>
+          <description>encoder c counter</description>
+          <addressOffset>0x0028</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>enc_count_x</name>
+          <description>encoder x counter</description>
+          <addressOffset>0x002c</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>enc_count_y</name>
+          <description>encoder y counter</description>
+          <addressOffset>0x0030</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>enc_count_z</name>
+          <description>encoder z counter</description>
+          <addressOffset>0x0034</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>value</name>
+              <description>encoder counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, ignored</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+      </registers>
+    </peripheral>
+
     <!-- system2 block (0x01c0 - 0x01ff) -->
     <peripheral>
       <name>system2</name>

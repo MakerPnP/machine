@@ -11,6 +11,9 @@ pub const LED: led::led = unsafe { led::led::from_ptr(0x9000_0040usize as _) };
 pub const IO: io::io = unsafe { io::io::from_ptr(0x9000_0080usize as _) };
 #[doc = "buzzer control block"]
 pub const BUZZER: buzzer::buzzer = unsafe { buzzer::buzzer::from_ptr(0x9000_00c0usize as _) };
+#[doc = "encoders control block"]
+pub const ENCODERS: encoders::encoders =
+    unsafe { encoders::encoders::from_ptr(0x9000_0100usize as _) };
 #[doc = "system block 2"]
 pub const SYSTEM2: system2::system2 = unsafe { system2::system2::from_ptr(0x9000_01c0usize as _) };
 #[cfg(feature = "rt")]
@@ -227,6 +230,820 @@ pub mod common {
             let mut val = self.read();
             f(&mut val);
             self.write_value(val);
+        }
+    }
+}
+pub mod encoders {
+    #[doc = "encoders control block."]
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    pub struct encoders {
+        ptr: *mut u8,
+    }
+    unsafe impl Send for encoders {}
+    unsafe impl Sync for encoders {}
+    impl encoders {
+        #[inline(always)]
+        pub const unsafe fn from_ptr(ptr: *mut ()) -> Self {
+            Self { ptr: ptr as _ }
+        }
+        #[inline(always)]
+        pub const fn as_ptr(&self) -> *mut () {
+            self.ptr as _
+        }
+        #[doc = "encoders control register."]
+        #[inline(always)]
+        pub const fn enc_ctrl(self) -> crate::common::Reg<regs::enc_ctrl, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x0usize) as _) }
+        }
+        #[doc = "set encoder a counter."]
+        #[inline(always)]
+        pub const fn enc_set_count_a(
+            self,
+        ) -> crate::common::Reg<regs::enc_set_count_a, crate::common::W> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x04usize) as _) }
+        }
+        #[doc = "set encoder b counter."]
+        #[inline(always)]
+        pub const fn enc_set_count_b(
+            self,
+        ) -> crate::common::Reg<regs::enc_set_count_b, crate::common::W> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x08usize) as _) }
+        }
+        #[doc = "set encoder c counter."]
+        #[inline(always)]
+        pub const fn enc_set_count_c(
+            self,
+        ) -> crate::common::Reg<regs::enc_set_count_c, crate::common::W> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x0cusize) as _) }
+        }
+        #[doc = "set encoder x counter."]
+        #[inline(always)]
+        pub const fn enc_set_count_x(
+            self,
+        ) -> crate::common::Reg<regs::enc_set_count_x, crate::common::W> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x10usize) as _) }
+        }
+        #[doc = "set encoder y counter."]
+        #[inline(always)]
+        pub const fn enc_set_count_y(
+            self,
+        ) -> crate::common::Reg<regs::enc_set_count_y, crate::common::W> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x14usize) as _) }
+        }
+        #[doc = "set encoder z counter."]
+        #[inline(always)]
+        pub const fn enc_set_count_z(
+            self,
+        ) -> crate::common::Reg<regs::enc_set_count_z, crate::common::W> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x18usize) as _) }
+        }
+        #[doc = "encoder a counter."]
+        #[inline(always)]
+        pub const fn enc_count_a(self) -> crate::common::Reg<regs::enc_count_a, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x20usize) as _) }
+        }
+        #[doc = "encoder b counter."]
+        #[inline(always)]
+        pub const fn enc_count_b(self) -> crate::common::Reg<regs::enc_count_b, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x24usize) as _) }
+        }
+        #[doc = "encoder c counter."]
+        #[inline(always)]
+        pub const fn enc_count_c(self) -> crate::common::Reg<regs::enc_count_c, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x28usize) as _) }
+        }
+        #[doc = "encoder x counter."]
+        #[inline(always)]
+        pub const fn enc_count_x(self) -> crate::common::Reg<regs::enc_count_x, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x2cusize) as _) }
+        }
+        #[doc = "encoder y counter."]
+        #[inline(always)]
+        pub const fn enc_count_y(self) -> crate::common::Reg<regs::enc_count_y, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x30usize) as _) }
+        }
+        #[doc = "encoder z counter."]
+        #[inline(always)]
+        pub const fn enc_count_z(self) -> crate::common::Reg<regs::enc_count_z, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x34usize) as _) }
+        }
+    }
+    pub mod regs {
+        #[doc = "encoder a counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_count_a(pub u32);
+        impl enc_count_a {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_count_a {
+            #[inline(always)]
+            fn default() -> enc_count_a {
+                enc_count_a(0)
+            }
+        }
+        impl core::fmt::Debug for enc_count_a {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_count_a")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_count_a {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_count_a {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "encoder b counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_count_b(pub u32);
+        impl enc_count_b {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_count_b {
+            #[inline(always)]
+            fn default() -> enc_count_b {
+                enc_count_b(0)
+            }
+        }
+        impl core::fmt::Debug for enc_count_b {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_count_b")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_count_b {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_count_b {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "encoder c counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_count_c(pub u32);
+        impl enc_count_c {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_count_c {
+            #[inline(always)]
+            fn default() -> enc_count_c {
+                enc_count_c(0)
+            }
+        }
+        impl core::fmt::Debug for enc_count_c {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_count_c")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_count_c {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_count_c {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "encoder x counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_count_x(pub u32);
+        impl enc_count_x {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_count_x {
+            #[inline(always)]
+            fn default() -> enc_count_x {
+                enc_count_x(0)
+            }
+        }
+        impl core::fmt::Debug for enc_count_x {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_count_x")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_count_x {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_count_x {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "encoder y counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_count_y(pub u32);
+        impl enc_count_y {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_count_y {
+            #[inline(always)]
+            fn default() -> enc_count_y {
+                enc_count_y(0)
+            }
+        }
+        impl core::fmt::Debug for enc_count_y {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_count_y")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_count_y {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_count_y {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "encoder z counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_count_z(pub u32);
+        impl enc_count_z {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_count_z {
+            #[inline(always)]
+            fn default() -> enc_count_z {
+                enc_count_z(0)
+            }
+        }
+        impl core::fmt::Debug for enc_count_z {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_count_z")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_count_z {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_count_z {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "encoders control register."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_ctrl(pub u32);
+        impl enc_ctrl {
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0x7fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x7fff_ffff << 0usize)) | (((val as u32) & 0x7fff_ffff) << 0usize);
+            }
+            #[doc = "reset encoders (1 = reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reset(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "reset encoders (1 = reset)."]
+            #[inline(always)]
+            pub const fn set_reset(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+        }
+        impl Default for enc_ctrl {
+            #[inline(always)]
+            fn default() -> enc_ctrl {
+                enc_ctrl(0)
+            }
+        }
+        impl core::fmt::Debug for enc_ctrl {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_ctrl")
+                    .field("reserved", &self.reserved())
+                    .field("reset", &self.reset())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_ctrl {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_ctrl {{ reserved: {=u32:?}, reset: {=bool:?} }}",
+                    self.reserved(),
+                    self.reset()
+                )
+            }
+        }
+        #[doc = "set encoder a counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_set_count_a(pub u32);
+        impl enc_set_count_a {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_set_count_a {
+            #[inline(always)]
+            fn default() -> enc_set_count_a {
+                enc_set_count_a(0)
+            }
+        }
+        impl core::fmt::Debug for enc_set_count_a {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_set_count_a")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_set_count_a {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_set_count_a {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "set encoder b counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_set_count_b(pub u32);
+        impl enc_set_count_b {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_set_count_b {
+            #[inline(always)]
+            fn default() -> enc_set_count_b {
+                enc_set_count_b(0)
+            }
+        }
+        impl core::fmt::Debug for enc_set_count_b {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_set_count_b")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_set_count_b {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_set_count_b {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "set encoder c counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_set_count_c(pub u32);
+        impl enc_set_count_c {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_set_count_c {
+            #[inline(always)]
+            fn default() -> enc_set_count_c {
+                enc_set_count_c(0)
+            }
+        }
+        impl core::fmt::Debug for enc_set_count_c {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_set_count_c")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_set_count_c {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_set_count_c {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "set encoder x counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_set_count_x(pub u32);
+        impl enc_set_count_x {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_set_count_x {
+            #[inline(always)]
+            fn default() -> enc_set_count_x {
+                enc_set_count_x(0)
+            }
+        }
+        impl core::fmt::Debug for enc_set_count_x {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_set_count_x")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_set_count_x {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_set_count_x {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "set encoder y counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_set_count_y(pub u32);
+        impl enc_set_count_y {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_set_count_y {
+            #[inline(always)]
+            fn default() -> enc_set_count_y {
+                enc_set_count_y(0)
+            }
+        }
+        impl core::fmt::Debug for enc_set_count_y {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_set_count_y")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_set_count_y {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_set_count_y {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "set encoder z counter."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct enc_set_count_z(pub u32);
+        impl enc_set_count_z {
+            #[doc = "encoder counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "encoder counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "reserved, ignored."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, ignored."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for enc_set_count_z {
+            #[inline(always)]
+            fn default() -> enc_set_count_z {
+                enc_set_count_z(0)
+            }
+        }
+        impl core::fmt::Debug for enc_set_count_z {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("enc_set_count_z")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for enc_set_count_z {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "enc_set_count_z {{ value: {=u16:?}, reserved: {=u16:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
         }
     }
 }
