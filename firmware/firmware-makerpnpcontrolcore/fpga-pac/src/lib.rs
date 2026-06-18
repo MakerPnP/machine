@@ -102,7 +102,47 @@ pub mod buzzer {
     }
 }
 pub mod common {
+
+    // The QuadSPI peripheral has a FIFO that cannot be turned off and is always used.
+    //
+    // The FIFO is a block of 0x20 bytes.
+    // * On the first read from the block, say at 0x84, the hardware issues a block read start at
+    //   address 0x84 and fills up-to the length of the FIFI.
+    // * A second read from an address in the block will NOT trigger a new octospi transaction,
+    //   but will instead read the data from the FIFO.
+    //
+    // This means data in the FIFO will be stale, polling registers in the same block will not work.
+    //
+    // To workaround this, we must check if the second read is in the same block as the first read,
+    // and if IS in the same block, then we need to issue a dummy read OUTSIDE of the block, then
+    // issue the actual read afterwards, this cases the FIFO to be fulled by the data from the dummy
+    // read so that when the actual read is requested the FIFO will be filled again.
+    //
+    // Safety:
+    //
+    // An AtomicUsize is used to keep track of the last block read, which it makes it thread-safe.
+    // FPGA register must not have side-effects on reads.
+
+    static LAST_BLOCK: AtomicUsize = AtomicUsize::new(usize::MAX);
+    const QUAD_SPI_FIFO_DEPTH: usize = 0x20;
+    const FPGA_MEMORY_SIZE: usize = 0x0000_0200;
+
+    // Note: This assumes OCTOSPI1 is used
+    const DUMMY_READ_ADDRESS: usize = 0x9000_0000 + FPGA_MEMORY_SIZE;
+
+    #[inline(always)]
+    fn compute_block(addr: usize) -> usize {
+        addr & !(QUAD_SPI_FIFO_DEPTH - 1)
+    }
+
+    #[inline(always)]
+    fn dummy_read() {
+        unsafe { core::ptr::read_volatile(DUMMY_READ_ADDRESS as *mut u8); }
+    }
+
     use core::marker::PhantomData;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
     #[derive(Copy, Clone, PartialEq, Eq)]
     pub struct RW;
     #[derive(Copy, Clone, PartialEq, Eq)]
@@ -147,12 +187,28 @@ pub mod common {
             self.ptr as _
         }
     }
+
+    /// OctoSPI-safe read implementation, with OctoSPI FIFO bypass.
     impl<T: Copy, A: Read> Reg<T, A> {
         #[inline(always)]
         pub fn read(&self) -> T {
+            let addr = self.ptr as usize;
+            let block = compute_block(addr);
+
+            let last = LAST_BLOCK.load(Ordering::Relaxed);
+
+            if last == block {
+                // Same FIFO block → force flush
+                dummy_read();
+            }
+
+            // Update block AFTER dummy logic
+            LAST_BLOCK.store(block, Ordering::Relaxed);
+
             unsafe { (self.ptr as *mut T).read_volatile() }
         }
     }
+
     impl<T: Copy, A: Write> Reg<T, A> {
         #[inline(always)]
         pub fn write_value(&self, val: T) {
