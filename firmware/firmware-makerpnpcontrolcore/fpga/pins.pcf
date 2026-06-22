@@ -40,6 +40,25 @@ set_io QUADSPI1_NCS L16
 set_io USER_0 K11
 set_io USER_1 P13
 
+### Optical Inputs ###
+set_io OEC1 R5
+set_io OEC2 T2
+
+### Optical outputs ###
+set_io IAK1 T3
+set_io IAK2 R3
+
+### Digital Inputs ###
+set_io DIN[0] N2
+set_io DIN[1] N3
+set_io DIN[2] R4
+set_io DIN[3] P4
+set_io DIN[4] P5
+set_io DIN[5] P6
+set_io DIN[6] P7
+set_io DIN[7] N7
+
+
 ### Logic Analyzer ###
 set_io LA_IO[0] P2
 set_io LA_IO[1] R1
