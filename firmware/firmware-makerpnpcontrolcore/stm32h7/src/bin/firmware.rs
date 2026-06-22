@@ -378,6 +378,22 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     }
 
     if true {
+        // estop is pulled to 3V3 when it is connected, but not activated.
+        // when it is pressed it will be pulled to GND.  We pull to GND by default.
+        // so that a valid signal can be read when the base board is not connected properly which
+        // results in the same condition as if the ESTOP switch was pressed.
+        let estop = Input::new(p.PG4, Pull::Down);
+
+        info!("Waiting for ESTOP be be released (or re-connected).");
+        loop {
+            if estop.is_low() {
+                break;
+            }
+            Timer::after(Duration::from_millis(100)).await;
+        }
+    }
+
+    if true {
         let mut encoder_mem: [u16; 6] = [0xc0de; 6];
 
         fpga.reset_encoders();
