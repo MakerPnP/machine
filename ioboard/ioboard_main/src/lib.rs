@@ -41,32 +41,45 @@ pub async fn run<STEPPER: Stepper>(mut stepper: STEPPER) {
 
     let trajectory_units: &[(f64, f64, f64, f64)] = &[
         // (degrees, max_jerk, max_acc, max_vel)
-        (90.0, 10000.0, 10000.0, 10000.0),
-        (0.0, 10000.0, 10000.0, 10000.0),
-        (180.0, 50000.0, 50000.0, 50000.0),
-        (0.0, 50000.0, 50000.0, 50000.0),
-        (360.0, 100000.0, 100000.0, 100000.0),
-        (0.0, 100000.0, 100000.0, 100000.0),
+
+        // 0-1 encoder resets
+        // (90.0, 5000.0, 10000.0, 10000.0),
+        // (0.0, 5000.0, 10000.0, 10000.0),
+
+        // 1-2 encoder resets
+        (540.0, 5000.0, 10000.0, 10000.0),
+        (0.0, 5000.0, 10000.0, 10000.0),
+
+        // various different settings
+        // (1440.0, 5000.0, 10000.0, 10000.0),
+        // (0.0, 5000.0, 10000.0, 10000.0),
+        // (1440.0, 5000.0, 15000.0, 10000.0),
+        // (0.0, 5000.0, 15000.0, 10000.0),
+        // (1440.0, 5000.0, 10000.0, 15000.0),
+        // (0.0, 5000.0, 10000.0, 15000.0),
     ];
 
     let steps_per_unit = motor_steps as f64 / 360.0;
 
     loop {
-        for i in 0..2 {
-            info!("Run simple loop {}", i);
-            stepper.enable().unwrap();
-            Timer::after(Duration::from_millis(100)).await;
-            if run_simple_loop(&mut stepper, move_steps)
-                .await
-                .is_err()
-            {
-                break;
+        if false {
+            for i in 0..2 {
+                info!("Run simple loop {}", i);
+                stepper.enable().unwrap();
+                Timer::after(Duration::from_millis(100)).await;
+                if run_simple_loop(&mut stepper, move_steps)
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+                stepper.disable().unwrap();
+                info!("Stopped loop {}", i);
+                Timer::after(Duration::from_millis(1000)).await;
             }
-            stepper.disable().unwrap();
-            Timer::after(Duration::from_millis(1000)).await;
         }
 
-        for i in 0..2 {
+        for i in 0..1 {
             info!("Run trajectory {}", i);
             stepper.enable().unwrap();
             Timer::after(Duration::from_millis(100)).await;
@@ -77,7 +90,8 @@ pub async fn run<STEPPER: Stepper>(mut stepper: STEPPER) {
                 break;
             }
             stepper.disable().unwrap();
-            Timer::after(Duration::from_millis(1000)).await;
+            info!("Stopped trajectory {}", i);
+            Timer::after(Duration::from_millis(5000)).await;
         }
     }
 }
