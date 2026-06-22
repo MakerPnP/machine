@@ -22,17 +22,18 @@ puffin_http          = { version = "0.16.1" }
 # i18n
 #egui-i18n            = { git = "https://github.com/fewensa/egui-i18n", rev = "3be4d89e6328d545a715529ac80415f49d675756", features = ["fluent"] }
 #egui-i18n            = { git = "https://github.com/makerpnp/egui-i18n", rev = "087c62591d8027b51641bf4bcf556106d17ea799", features = ["fluent"] }
-egui-i18n            = { version = "0.1.2", features = ["fluent"] }
+egui-i18n            = { version = "0.2.0", features = ["fluent"] }
 
 # gui (egui)
-egui_mobius          = "0.3.0-alpha.32"
+egui_mobius          = "0.4.0"
 #egui_mobius          = { git = "https://github.com/makerpnp/egui_mobius", rev = "e62f97bfcf97a831bd67dd75ab5eab9585922765" }
 #egui_mobius          = { path = "../../../libraries/rust/egui/egui_mobius/crates/egui_mobius" }
-egui_tiles           = { version = "0.14.0"}
-egui_extras          = { version = "0.33.0", default-features = false }
-egui_plot            = { version = "0.34.0" }
+egui_tiles           = { version = "0.15.0"}
+egui_extras          = { version = "0.34.3", default-features = false }
+egui_plot            = { version = "0.35.0" }
 egui_vertical_stack  = { version = "0.2.0" }
-egui_tool_windows    = { version = "0.3.0" }
+egui_tool_windows    = { version = "0.4.0" }
+#egui_tool_windows    = { git = "https://github.com/makerpnp/egui_tool_windows", tag = "0.4.0" }
 
 # images
 image                = { version = "0.25", default-features = false }

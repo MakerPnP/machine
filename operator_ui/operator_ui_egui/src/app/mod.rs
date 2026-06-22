@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use async_std::prelude::StreamExt;
+use eframe::Frame;
 use egui::{Context, Ui, Vec2, ViewportBuilder, ViewportClass, ViewportCommand, ViewportId};
 use egui_extras::install_image_loaders;
 use egui_i18n::tr;
@@ -353,7 +354,9 @@ impl eframe::App for OperatorUiApp {
     }
 
     /// Called each time the UI needs repainting, which may be many times per second.
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut Ui, _frame: &mut Frame) {
+        let ctx = ui.ctx().clone();
+
         let viewports = self.viewports.lock().unwrap();
 
         for viewport in viewports.iter() {
@@ -368,7 +371,7 @@ impl eframe::App for OperatorUiApp {
 
             if viewport_id == ViewportId::ROOT {
                 let mut viewport = viewport.lock().unwrap();
-                viewport.ui(ctx);
+                viewport.ui(ui);
                 //Self::show_shutdown_modal(self.shutdown_state, ctx, viewport_id);
             } else {
                 let unformatted_viewport_id = format!("{:?}", viewport_id);
@@ -411,7 +414,7 @@ impl eframe::App for OperatorUiApp {
             }
         }
 
-        Self::show_shutdown_modal(self.shutdown_state, ctx, ViewportId::ROOT);
+        Self::show_shutdown_modal(self.shutdown_state, ui.ctx(), ViewportId::ROOT);
 
         if let Some((_, app_event_rx)) = self.app_event_broadcast.as_mut() {
             if let Ok(event) = app_event_rx.try_recv() {

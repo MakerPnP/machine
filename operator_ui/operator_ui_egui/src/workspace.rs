@@ -287,7 +287,8 @@ impl ViewportState {
             .collect::<Vec<_>>()
     }
 
-    pub fn ui(&mut self, ctx: &egui::Context) {
+    pub fn ui(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
         let now = std::time::Instant::now();
 
         self.fps_snapshot = self.fps_stats.update(now);
@@ -351,7 +352,7 @@ impl ViewportState {
         let sender = self.command_sender.clone();
 
         if self.id == ViewportId::ROOT {
-            egui::TopBottomPanel::top(ui_id.with("top_panel")).show(ctx, |ui| {
+            egui::Panel::top(ui_id.with("top_panel")).show_inside(ui, |ui| {
                 egui::MenuBar::new().ui(ui, |ui| {
                     egui::Sides::new().show(
                         ui,
@@ -445,17 +446,17 @@ impl ViewportState {
             });
         }
 
-        let panel_fill_color = ctx.style().visuals.panel_fill;
+        let panel_fill_color = ctx.global_style().visuals.panel_fill;
         let side_panel_fill_color = panel_fill_color.gamma_multiply(0.9);
 
         let mut request_make_visible: Option<ToggleState> = None;
 
-        let _side_panel_response = egui::SidePanel::left(ui_id.with("left_panel"))
-            .min_width(MIN_TOUCH_SIZE.x * 2.0)
-            .max_width(200.0)
+        let _side_panel_response = egui::Panel::left(ui_id.with("left_panel"))
+            .min_size(MIN_TOUCH_SIZE.x * 2.0)
+            .max_size(200.0)
             .resizable(true)
             .frame(Frame::NONE.fill(side_panel_fill_color))
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 let left_panel_width = ui.available_size_before_wrap().x;
                 ui.vertical(|ui| {
                     let mut workspaces = self.workspaces.lock().unwrap();
@@ -599,7 +600,7 @@ impl ViewportState {
 
         let central_panel_response = egui::CentralPanel::default()
             .frame(Frame::NONE.fill(panel_fill_color))
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 //
                 // Tiles
                 //
@@ -669,7 +670,7 @@ impl ViewportState {
 
             let mut dump_position = false;
 
-            let style = &ctx.style();
+            let style = &ctx.global_style();
 
             let window_id = ui_id.with(&toggle_state);
             ctx.memory(|memory| {
@@ -727,7 +728,7 @@ impl ViewportState {
                 }
             }
 
-            let window = window.resizable(true).show(ctx, |ui| {
+            let window = window.resizable(true).show(ui.ctx(), |ui| {
                 ui.vertical(|ui| {
                     if false {
                         trace!(
@@ -773,7 +774,7 @@ impl ViewportState {
                             "bringing window to front. layer_id: {:?}, toggle_state: {:?}",
                             window.response.layer_id, toggle_state
                         );
-                        bring_window_to_front(ctx, window.response.layer_id);
+                        bring_window_to_front(&ctx, window.response.layer_id);
                     }
                     _ => {}
                 }
