@@ -7,8 +7,10 @@ module io_tb;
     // Testbench signals
     reg RESET;
     reg TCXO = 0;
-    reg USER_0;
-    reg USER_1;
+    reg [1:0] BTN;
+    reg [7:0] DIN = 8'd0;
+    reg [1:0] IAK;
+    reg [1:0] OEC;
 
     reg [5:0]  addr;
     reg [31:0] din;
@@ -27,8 +29,10 @@ module io_tb;
         .bus_din(din),
         .bus_dout(dout),
 
-        .user_0(USER_0),
-        .user_1(USER_1),
+        .btn(BTN),
+        .iak(IAK),
+        .din(DIN),
+        .oec(OEC),
 
         .debug(debug)
     );
@@ -42,8 +46,12 @@ module io_tb;
         $dumpvars(0, io_tb);
 
         // simulate pull-ups
-        USER_0 = 1;
-        USER_1 = 1;
+        BTN[0] = 1;
+        BTN[1] = 1;
+
+        // default low
+        IAK[0] = 0;
+        IAK[1] = 0;
 
         // reset pulse
         RESET = 1;
@@ -55,36 +63,65 @@ module io_tb;
         addr = 6'h04;
         #10;
 
-        $display("Buttons. user_0: %d, user_1: %d", (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
-        `ASSERT_EQ(dout, {30'd0, 2'b00}, "0x%08h", "IO_IN_1 not updated");
+        $display("default state");
+        $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
+        `ASSERT_EQ(dout, {28'd0, 2'b00, 2'b00}, "0x%08h", "IO_IN_1 not updated");
 
         $display("simulate button 0 press (active low)");
-        USER_0 = 0;
+        BTN[0] = 0;
         #20;
 
-        $display("Buttons. user_0: %d, user_1: %d", (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
-        `ASSERT_EQ(dout, {30'd0, 2'b01}, "0x%08h", "IO_IN_1 not updated");
+        $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
+        `ASSERT_EQ(dout, {28'd0, 2'b00, 2'b01}, "0x%08h", "IO_IN_1 not updated");
 
         $display("simulate button 0 release (active low)");
-        USER_0 = 1;
+        BTN[0] = 1;
         #20;
 
-        $display("Buttons. user_0: %d, user_1: %d", (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
-        `ASSERT_EQ(dout, {30'd0, 2'b00}, "0x%08h", "IO_IN_1 not updated");
+        $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
+        `ASSERT_EQ(dout, {28'd0, 2'b00, 2'b00}, "0x%08h", "IO_IN_1 not updated");
 
         $display("simulate button 1 press (active low)");
-        USER_1 = 0;
+        BTN[1] = 0;
         #20;
 
-        $display("Buttons. user_0: %d, user_1: %d", (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
-        `ASSERT_EQ(dout, {30'd0, 2'b10}, "0x%08h", "IO_IN_1 not updated");
+        $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
+        `ASSERT_EQ(dout, {28'd0, 2'b00, 2'b10}, "0x%08h", "IO_IN_1 not updated");
 
         $display("simulate button 1 release (active low)");
-        USER_1 = 1;
+        BTN[1] = 1;
         #20;
 
-        $display("Buttons. user_0: %d, user_1: %d", (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
-        `ASSERT_EQ(dout, {30'd0, 2'b00}, "0x%08h", "IO_IN_1 not updated");
+        $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
+        `ASSERT_EQ(dout, {28'd0, 2'b00, 2'b00}, "0x%08h", "IO_IN_1 not updated");
+
+        $display("simulate iak1 active (active high)");
+        IAK[0] = 1;
+        #20;
+
+        $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
+        `ASSERT_EQ(dout, {28'd0, 2'b01, 2'b00}, "0x%08h", "IO_IN_1 not updated");
+
+        $display("simulate iak1 inactive (active high)");
+        IAK[0] = 0;
+        #20;
+
+        $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
+        `ASSERT_EQ(dout, {28'd0, 2'b00, 2'b00}, "0x%08h", "IO_IN_1 not updated");
+
+        $display("simulate iak2 active (active high)");
+        IAK[1] = 1;
+        #20;
+
+        $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
+        `ASSERT_EQ(dout, {28'd0, 2'b10, 2'b00}, "0x%08h", "IO_IN_1 not updated");
+
+        $display("simulate iak2 inactive (active high)");
+        IAK[1] = 0;
+        #20;
+
+        $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
+        `ASSERT_EQ(dout, {28'd0, 2'b00, 2'b00}, "0x%08h", "IO_IN_1 not updated");
 
         report();
         $finish;

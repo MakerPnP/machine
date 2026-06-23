@@ -38,12 +38,19 @@ module int_core_top_tb;
     reg RGB_UP_CAM;
 
     //
-    // Buttons
+    // Digital Inputs
     //
 
-    // active low
-    reg USER_0 = 1'b1;
-    reg USER_1 = 1'b1;
+    // active low buttons (inverted)
+    reg [1:0] BTN = 2'd1;
+    // active high (non-inverted)
+    reg [1:0] IAK = 2'd0;
+    reg [7:0] DIN = 8'd0;
+
+    //
+    // Digital Outputs
+    //
+    reg [1:0] OEC;
 
     // encoders
     reg [2:0] ENCODER_A = 3'd0;
@@ -61,8 +68,10 @@ module int_core_top_tb;
         .FPGA_ACT(FPGA_ACT),
         .MCU_ACT(MCU_ACT),
         .BUZZER(BUZZER),
-        .USER_0(USER_0),
-        .USER_1(USER_1),
+        .BTN(BTN),
+        .IAK(IAK),
+        .DIN(DIN),
+        .OEC(OEC),
         .ENCODER_A(ENCODER_A),
         .ENCODER_B(ENCODER_B),
         .ENCODER_C(ENCODER_C),
@@ -239,12 +248,15 @@ module int_core_top_tb;
         #100;
 
         // -------------------------------------------------------------
-        $display("--- Test 2: Simulating Pressed Buttons inside TB and Reading ---");
+        $display("--- Test 2: Simulating Pressed Buttons and readback ---");
         // -------------------------------------------------------------
 
-        // Simulate buttons being pressed
-        USER_0 = 0;
-        USER_1 = 0;
+        // Simulate buttons being pressed (inverted)
+        BTN[0] = 0;
+        BTN[1] = 0;
+        // non-inverted IO
+        IAK[0] = 1;
+        IAK[1] = 1;
         #100;
 
         cs_n  = 0;
@@ -255,13 +267,16 @@ module int_core_top_tb;
         read_long_word_data_be(read_word);
         cs_n = 1;
 
-        `ASSERT_EQ(read_word, 32'h0000_0003, "0x%08h", "IO_IN_1 Readout mismatch");
+        `ASSERT_EQ(read_word, 32'h0000_000F, "0x%08h", "IO_IN_1 Readout mismatch");
 
         #100;
 
-        // Simulate buttons being released
-        USER_0 = 1;
-        USER_1 = 1;
+        // Simulate buttons being released (inverted)
+        BTN[0] = 1;
+        BTN[1] = 1;
+        // non-inverted IO
+        IAK[0] = 0;
+        IAK[1] = 0;
         #100;
 
         cs_n  = 0;
@@ -277,7 +292,61 @@ module int_core_top_tb;
         #100;
 
         // -------------------------------------------------------------
-        $display("--- Test 3: Writing LED ---");
+        $display("--- Test 3: Simulate changing DIN and readback ---");
+        // -------------------------------------------------------------
+
+        // Bit pattern 1
+        DIN = 8'hA5;
+        #100;
+
+        cs_n  = 0;
+        io_en = 1;
+        send_command_byte(8'h10);
+        send_address_word(16'h0088);
+        dummy_phase();
+        read_long_word_data_be(read_word);
+        cs_n = 1;
+
+        `ASSERT_EQ(read_word, 32'h0000_00A5, "0x%08h", "IO_IN_2 Readout mismatch");
+
+        #100;
+
+        // Bit pattern 2
+        DIN = 8'h5A;
+        #100;
+
+        cs_n  = 0;
+        io_en = 1;
+        send_command_byte(8'h10);
+        send_address_word(16'h0088);
+        dummy_phase();
+        read_long_word_data_be(read_word);
+        cs_n = 1;
+
+        `ASSERT_EQ(read_word, 32'h0000_005A, "0x%08h", "IO_IN_1 Readout mismatch");
+
+        #100;
+
+        // -------------------------------------------------------------
+        $display("--- Test 4: Writing DOUT ---");
+        // -------------------------------------------------------------
+
+        cs_n  = 0;
+        io_en = 1;
+        send_command_byte(8'h90);
+        send_address_word(16'h0090);
+        send_long_word(32'h0000_0003);
+        cs_n = 1;
+
+        // Allow the sys_clk domain several cycles to flush out the strobe
+        repeat (5) @(posedge TCXO);
+
+        `ASSERT_EQ(OEC, 2'b11, "0b%2b", "OEC mismatch");
+
+        #100;
+
+        // -------------------------------------------------------------
+        $display("--- Test 5: Writing LED ---");
         // -------------------------------------------------------------
 
         cs_n  = 0;
@@ -296,7 +365,7 @@ module int_core_top_tb;
         #100;
 
         // -------------------------------------------------------------
-        $display("--- Test 4: Writing BUZZER_CTRL ---");
+        $display("--- Test 6: Writing BUZZER_CTRL ---");
         // -------------------------------------------------------------
 
         cs_n  = 0;
@@ -314,7 +383,7 @@ module int_core_top_tb;
         #100;
 
         // -------------------------------------------------------------
-        $display("--- Test 5: Continuous Read of Encoders 1 to 6 (24 Bytes) ---");
+        $display("--- Test 7: Continuous Read of Encoders 1 to 6 (24 Bytes) ---");
         // -------------------------------------------------------------
 
         // TODO generate encoder signals to increase the encoder counters
@@ -335,7 +404,7 @@ module int_core_top_tb;
         #100;
 
         // -------------------------------------------------------------
-        $display("--- Test 6: Writing 0x01 to CONFIG_1 to Reset Encoders ---");
+        $display("--- Test 8: Writing 0x01 to CONFIG_1 to Reset Encoders ---");
         // -------------------------------------------------------------
 
         cs_n  = 0;
@@ -368,7 +437,7 @@ module int_core_top_tb;
         #100;
 
         // -------------------------------------------------------------
-        $display("--- Test 7: Wrap around and register map boundary ---");
+        $display("--- Test 9: Wrap around and register map boundary ---");
         // -------------------------------------------------------------
         begin
             reg [31:0] expected_data [3] = '{

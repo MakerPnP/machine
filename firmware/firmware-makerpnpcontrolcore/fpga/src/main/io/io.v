@@ -9,18 +9,28 @@ module io (
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
 
-    input wire         user_0,
-    input wire         user_1,
+    input  wire [1:0]  btn,
+    input  wire [1:0]  iak,
+    input  wire [7:0]  din,
+    output wire [1:0]  oec,
 
     output reg [15:0]  debug
 );
 
     reg [31:0] io_ctrl;
-    wire [31:0] io_in_1;
+
+    wire [3:0] io_in_1;
+    wire [7:0] io_in_2;
+
+    reg [1:0] io_out_1;
+
     reg        strobe_update;
 
-    reg [1:0]  btn_sync_m;
-    reg [1:0]  btn_sync_s;
+    reg [3:0]  io_sync_m;
+    reg [3:0]  io_sync_s;
+
+    reg [7:0]  din_sync_m;
+    reg [7:0]  din_sync_s;
 
     // CDC (Clock Domain Crossing) Flag Catching
     // Because strobe_update /may/ originate from a diffent clock domain a simple pulse synchronizer
@@ -31,8 +41,9 @@ module io (
     // --- 1. Synchronous Register Writes & Local Strobes ---
     always @(posedge sys_clk) begin
         if (reset) begin
-            io_ctrl       <= 32'd0;
+            io_ctrl        <= 32'd0;
             strobe_update  <= 1'b1;
+            io_out_1       <= 2'b00;
         end else begin
             // Automatic self-clearing single-cycle strobe pulse
             strobe_update  <= 1'b0;
@@ -44,6 +55,9 @@ module io (
                         io_ctrl       <= bus_din;
                         strobe_update <= 1'b1;
                     end
+                    6'h10: begin
+                        io_out_1      <= bus_din[1:0];
+                    end
                     default: begin end
                 endcase
             end
@@ -54,7 +68,8 @@ module io (
     always @(*) begin
         case (bus_addr)
             6'h00:   bus_dout = io_ctrl;
-            6'h04:   bus_dout = io_in_1;
+            6'h04:   bus_dout = {28'd0, io_in_1};
+            6'h08:   bus_dout = {24'd0, io_in_2};
             default: bus_dout = 32'h33333333;
         endcase
     end
@@ -76,8 +91,11 @@ module io (
                 $display("IO_CTRL: 0x%08h", io_ctrl);
             end
 
-            btn_sync_m <= {user_1, user_0};
-            btn_sync_s <= btn_sync_m;
+            io_sync_m <= {iak[1], iak[0], btn[1], btn[0]};
+            io_sync_s <= io_sync_m;
+
+            din_sync_m <= din;
+            din_sync_s <= din_sync_m;
 
             activity_flag <= ~activity_flag;
 
@@ -98,6 +116,8 @@ module io (
 
     // Map buttons to reg_io_in_1 (Bit 0 = USER 0, Bit 1 = USER 1)
     // Inverted (~btn) because external circuit pulls up to 3V3 (Pressed = 0)
-    assign io_in_1 = {30'd0, ~btn_sync_s[1], ~btn_sync_s[0]};
+    assign io_in_1 = {io_sync_s[3:2], ~io_sync_s[1:0]};
+    assign io_in_2 = din_sync_s[7:0];
 
+    assign oec = io_out_1;
 endmodule

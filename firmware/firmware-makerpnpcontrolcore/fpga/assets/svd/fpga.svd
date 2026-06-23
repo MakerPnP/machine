@@ -182,6 +182,76 @@
             </field>
 
             <field>
+              <name>iak1</name>
+              <description>optical input 1 (optical isolator anode cathode)</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>iak2</name>
+              <description>optical input 2 (optical isolator anode cathode)</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>30</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>io_in_2</name>
+          <description>io in 2 register</description>
+          <addressOffset>0x0008</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>din</name>
+              <description>digital in 8 to 1 (ordering = 7:0)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>io_out_1</name>
+          <description>io out 1 register</description>
+          <addressOffset>0x0010</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>oec1</name>
+              <description>optical output 1 (optical isolator emitter collector)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>oec2</name>
+              <description>optical output 2 (optical isolator emitter collector)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
               <name>reserved</name>
               <description>reserved, keep at reset value</description>
               <bitOffset>2</bitOffset>
@@ -216,7 +286,6 @@
           <access>read-write</access>
           <resetValue>0x00000000</resetValue>
           <fields>
-
             <field>
               <name>buzzer</name>
               <description>buzzer control (0 = off)</description>
@@ -230,7 +299,6 @@
               <bitOffset>1</bitOffset>
               <bitWidth>31</bitWidth>
             </field>
-
           </fields>
         </register>
 

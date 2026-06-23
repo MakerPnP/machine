@@ -1,8 +1,10 @@
 module core_top (
     input             TCXO,          // H16 Bank 1 50 MHz TCXO
 
-    input  wire       USER_0,        // Button 0 (External Pull-up to 3V3)
-    input  wire       USER_1,        // Button 1 (External Pull-up to 3V3)
+    input  wire [1:0] BTN,           // Buttons (External Pull-up to 3V3)
+    input  wire [1:0] IAK,
+    input  wire [7:0] DIN,
+    output wire [1:0] OEC,
 
     output wire       MCU_ACT,       // LED 1
     output wire       FPGA_ACT,      // LED 2
@@ -176,8 +178,10 @@ module core_top (
         .bus_addr(io_addr),
         .bus_din(io_din),
         .bus_dout(io_dout),
-        .user_0(USER_0),
-        .user_1(USER_1),
+        .btn(BTN),
+        .iak(IAK),
+        .din(DIN),
+        .oec(OEC),
         .debug(io_debug)
     );
 

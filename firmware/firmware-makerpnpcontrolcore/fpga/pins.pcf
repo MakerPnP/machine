@@ -37,16 +37,16 @@ set_io QUADSPI1_CLK G16
 set_io QUADSPI1_NCS L16
 
 ### Buttons ###
-set_io USER_0 K11
-set_io USER_1 P13
+set_io BTN[0] K11
+set_io BTN[1] P13
 
 ### Optical Inputs ###
-set_io OEC1 R5
-set_io OEC2 T2
+set_io OEC[0] R5
+set_io OEC[1] T2
 
 ### Optical outputs ###
-set_io IAK1 T3
-set_io IAK2 R3
+set_io IAK[0] T3
+set_io IAK[1] R3
 
 ### Digital Inputs ###
 set_io DIN[0] N2
