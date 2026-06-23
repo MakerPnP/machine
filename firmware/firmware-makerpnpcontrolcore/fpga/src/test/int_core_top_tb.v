@@ -295,7 +295,7 @@ module int_core_top_tb;
         $display("--- Test 3: Simulate changing DIN and readback ---");
         // -------------------------------------------------------------
 
-        // Bit pattern 1
+        // Bit pattern 1, active-low
         DIN = 8'hA5;
         #100;
 
@@ -307,11 +307,11 @@ module int_core_top_tb;
         read_long_word_data_be(read_word);
         cs_n = 1;
 
-        `ASSERT_EQ(read_word, 32'h0000_00A5, "0x%08h", "IO_IN_2 Readout mismatch");
+        `ASSERT_EQ(read_word, 32'h0000_005A, "0x%08h", "IO_IN_2 Readout mismatch");
 
         #100;
 
-        // Bit pattern 2
+        // Bit pattern 2, active-low
         DIN = 8'h5A;
         #100;
 
@@ -323,7 +323,7 @@ module int_core_top_tb;
         read_long_word_data_be(read_word);
         cs_n = 1;
 
-        `ASSERT_EQ(read_word, 32'h0000_005A, "0x%08h", "IO_IN_1 Readout mismatch");
+        `ASSERT_EQ(read_word, 32'h0000_00A5, "0x%08h", "IO_IN_1 Readout mismatch");
 
         #100;
 

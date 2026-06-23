@@ -114,10 +114,16 @@ module io (
         end
     end
 
-    // Map buttons to reg_io_in_1 (Bit 0 = USER 0, Bit 1 = USER 1)
+    // Map buttons to io_in_1 (Bit 0 = USER 0, Bit 1 = USER 1)
     // Inverted (~btn) because external circuit pulls up to 3V3 (Pressed = 0)
+    //
+    // Map IAK to io_in_1 (Bit 2 = IAK1, Bit 1 = IAK2)
+    // Non-inverted.
     assign io_in_1 = {io_sync_s[3:2], ~io_sync_s[1:0]};
-    assign io_in_2 = din_sync_s[7:0];
+
+    // Map DIN to io_in_2
+    // Inverted (~btn) because external circuit pulls up to 5V5 though a octal bus tranceiver.
+    assign io_in_2 = ~din_sync_s[7:0];
 
     assign oec = io_out_1;
 endmodule
