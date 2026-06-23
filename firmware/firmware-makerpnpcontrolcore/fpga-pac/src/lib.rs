@@ -1080,6 +1080,16 @@ pub mod io {
         pub const fn io_in_1(self) -> crate::common::Reg<regs::io_in_1, crate::common::R> {
             unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x04usize) as _) }
         }
+        #[doc = "io in 2 register."]
+        #[inline(always)]
+        pub const fn io_in_2(self) -> crate::common::Reg<regs::io_in_2, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x08usize) as _) }
+        }
+        #[doc = "io out 1 register."]
+        #[inline(always)]
+        pub const fn io_out_1(self) -> crate::common::Reg<regs::io_out_1, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x10usize) as _) }
+        }
     }
     pub mod regs {
         #[doc = "io control register."]
@@ -1149,6 +1159,152 @@ pub mod io {
             pub const fn set_user1(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
             }
+            #[doc = "optical input 1 (optical isolator anode cathode)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn iak1(&self) -> bool {
+                let val = (self.0 >> 2usize) & 0x01;
+                val != 0
+            }
+            #[doc = "optical input 1 (optical isolator anode cathode)."]
+            #[inline(always)]
+            pub const fn set_iak1(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 2usize)) | (((val as u32) & 0x01) << 2usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 2usize) & 0x3fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x3fff_ffff << 2usize)) | (((val as u32) & 0x3fff_ffff) << 2usize);
+            }
+            #[doc = "optical input 2 (optical isolator anode cathode)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn iak2(&self) -> bool {
+                let val = (self.0 >> 3usize) & 0x01;
+                val != 0
+            }
+            #[doc = "optical input 2 (optical isolator anode cathode)."]
+            #[inline(always)]
+            pub const fn set_iak2(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 3usize)) | (((val as u32) & 0x01) << 3usize);
+            }
+        }
+        impl Default for io_in_1 {
+            #[inline(always)]
+            fn default() -> io_in_1 {
+                io_in_1(0)
+            }
+        }
+        impl core::fmt::Debug for io_in_1 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("io_in_1")
+                    .field("user0", &self.user0())
+                    .field("user1", &self.user1())
+                    .field("iak1", &self.iak1())
+                    .field("reserved", &self.reserved())
+                    .field("iak2", &self.iak2())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for io_in_1 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "io_in_1 {{ user0: {=bool:?}, user1: {=bool:?}, iak1: {=bool:?}, reserved: {=u32:?}, iak2: {=bool:?} }}" , self . user0 () , self . user1 () , self . iak1 () , self . reserved () , self . iak2 ())
+            }
+        }
+        #[doc = "io in 2 register."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct io_in_2(pub u32);
+        impl io_in_2 {
+            #[doc = "digital in 8 to 1 (ordering = 7:0)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn din(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "digital in 8 to 1 (ordering = 7:0)."]
+            #[inline(always)]
+            pub const fn set_din(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for io_in_2 {
+            #[inline(always)]
+            fn default() -> io_in_2 {
+                io_in_2(0)
+            }
+        }
+        impl core::fmt::Debug for io_in_2 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("io_in_2")
+                    .field("din", &self.din())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for io_in_2 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "io_in_2 {{ din: {=u8:?}, reserved: {=u32:?} }}",
+                    self.din(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "io out 1 register."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct io_out_1(pub u32);
+        impl io_out_1 {
+            #[doc = "optical output 1 (optical isolator emitter collector)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn oec1(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "optical output 1 (optical isolator emitter collector)."]
+            #[inline(always)]
+            pub const fn set_oec1(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "optical output 2 (optical isolator emitter collector)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn oec2(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "optical output 2 (optical isolator emitter collector)."]
+            #[inline(always)]
+            pub const fn set_oec2(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
             #[doc = "reserved, keep at reset value."]
             #[must_use]
             #[inline(always)]
@@ -1163,29 +1319,29 @@ pub mod io {
                     (self.0 & !(0x3fff_ffff << 2usize)) | (((val as u32) & 0x3fff_ffff) << 2usize);
             }
         }
-        impl Default for io_in_1 {
+        impl Default for io_out_1 {
             #[inline(always)]
-            fn default() -> io_in_1 {
-                io_in_1(0)
+            fn default() -> io_out_1 {
+                io_out_1(0)
             }
         }
-        impl core::fmt::Debug for io_in_1 {
+        impl core::fmt::Debug for io_out_1 {
             fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                f.debug_struct("io_in_1")
-                    .field("user0", &self.user0())
-                    .field("user1", &self.user1())
+                f.debug_struct("io_out_1")
+                    .field("oec1", &self.oec1())
+                    .field("oec2", &self.oec2())
                     .field("reserved", &self.reserved())
                     .finish()
             }
         }
         #[cfg(feature = "defmt")]
-        impl defmt::Format for io_in_1 {
+        impl defmt::Format for io_out_1 {
             fn format(&self, f: defmt::Formatter) {
                 defmt::write!(
                     f,
-                    "io_in_1 {{ user0: {=bool:?}, user1: {=bool:?}, reserved: {=u32:?} }}",
-                    self.user0(),
-                    self.user1(),
+                    "io_out_1 {{ oec1: {=bool:?}, oec2: {=bool:?}, reserved: {=u32:?} }}",
+                    self.oec1(),
+                    self.oec2(),
                     self.reserved()
                 )
             }
