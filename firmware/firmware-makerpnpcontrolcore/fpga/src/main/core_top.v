@@ -93,8 +93,8 @@ module core_top (
     wire [15:0] encoder_debug;
 
     reg [7:0] la_src = 2;
-    wire [15:0] la_in = buzzer_debug;
-    //wire [15:0] la_in = 16'h0F0F;
+    //wire [15:0] la_in = buzzer_debug;
+    wire [15:0] la_in = 16'h0F0F;
 
     reg [7:0] reset_cnt = 0;
     reg reset_r = 1;
