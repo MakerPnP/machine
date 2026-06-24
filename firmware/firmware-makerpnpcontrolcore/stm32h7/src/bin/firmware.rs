@@ -14,17 +14,18 @@ use cortex_m_rt::entry;
 use defmt::*;
 use embassy_executor::SendSpawner;
 use embassy_executor::{Executor, InterruptExecutor, Spawner};
-use embassy_stm32::{spi, Peripherals};
+use embassy_stm32::{spi, Peri, Peripherals};
 use embassy_stm32::eth::{PacketQueue, Sma };
 use embassy_stm32::eth::{Ethernet, GenericPhy};
 use embassy_stm32::gpio::{Level, Output, Speed, Input, Pull};
 use embassy_stm32::interrupt::{InterruptExt, Priority};
-use embassy_stm32::peripherals::{ETH, ETH_SMA};
+use embassy_stm32::peripherals::{ETH, ETH_SMA, PA0_C, PA1_C, PC2_C, PC3_C, PC0, PH2, ADC3};
 use embassy_stm32::rng::Rng;
 use embassy_stm32::ospi::{
     ChipSelectHighTime, FIFOThresholdLevel, MemorySize, MemoryType, WrapSize,
 };
 use embassy_stm32::{bind_interrupts, eth, interrupt, peripherals, rng};
+use embassy_stm32::adc::{Adc, SampleTime};
 use embassy_stm32::mode::Blocking;
 use embassy_stm32::spi::mode::Master;
 use embassy_stm32::spi::Spi;
@@ -38,6 +39,7 @@ use ioboard_trace::tracepin;
 use ioboard_trace::tracepin::TracePins;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
+use firmware_makerpnpcontrolcore::adc;
 #[cfg(feature = "morse_startup")]
 use morse_core::MorseSymbol;
 use firmware_makerpnpcontrolcore::fpga::FpgaCore;
@@ -408,8 +410,33 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         debug!("Encoder values after explicit set (u32):\n{:08x}", encoder_mem);
     }
 
+    let fpga_adc_mux = fpga.adc_mux();
 
     lp_spawner.spawn(unwrap!(fpga_task(fpga)));
+
+    let adc1 = Adc::new(p.ADC1);
+    let adc3 = Adc::new(p.ADC3);
+
+
+    let adc_mux = adc::Mux::new(
+        // adc mux inputs
+        fpga_adc_mux,
+        adc1,
+        p.PA0_C, // PA0_C MUX input 1, ADC1_INP0
+        p.PA1_C, // PA1_C MUX input 2, ADC1_INP1
+        embassy_stm32::adc::SampleTime::Cycles325,
+    );
+
+    lp_spawner.spawn(unwrap!(adc_task(
+        adc_mux,
+
+        // other adc inputs
+        adc3,
+        p.PC2_C, // PC2_C AI3, ADC3_INP0, EXT_SENSE_1
+        p.PC3_C, // PC3_C AI4, ADC3_INP1, EXT_SENSE_2
+        p.PC0, // PC0 AIN5, ADC3_INP10, VAC_SENSE_1 (5V tolerant)
+        p.PH2, // PH2 AIN6, ADC3_INP13, VAC_SENSE_2 (5V tolerant)
+    )));
 
     #[cfg(feature = "tracepin")]
     {
@@ -509,6 +536,55 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         ticker.next().await;
     }
 }
+
+type AdcMuxInstance = adc::Mux<
+    'static,
+    embassy_stm32::peripherals::ADC1,
+    Peri<'static, PA0_C>,
+    Peri<'static, PA1_C>
+>;
+
+#[embassy_executor::task]
+async fn adc_task(
+    mut adc_mux: AdcMuxInstance,
+    mut adc: Adc<'static, ADC3>,
+    mut ext1_in: Peri<'static, PC2_C>,
+    mut ext2_in: Peri<'static, PC3_C>,
+    mut vac1_in: Peri<'static, PC0>,
+    mut vac2_in: Peri<'static, PH2>,
+) -> ! {
+    // FIXME without this pause, the buzzer gets stuck on! Why?
+    Timer::after(Duration::from_secs(20)).await;
+
+    //let mut ticker = Ticker::every(Duration::from_secs(1));
+    loop {
+        for port in 0..4 {
+            adc_mux.select_port(port);
+
+            // allow some time for settling before reading
+            Timer::after(Duration::from_millis(10)).await;
+
+            let values = adc_mux.read_pair();
+            defmt::info!("ADC inputs. port: {}, values: {:?})", port, values);
+        }
+
+        let ext = (
+            adc.blocking_read(&mut ext1_in, SampleTime::Cycles325),
+            adc.blocking_read(&mut ext2_in, SampleTime::Cycles325),
+        );
+        defmt::info!("ADC ext inputs. values: {:?})", ext);
+
+        let vac = (
+            adc.blocking_read(&mut vac1_in, SampleTime::Cycles325),
+            adc.blocking_read(&mut vac2_in, SampleTime::Cycles325),
+        );
+        defmt::info!("ADC vac inputs. values: {:?})", vac);
+
+        //ticker.next().await;
+        Timer::after(Duration::from_secs(1)).await;
+    }
+}
+
 
 type FpgaInstance = FpgaCore<embassy_stm32::peripherals::OCTOSPI1>;
 

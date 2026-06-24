@@ -22,6 +22,7 @@ mod registers {
     pub const REG_BUZZER_CTRL: u16 = 0x00C0;
 }
 pub use registers::*;
+use crate::fpga::adc::FpgaAdcMux;
 use crate::fpga::ws2812::Ws2812LedControllerBuilder;
 
 pub struct FpgaCore<I: Instance> {
@@ -432,6 +433,9 @@ impl<I: Instance> FpgaCore<I> {
         });
     }
 
+    pub fn adc_mux(&self) -> FpgaAdcMux {
+        FpgaAdcMux::new()
+    }
 }
 
 #[derive(defmt::Format)]
@@ -549,6 +553,24 @@ pub mod ws2812 {
                 ColorOrdering::GRB => fpga_pac::ws2812_1::vals::mode::GRB,
                 ColorOrdering::GRBW => fpga_pac::ws2812_1::vals::mode::GRBW,
             }
+        }
+    }
+}
+
+pub mod adc {
+    pub struct FpgaAdcMux {}
+
+    impl FpgaAdcMux {
+        pub fn new() -> Self {
+            Self {}
+        }
+
+        pub fn select_port(&mut self, port: usize) {
+            assert!(port < 4);
+
+            fpga_pac::IO.io_out_1().modify(|w| {
+                w.set_adc_mux_sel(port as u8);
+            })
         }
     }
 }

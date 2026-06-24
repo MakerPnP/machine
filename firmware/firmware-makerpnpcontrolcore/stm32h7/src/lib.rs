@@ -8,3 +8,5 @@ pub mod trace;
 pub mod fpga;
 
 pub mod rgb;
+
+pub mod adc;
