@@ -1308,15 +1308,39 @@ pub mod io {
             #[doc = "reserved, keep at reset value."]
             #[must_use]
             #[inline(always)]
-            pub const fn reserved(&self) -> u32 {
-                let val = (self.0 >> 2usize) & 0x3fff_ffff;
+            pub const fn reserved1(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x3f;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x3f << 2usize)) | (((val as u32) & 0x3f) << 2usize);
+            }
+            #[doc = "ADC Mux input select."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn adc_mux_sel(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0x03;
+                val as u8
+            }
+            #[doc = "ADC Mux input select."]
+            #[inline(always)]
+            pub const fn set_adc_mux_sel(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 8usize)) | (((val as u32) & 0x03) << 8usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved2(&self) -> u32 {
+                let val = (self.0 >> 10usize) & 0x003f_ffff;
                 val as u32
             }
             #[doc = "reserved, keep at reset value."]
             #[inline(always)]
-            pub const fn set_reserved(&mut self, val: u32) {
-                self.0 =
-                    (self.0 & !(0x3fff_ffff << 2usize)) | (((val as u32) & 0x3fff_ffff) << 2usize);
+            pub const fn set_reserved2(&mut self, val: u32) {
+                self.0 = (self.0 & !(0x003f_ffff << 10usize))
+                    | (((val as u32) & 0x003f_ffff) << 10usize);
             }
         }
         impl Default for io_out_1 {
@@ -1330,20 +1354,16 @@ pub mod io {
                 f.debug_struct("io_out_1")
                     .field("oec1", &self.oec1())
                     .field("oec2", &self.oec2())
-                    .field("reserved", &self.reserved())
+                    .field("reserved1", &self.reserved1())
+                    .field("adc_mux_sel", &self.adc_mux_sel())
+                    .field("reserved2", &self.reserved2())
                     .finish()
             }
         }
         #[cfg(feature = "defmt")]
         impl defmt::Format for io_out_1 {
             fn format(&self, f: defmt::Formatter) {
-                defmt::write!(
-                    f,
-                    "io_out_1 {{ oec1: {=bool:?}, oec2: {=bool:?}, reserved: {=u32:?} }}",
-                    self.oec1(),
-                    self.oec2(),
-                    self.reserved()
-                )
+                defmt :: write ! (f , "io_out_1 {{ oec1: {=bool:?}, oec2: {=bool:?}, reserved1: {=u8:?}, adc_mux_sel: {=u8:?}, reserved2: {=u32:?} }}" , self . oec1 () , self . oec2 () , self . reserved1 () , self . adc_mux_sel () , self . reserved2 ())
             }
         }
     }
