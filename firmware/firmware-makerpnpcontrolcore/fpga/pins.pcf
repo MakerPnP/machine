@@ -62,6 +62,13 @@ set_io DIN[7] N7
 set_io ADC_MUX[0] F9
 set_io ADC_MUX[1] E9
 
+### Present detection ###
+set_io BASE_PRESENT P9
+set_io PORT_PRESENT[0] N10
+set_io PORT_PRESENT[1] P10
+set_io PORT_PRESENT[2] C9
+set_io PORT_PRESENT[3] D9
+
 ### Logic Analyzer ###
 set_io LA_IO[0] P2
 set_io LA_IO[1] R1

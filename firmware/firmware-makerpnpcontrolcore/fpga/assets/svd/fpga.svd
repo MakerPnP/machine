@@ -196,10 +196,38 @@
             </field>
 
             <field>
-              <name>reserved</name>
+              <name>reserved1</name>
               <description>reserved, keep at reset value</description>
-              <bitOffset>2</bitOffset>
-              <bitWidth>30</bitWidth>
+              <bitOffset>4</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+
+            <field>
+              <name>base_present</name>
+              <description>base present detect</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved2</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+
+            <field>
+              <name>port_present</name>
+              <description>port present detect</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved3</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
             </field>
           </fields>
         </register>

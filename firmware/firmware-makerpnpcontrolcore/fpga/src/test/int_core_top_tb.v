@@ -57,6 +57,12 @@ module int_core_top_tb;
     //
     reg [1:0] ADC_MUX;
 
+    //
+    // Present status
+    //
+    reg       BASE_PRESENT = 1'b0;
+    reg [3:0] PORT_PRESENT = 4'b0000;
+
     // encoders
     reg [2:0] ENCODER_A = 3'd0;
     reg [2:0] ENCODER_B = 3'd0;
@@ -78,6 +84,8 @@ module int_core_top_tb;
         .DIN(DIN),
         .OEC(OEC),
         .ADC_MUX(ADC_MUX),
+        .BASE_PRESENT(BASE_PRESENT),
+        .PORT_PRESENT(PORT_PRESENT),
         .ENCODER_A(ENCODER_A),
         .ENCODER_B(ENCODER_B),
         .ENCODER_C(ENCODER_C),

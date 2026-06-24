@@ -14,21 +14,24 @@ module io (
     input  wire [7:0]  din,
     output wire [1:0]  oec,
     output wire [1:0]  adc_mux,
+    input  wire        base_present,
+    input  wire [3:0]  port_present,
 
     output reg [15:0]  debug
 );
 
     reg [31:0] io_ctrl;
 
-    wire [3:0] io_in_1;
+    // port_present (4), base_present (1), iak (2), btn (2) = 9 bits
+    wire [8:0] io_in_1;
     wire [7:0] io_in_2;
 
     reg [3:0] io_out_1;
 
     reg        strobe_update;
 
-    reg [3:0]  io_sync_m;
-    reg [3:0]  io_sync_s;
+    reg [8:0]  io_sync_m;
+    reg [8:0]  io_sync_s;
 
     reg [7:0]  din_sync_m;
     reg [7:0]  din_sync_s;
@@ -69,7 +72,7 @@ module io (
     always @(*) begin
         case (bus_addr)
             6'h00:   bus_dout = io_ctrl;
-            6'h04:   bus_dout = {28'd0, io_in_1};
+            6'h04:   bus_dout = {16'd0, io_in_1[8:5], 3'b000, io_in_1[4:4], 4'b0000, io_in_1[3:0]};
             6'h08:   bus_dout = {24'd0, io_in_2};
             6'h10:   bus_dout = {22'd0, io_out_1[3:2], 6'd0, io_out_1[1:0]};
             default: bus_dout = 32'h33333333;
@@ -93,7 +96,7 @@ module io (
                 $display("IO_CTRL: 0x%08h", io_ctrl);
             end
 
-            io_sync_m <= {iak[1], iak[0], btn[1], btn[0]};
+            io_sync_m <= {port_present, base_present, iak, btn};
             io_sync_s <= io_sync_m;
 
             din_sync_m <= din;
@@ -121,7 +124,9 @@ module io (
     //
     // Map IAK to io_in_1 (Bit 2 = IAK1, Bit 1 = IAK2)
     // Inverted, as inputs are via optical isolators, active-low.
-    assign io_in_1 = {~io_sync_s[3:0]};
+    //
+    // Map present signals, non-inverted
+    assign io_in_1 = {io_sync_s[8:4], ~io_sync_s[3:0]};
 
     // Map DIN to io_in_2
     // Inverted (~btn) because external circuit pulls up to 5V5 though a octal bus tranceiver.

@@ -6,6 +6,8 @@ module core_top (
     input  wire [7:0] DIN,
     output wire [1:0] OEC,
     output wire [1:0] ADC_MUX,
+    input  wire       BASE_PRESENT,
+    input  wire [3:0] PORT_PRESENT,
 
     output wire       MCU_ACT,       // LED 1
     output wire       FPGA_ACT,      // LED 2
@@ -184,6 +186,9 @@ module core_top (
         .din(DIN),
         .oec(OEC),
         .adc_mux(ADC_MUX),
+        .base_present(BASE_PRESENT),
+        .port_present(PORT_PRESENT),
+
         .debug(io_debug)
     );
 
