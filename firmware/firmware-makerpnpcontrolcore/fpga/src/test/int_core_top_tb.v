@@ -255,8 +255,8 @@ module int_core_top_tb;
         BTN[0] = 0;
         BTN[1] = 0;
         // non-inverted IO
-        IAK[0] = 1;
-        IAK[1] = 1;
+        IAK[0] = 0;
+        IAK[1] = 0;
         #100;
 
         cs_n  = 0;
@@ -275,8 +275,8 @@ module int_core_top_tb;
         BTN[0] = 1;
         BTN[1] = 1;
         // non-inverted IO
-        IAK[0] = 0;
-        IAK[1] = 0;
+        IAK[0] = 1;
+        IAK[1] = 1;
         #100;
 
         cs_n  = 0;
