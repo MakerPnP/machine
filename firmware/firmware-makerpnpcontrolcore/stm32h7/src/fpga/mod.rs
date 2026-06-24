@@ -75,6 +75,34 @@ impl<I: Instance> FpgaCore<I> {
         buttons
     }
 
+    /// Returns a bitfield of the FPGA IAK inputs.
+    /// bit 0 = IAK1
+    /// bit 1 = IAK2
+    /// 1 indicates active-low (inverted)
+    pub fn read_iak(&mut self) -> u8 {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        let value = fpga_pac::IO.io_in_1().read();
+
+        let iak = (value.iak1() as u8) | ((value.iak2() as u8) << 1);
+        defmt::debug!("FPGA value: 0x{:08x}, iak: 0b{:02b}", value.0, iak);
+
+        iak
+    }
+
+    /// bits 0-7 = DIN1-8
+    /// 1 indicates active-high (non-inverted)
+    pub fn read_din(&mut self) -> u8 {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        let value = fpga_pac::IO.io_in_2().read();
+
+        let din = value.din();
+        defmt::debug!("FPGA value: 0x{:08x}, din: 0b{:08b}", value.0, din);
+
+        din
+    }
+
     pub fn read_block(&mut self, address: u16, buffer: &mut [u8]) {
         defmt::assert!(!self.memory_mapped_mode_enabled);
 
@@ -371,6 +399,39 @@ impl<I: Instance> FpgaCore<I> {
     pub fn led_controller_1(&self) -> Ws2812LedControllerBuilder {
         Ws2812LedControllerBuilder::new(1)
     }
+
+    pub fn oec1_enable(&mut self) {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        fpga_pac::IO.io_out_1().modify(|w| {
+            w.set_oec1(true);
+        });
+    }
+
+    pub fn oec1_disable(&mut self) {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        fpga_pac::IO.io_out_1().modify(|w| {
+            w.set_oec1(false);
+        });
+    }
+
+    pub fn oec2_enable(&mut self) {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        fpga_pac::IO.io_out_1().modify(|w| {
+            w.set_oec2(true);
+        });
+    }
+
+    pub fn oec2_disable(&mut self) {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        fpga_pac::IO.io_out_1().modify(|w| {
+            w.set_oec2(false);
+        });
+    }
+
 }
 
 #[derive(defmt::Format)]
