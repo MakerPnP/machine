@@ -1171,19 +1171,6 @@ pub mod io {
             pub const fn set_iak1(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 2usize)) | (((val as u32) & 0x01) << 2usize);
             }
-            #[doc = "reserved, keep at reset value."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn reserved(&self) -> u32 {
-                let val = (self.0 >> 2usize) & 0x3fff_ffff;
-                val as u32
-            }
-            #[doc = "reserved, keep at reset value."]
-            #[inline(always)]
-            pub const fn set_reserved(&mut self, val: u32) {
-                self.0 =
-                    (self.0 & !(0x3fff_ffff << 2usize)) | (((val as u32) & 0x3fff_ffff) << 2usize);
-            }
             #[doc = "optical input 2 (optical isolator anode cathode)."]
             #[must_use]
             #[inline(always)]
@@ -1195,6 +1182,66 @@ pub mod io {
             #[inline(always)]
             pub const fn set_iak2(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 3usize)) | (((val as u32) & 0x01) << 3usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u8 {
+                let val = (self.0 >> 4usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 4usize)) | (((val as u32) & 0x0f) << 4usize);
+            }
+            #[doc = "base present detect."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn base_present(&self) -> bool {
+                let val = (self.0 >> 8usize) & 0x01;
+                val != 0
+            }
+            #[doc = "base present detect."]
+            #[inline(always)]
+            pub const fn set_base_present(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 8usize)) | (((val as u32) & 0x01) << 8usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved2(&self) -> u8 {
+                let val = (self.0 >> 9usize) & 0x07;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved2(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x07 << 9usize)) | (((val as u32) & 0x07) << 9usize);
+            }
+            #[doc = "port present detect."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn port_present(&self) -> u8 {
+                let val = (self.0 >> 12usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "port present detect."]
+            #[inline(always)]
+            pub const fn set_port_present(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 12usize)) | (((val as u32) & 0x0f) << 12usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved3(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved3(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
             }
         }
         impl Default for io_in_1 {
@@ -1209,15 +1256,19 @@ pub mod io {
                     .field("user0", &self.user0())
                     .field("user1", &self.user1())
                     .field("iak1", &self.iak1())
-                    .field("reserved", &self.reserved())
                     .field("iak2", &self.iak2())
+                    .field("reserved1", &self.reserved1())
+                    .field("base_present", &self.base_present())
+                    .field("reserved2", &self.reserved2())
+                    .field("port_present", &self.port_present())
+                    .field("reserved3", &self.reserved3())
                     .finish()
             }
         }
         #[cfg(feature = "defmt")]
         impl defmt::Format for io_in_1 {
             fn format(&self, f: defmt::Formatter) {
-                defmt :: write ! (f , "io_in_1 {{ user0: {=bool:?}, user1: {=bool:?}, iak1: {=bool:?}, reserved: {=u32:?}, iak2: {=bool:?} }}" , self . user0 () , self . user1 () , self . iak1 () , self . reserved () , self . iak2 ())
+                defmt :: write ! (f , "io_in_1 {{ user0: {=bool:?}, user1: {=bool:?}, iak1: {=bool:?}, iak2: {=bool:?}, reserved1: {=u8:?}, base_present: {=bool:?}, reserved2: {=u8:?}, port_present: {=u8:?}, reserved3: {=u16:?} }}" , self . user0 () , self . user1 () , self . iak1 () , self . iak2 () , self . reserved1 () , self . base_present () , self . reserved2 () , self . port_present () , self . reserved3 ())
             }
         }
         #[doc = "io in 2 register."]
