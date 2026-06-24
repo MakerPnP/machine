@@ -791,7 +791,7 @@ pub fn trigger_stack_corruption() {
 
 mod rcc_setup {
 
-    use embassy_stm32::rcc::mux::{Fmcsel, Rngsel, Usbsel};
+    use embassy_stm32::rcc::mux::{Adcsel, Fmcsel, Rngsel, Usbsel};
     use embassy_stm32::rcc::{Hse, HseMode, *};
     use embassy_stm32::time::Hertz;
     use embassy_stm32::{Config, Peripherals};
@@ -848,6 +848,7 @@ mod rcc_setup {
         config.rcc.mux.rngsel = Rngsel::Pll1Q; // 110Mhz
         //config.rcc.mux.rngsel = Rngsel::Hsi48;
         config.rcc.mux.usbsel = Usbsel::Pll3Q; // 48Mhz
+        config.rcc.mux.adcsel = Adcsel::Pll2P; // 80Mhz
 
         embassy_stm32::init(config)
     }
