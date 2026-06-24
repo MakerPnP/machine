@@ -11,6 +11,7 @@ module io_tb;
     reg [7:0] DIN = 8'd0;
     reg [1:0] IAK;
     reg [1:0] OEC;
+    reg [1:0] ADC_MUX;
 
     reg [5:0]  addr;
     reg [31:0] din;
@@ -33,6 +34,7 @@ module io_tb;
         .iak(IAK),
         .din(DIN),
         .oec(OEC),
+        .adc_mux(ADC_MUX),
 
         .debug(debug)
     );
@@ -127,27 +129,27 @@ module io_tb;
         $display("change outputs - pattern 1");
         we = 1;
         addr = 5'h10;
-        din = 32'h0000_0001;
+        din = 32'h0000_0201;
         #10;
         we = 0;
 
         #20;
 
         `ASSERT_EQ(OEC, 2'b01, "0x%02b", "OEC mismatch");
-        `ASSERT_EQ(dout, 32'h0000_0001, "0x%08h", "dout mismatch");
+        `ASSERT_EQ(dout, 32'h0000_0201, "0x%08h", "dout mismatch");
 
 
         $display("change outputs - pattern 2");
         we = 1;
         addr = 5'h10;
-        din = 32'h0000_0002;
+        din = 32'h0000_0102;
         #10;
         we = 0;
 
         #20;
 
         `ASSERT_EQ(OEC, 2'b10, "0x%02b", "OEC mismatch");
-        `ASSERT_EQ(dout, 32'h0000_0002, "0x%08h", "dout mismatch");
+        `ASSERT_EQ(dout, 32'h0000_0102, "0x%08h", "dout mismatch");
 
         report();
         $finish;

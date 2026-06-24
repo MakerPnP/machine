@@ -58,6 +58,9 @@ set_io DIN[5] P6
 set_io DIN[6] P7
 set_io DIN[7] N7
 
+### ADC_MUX ###
+set_io ADC_MUX[0] F9
+set_io ADC_MUX[1] E9
 
 ### Logic Analyzer ###
 set_io LA_IO[0] P2

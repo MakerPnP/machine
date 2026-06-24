@@ -13,6 +13,7 @@ module io (
     input  wire [1:0]  iak,
     input  wire [7:0]  din,
     output wire [1:0]  oec,
+    output wire [1:0]  adc_mux,
 
     output reg [15:0]  debug
 );
@@ -22,7 +23,7 @@ module io (
     wire [3:0] io_in_1;
     wire [7:0] io_in_2;
 
-    reg [1:0] io_out_1;
+    reg [3:0] io_out_1;
 
     reg        strobe_update;
 
@@ -43,7 +44,7 @@ module io (
         if (reset) begin
             io_ctrl        <= 32'd0;
             strobe_update  <= 1'b1;
-            io_out_1       <= 2'b00;
+            io_out_1       <= 4'b0000;
         end else begin
             // Automatic self-clearing single-cycle strobe pulse
             strobe_update  <= 1'b0;
@@ -56,7 +57,7 @@ module io (
                         strobe_update <= 1'b1;
                     end
                     6'h10: begin
-                        io_out_1      <= bus_din[1:0];
+                        io_out_1      <= {bus_din[9:8], bus_din[1:0]};
                     end
                     default: begin end
                 endcase
@@ -70,7 +71,7 @@ module io (
             6'h00:   bus_dout = io_ctrl;
             6'h04:   bus_dout = {28'd0, io_in_1};
             6'h08:   bus_dout = {24'd0, io_in_2};
-            6'h10:   bus_dout = {30'd0, io_out_1};
+            6'h10:   bus_dout = {22'd0, io_out_1[3:2], 6'd0, io_out_1[1:0]};
             default: bus_dout = 32'h33333333;
         endcase
     end
@@ -126,5 +127,6 @@ module io (
     // Inverted (~btn) because external circuit pulls up to 5V5 though a octal bus tranceiver.
     assign io_in_2 = ~din_sync_s[7:0];
 
-    assign oec = io_out_1;
+    assign oec = io_out_1[1:0];
+    assign adc_mux = io_out_1[3:2];
 endmodule

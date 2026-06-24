@@ -5,6 +5,7 @@ module core_top (
     input  wire [1:0] IAK,
     input  wire [7:0] DIN,
     output wire [1:0] OEC,
+    output wire [1:0] ADC_MUX,
 
     output wire       MCU_ACT,       // LED 1
     output wire       FPGA_ACT,      // LED 2
@@ -182,6 +183,7 @@ module core_top (
         .iak(IAK),
         .din(DIN),
         .oec(OEC),
+        .adc_mux(ADC_MUX),
         .debug(io_debug)
     );
 

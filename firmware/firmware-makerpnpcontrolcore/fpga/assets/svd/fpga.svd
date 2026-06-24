@@ -252,10 +252,24 @@
             </field>
 
             <field>
-              <name>reserved</name>
+              <name>reserved1</name>
               <description>reserved, keep at reset value</description>
               <bitOffset>2</bitOffset>
-              <bitWidth>30</bitWidth>
+              <bitWidth>6</bitWidth>
+            </field>
+
+            <field>
+              <name>adc_mux_sel</name>
+              <description>ADC Mux input select</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved2</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>10</bitOffset>
+              <bitWidth>22</bitWidth>
             </field>
 
           </fields>

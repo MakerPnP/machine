@@ -52,6 +52,11 @@ module int_core_top_tb;
     //
     reg [1:0] OEC;
 
+    //
+    // ADC Mux (address select bits)
+    //
+    reg [1:0] ADC_MUX;
+
     // encoders
     reg [2:0] ENCODER_A = 3'd0;
     reg [2:0] ENCODER_B = 3'd0;
@@ -72,6 +77,7 @@ module int_core_top_tb;
         .IAK(IAK),
         .DIN(DIN),
         .OEC(OEC),
+        .ADC_MUX(ADC_MUX),
         .ENCODER_A(ENCODER_A),
         .ENCODER_B(ENCODER_B),
         .ENCODER_C(ENCODER_C),
