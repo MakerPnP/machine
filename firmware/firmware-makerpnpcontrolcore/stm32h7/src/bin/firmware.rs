@@ -565,15 +565,11 @@ async fn adc_task(
             defmt::info!("ADC inputs. port: {}, values: {:?})", port, values);
         }
 
-        // FIXME disabled until embassy bug with split analog pins is fixed (PXn/PXn_C)
-        //       See https://github.com/embassy-rs/embassy/issues/6409
-        if false {
-            let ext = (
-                adc.blocking_read(&mut ext1_in, SampleTime::Cycles325),
-                adc.blocking_read(&mut ext2_in, SampleTime::Cycles325),
-            );
-            defmt::info!("ADC ext inputs. values: {:?})", ext);
-        }
+        let ext = (
+            adc.blocking_read(&mut ext1_in, SampleTime::Cycles325),
+            adc.blocking_read(&mut ext2_in, SampleTime::Cycles325),
+        );
+        defmt::info!("ADC ext inputs. values: {:?})", ext);
 
         let vac = (
             adc.blocking_read(&mut vac1_in, SampleTime::Cycles325),
