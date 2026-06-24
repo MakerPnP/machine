@@ -436,6 +436,34 @@ impl<I: Instance> FpgaCore<I> {
     pub fn adc_mux(&self) -> FpgaAdcMux {
         FpgaAdcMux::new()
     }
+
+
+    /// Indicates if the base board is present.
+    pub fn base_present(&mut self) -> bool {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        let value = fpga_pac::IO.io_in_1().read();
+
+        let present = value.base_present();
+        defmt::debug!("FPGA value: 0x{:08x}, base_present: 0b{:01b}", value.0, present);
+
+        present
+    }
+
+    /// Returns a bitmask of the port present status
+    /// one bit per port, 4 port.
+    pub fn port_present(&mut self) -> u8 {
+        defmt::assert!(self.memory_mapped_mode_enabled);
+
+        let value = fpga_pac::IO.io_in_1().read();
+
+        let present = value.port_present() & 0b1111;
+
+        defmt::debug!("FPGA value: 0x{:08x}, port_present: 0b{:04b}", value.0, present);
+
+        present
+    }
+
 }
 
 #[derive(defmt::Format)]

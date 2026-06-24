@@ -366,6 +366,30 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         Timer::after(Duration::from_millis(250)).await;
     }
 
+    //
+    // Detection circuits
+    //
+    let base_present = fpga.base_present();
+    if (!base_present) {
+        // enable the buzzer output, however, if the base board is not present, the buzzer will not
+        // be heard. if the base board is badly connected the user will hear the buzzer tone and
+        // be able to identify and resolve the issue.
+        fpga.buzzer_enable();
+        Timer::after(Duration::from_millis(5000)).await;
+        fpga.buzzer_disable();
+
+        // FUTURE add some LED diagnostic blink codes too
+
+        defmt::panic!("Base board not detected");
+    } else {
+        info!("Base board detected");
+    }
+
+    let port_present = fpga.port_present();
+    for i in 0..4 {
+        info!("Port {} present: {}", i, port_present & (1 << i));
+    }
+
     if true {
         info!("Waiting for either button to be pressed.");
         let initial_buttons = fpga.read_buttons_mm();
