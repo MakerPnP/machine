@@ -553,10 +553,7 @@ async fn adc_task(
     mut vac1_in: Peri<'static, PC0>,
     mut vac2_in: Peri<'static, PH2>,
 ) -> ! {
-    // FIXME without this pause, the buzzer gets stuck on! Why?
-    Timer::after(Duration::from_secs(20)).await;
-
-    //let mut ticker = Ticker::every(Duration::from_secs(1));
+    let mut ticker = Ticker::every(Duration::from_secs(1));
     loop {
         for port in 0..4 {
             adc_mux.select_port(port);
@@ -568,11 +565,15 @@ async fn adc_task(
             defmt::info!("ADC inputs. port: {}, values: {:?})", port, values);
         }
 
-        let ext = (
-            adc.blocking_read(&mut ext1_in, SampleTime::Cycles325),
-            adc.blocking_read(&mut ext2_in, SampleTime::Cycles325),
-        );
-        defmt::info!("ADC ext inputs. values: {:?})", ext);
+        // FIXME disabled until embassy bug with split analog pins is fixed (PXn/PXn_C)
+        //       See https://github.com/embassy-rs/embassy/issues/6409
+        if false {
+            let ext = (
+                adc.blocking_read(&mut ext1_in, SampleTime::Cycles325),
+                adc.blocking_read(&mut ext2_in, SampleTime::Cycles325),
+            );
+            defmt::info!("ADC ext inputs. values: {:?})", ext);
+        }
 
         let vac = (
             adc.blocking_read(&mut vac1_in, SampleTime::Cycles325),
@@ -580,8 +581,7 @@ async fn adc_task(
         );
         defmt::info!("ADC vac inputs. values: {:?})", vac);
 
-        //ticker.next().await;
-        Timer::after(Duration::from_secs(1)).await;
+        ticker.next().await;
     }
 }
 
