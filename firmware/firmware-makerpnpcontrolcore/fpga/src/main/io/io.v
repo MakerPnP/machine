@@ -70,6 +70,7 @@ module io (
             6'h00:   bus_dout = io_ctrl;
             6'h04:   bus_dout = {28'd0, io_in_1};
             6'h08:   bus_dout = {24'd0, io_in_2};
+            6'h10:   bus_dout = {30'd0, io_out_1};
             default: bus_dout = 32'h33333333;
         endcase
     end

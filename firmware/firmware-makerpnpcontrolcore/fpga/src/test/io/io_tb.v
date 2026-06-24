@@ -45,6 +45,8 @@ module io_tb;
         $dumpfile("io_tb.vcd");
         $dumpvars(0, io_tb);
 
+        we = 0;
+
         // simulate pull-ups
         BTN[0] = 1;
         BTN[1] = 1;
@@ -122,6 +124,32 @@ module io_tb;
 
         $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
         `ASSERT_EQ(dout, {28'd0, 2'b00, 2'b00}, "0x%08h", "IO_IN_1 not updated");
+
+
+        $display("change outputs - pattern 1");
+        we = 1;
+        addr = 5'h10;
+        din = 32'h0000_0001;
+        #10;
+        we = 0;
+
+        #20;
+
+        `ASSERT_EQ(OEC, 2'b01, "0x%02b", "OEC mismatch");
+        `ASSERT_EQ(dout, 32'h0000_0001, "0x%08h", "dout mismatch");
+
+
+        $display("change outputs - pattern 2");
+        we = 1;
+        addr = 5'h10;
+        din = 32'h0000_0002;
+        #10;
+        we = 0;
+
+        #20;
+
+        `ASSERT_EQ(OEC, 2'b10, "0x%02b", "OEC mismatch");
+        `ASSERT_EQ(dout, 32'h0000_0002, "0x%08h", "dout mismatch");
 
         report();
         $finish;
