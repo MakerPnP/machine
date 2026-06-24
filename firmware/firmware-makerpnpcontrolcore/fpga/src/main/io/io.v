@@ -119,8 +119,8 @@ module io (
     // Inverted (~btn) because external circuit pulls up to 3V3 (Pressed = 0)
     //
     // Map IAK to io_in_1 (Bit 2 = IAK1, Bit 1 = IAK2)
-    // Non-inverted.
-    assign io_in_1 = {io_sync_s[3:2], ~io_sync_s[1:0]};
+    // Inverted, as inputs are via optical isolators, active-low.
+    assign io_in_1 = {~io_sync_s[3:0]};
 
     // Map DIN to io_in_2
     // Inverted (~btn) because external circuit pulls up to 5V5 though a octal bus tranceiver.

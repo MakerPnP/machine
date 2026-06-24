@@ -560,9 +560,13 @@ async fn fpga_task(mut fpga: FpgaInstance) -> ! {
             if toggle {
                 fpga.led_1_disable();
                 fpga.led_2_enable();
+                fpga.oec1_disable();
+                fpga.oec2_enable();
             } else {
                 fpga.led_1_enable();
                 fpga.led_2_disable();
+                fpga.oec1_enable();
+                fpga.oec2_disable();
             }
             toggle = !toggle;
         }
@@ -570,6 +574,12 @@ async fn fpga_task(mut fpga: FpgaInstance) -> ! {
         if led_frame_counter % 100 == 0 {
             fpga.read_encoders(&mut encoders);
             debug!("Encoder values (u16):\n{:04x}", encoders);
+
+            let iak = fpga.read_iak();
+            debug!("IAK: 0b{:02b}", iak);
+
+            let din = fpga.read_din();
+            debug!("DIN: 0b{:08b}", din);
         }
 
         rainbow_wave(&mut port_rgb_leds, led_frame_counter);

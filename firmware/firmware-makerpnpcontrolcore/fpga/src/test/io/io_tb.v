@@ -47,13 +47,11 @@ module io_tb;
 
         we = 0;
 
-        // simulate pull-ups
+        // simulate pull-ups (active-low)
         BTN[0] = 1;
         BTN[1] = 1;
-
-        // default low
-        IAK[0] = 0;
-        IAK[1] = 0;
+        IAK[0] = 1;
+        IAK[1] = 1;
 
         // reset pulse
         RESET = 1;
@@ -97,29 +95,29 @@ module io_tb;
         $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
         `ASSERT_EQ(dout, {28'd0, 2'b00, 2'b00}, "0x%08h", "IO_IN_1 not updated");
 
-        $display("simulate iak1 active (active high)");
-        IAK[0] = 1;
+        $display("simulate iak1 active (active low)");
+        IAK[0] = 0;
         #20;
 
         $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
         `ASSERT_EQ(dout, {28'd0, 2'b01, 2'b00}, "0x%08h", "IO_IN_1 not updated");
 
-        $display("simulate iak1 inactive (active high)");
-        IAK[0] = 0;
+        $display("simulate iak1 inactive (active low)");
+        IAK[0] = 1;
         #20;
 
         $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
         `ASSERT_EQ(dout, {28'd0, 2'b00, 2'b00}, "0x%08h", "IO_IN_1 not updated");
 
-        $display("simulate iak2 active (active high)");
-        IAK[1] = 1;
+        $display("simulate iak2 active (active low)");
+        IAK[1] = 0;
         #20;
 
         $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
         `ASSERT_EQ(dout, {28'd0, 2'b10, 2'b00}, "0x%08h", "IO_IN_1 not updated");
 
-        $display("simulate iak2 inactive (active high)");
-        IAK[1] = 0;
+        $display("simulate iak2 inactive (active low)");
+        IAK[1] = 1;
         #20;
 
         $display("iak1: %d, iak2: %d, user_0: %d, user_1: %d", (dout[3:2] & 2'b01) >> 0, (dout[3:2] & 2'b10) >> 1, (dout[1:0] & 2'b01) >> 0, (dout[1:0] & 2'b10) >> 1);
