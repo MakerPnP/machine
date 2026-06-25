@@ -42,7 +42,7 @@ module clock_out_tb;
         #10;
         RESET = 0;
 
-        #10;
+        #20;
         `ASSERT_EQ(FPGA_CLK_1, 1'd0);
         `ASSERT_EQ(FPGA_CLK_2, 1'd0);
         `ASSERT_EQ(FPGA_CLK_3, 1'd0);
