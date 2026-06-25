@@ -1,4 +1,3 @@
-
 module timer_mux
     (
         input  wire        sys_clk,
@@ -9,19 +8,29 @@ module timer_mux
         output wire mux_sel4
     );
 
-reg[3:0] mux_sel;
+    // Explicitly instantiate SB_IO with an output register (PIN_OUTPUT_REGISTERED = 6'b0101_00)
+    SB_IO #(.PIN_TYPE(6'b0101_00)) io_sel1 (
+        .PACKAGE_PIN(mux_sel1),
+        .OUTPUT_CLK(sys_clk),
+        .D_OUT_0(reset ? 1'b1 : 1'b0)
+    );
 
-assign mux_sel1 = mux_sel[0];
-assign mux_sel2 = mux_sel[1];
-assign mux_sel3 = mux_sel[2];
-assign mux_sel4 = mux_sel[3];
+    SB_IO #(.PIN_TYPE(6'b0101_00)) io_sel2 (
+        .PACKAGE_PIN(mux_sel2),
+        .OUTPUT_CLK(sys_clk),
+        .D_OUT_0(reset ? 1'b1 : 1'b0)
+    );
 
-always @(posedge sys_clk) begin
-    if (reset) begin
-        mux_sel <= 4'b1111;
-    end else begin
-        mux_sel <= 4'b0000;
-    end
-end
+    SB_IO #(.PIN_TYPE(6'b0101_00)) io_sel3 (
+        .PACKAGE_PIN(mux_sel3),
+        .OUTPUT_CLK(sys_clk),
+        .D_OUT_0(reset ? 1'b1 : 1'b0)
+    );
+
+    SB_IO #(.PIN_TYPE(6'b0101_00)) io_sel4 (
+        .PACKAGE_PIN(mux_sel4),
+        .OUTPUT_CLK(sys_clk),
+        .D_OUT_0(reset ? 1'b1 : 1'b0)
+    );
 
 endmodule
