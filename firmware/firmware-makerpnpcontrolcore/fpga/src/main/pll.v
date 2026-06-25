@@ -6,8 +6,8 @@
  * Use at your own risk.
  *
  * Given input frequency:        50.000 MHz
- * Requested output frequency:  100.000 MHz
- * Achieved output frequency:   100.000 MHz
+ * Requested output frequency:   50.000 MHz
+ * Achieved output frequency:    50.000 MHz
  */
 
 `ifdef SIM
@@ -27,8 +27,8 @@ module pll(
         #100 locked = 1;
         $display("locked");
 
-        // generate 2x clock (adjust timing to match your testbench timescale)
-        forever #10 clock_out = ~clock_out;
+        // generate 1x clock (adjust timing to match your testbench timescale)
+        forever #5 clock_out = ~clock_out;
     end
 endmodule
 `else
@@ -40,11 +40,12 @@ module pll(
 
 SB_PLL40_CORE #(
 		.FEEDBACK_PATH("SIMPLE"),
-		.DIVR(4'b0000),		// DIVR =  0
-		.DIVF(7'b0001111),	// DIVF = 15
-		.DIVQ(3'b011),		// DIVQ =  3
-		.FILTER_RANGE(3'b100)	// FILTER_RANGE = 4
-	) uut (
+.FEEDBACK_PATH("SIMPLE"),
+        .DIVR(4'b0000),         // DIVR =  0
+        .DIVF(7'b0001111),      // DIVF = 15
+        .DIVQ(3'b100),          // DIVQ =  4
+        .FILTER_RANGE(3'b100)   // FILTER_RANGE = 4
+) uut (
 		.LOCK(locked),
 		.RESETB(1'b1),
 		.BYPASS(1'b0),

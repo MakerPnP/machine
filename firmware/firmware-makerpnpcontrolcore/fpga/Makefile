@@ -11,6 +11,7 @@ TYPE     := hx8k
 PACKAGE  := ct256
 #NEXTPNR_EXTRA_ARGS :=  --placer sa
 NEXTPNR_EXTRA_ARGS :=
+FREQ     := 50
 BUILD := build
 SRC_MAIN := src/main
 SRC_TEST := src/test
@@ -80,7 +81,7 @@ $(BUILD)/$(PROJECT)-design.json: $(VERILOGS) $(BUILD) Makefile
 	yosys -q -l $(BUILD)/yosys.log -p 'synth_${FAMILY} -top $(TOP) -json $(BUILD)/$(PROJECT)-design.json' $(VERILOGS)
 
 $(BUILD)/$(PROJECT).asc: $(BUILD)/$(PROJECT)-design.json pins.pcf
-	nextpnr-${FAMILY} -q -l $(BUILD)/nextpnr.log --${TYPE} --package ${PACKAGE} --top $(TOP) --json $(BUILD)/$(PROJECT)-design.json --write $(BUILD)/$(PROJECT)-place.json --report $(BUILD)/$(PROJECT)-report.json --pcf pins.pcf --asc $(BUILD)/$(PROJECT).asc --placed-svg $(BUILD)/$(PROJECT)-placed.svg --freq 100 -v $(NEXTPNR_EXTRA_ARGS)
+	nextpnr-${FAMILY} -q -l $(BUILD)/nextpnr.log --${TYPE} --package ${PACKAGE} --top $(TOP) --json $(BUILD)/$(PROJECT)-design.json --write $(BUILD)/$(PROJECT)-place.json --report $(BUILD)/$(PROJECT)-report.json --pcf pins.pcf --asc $(BUILD)/$(PROJECT).asc --placed-svg $(BUILD)/$(PROJECT)-placed.svg --freq $(FREQ) -v $(NEXTPNR_EXTRA_ARGS)
 	@echo ""
 	@grep -B 1 "%$$" $(BUILD)/nextpnr.log
 	@echo ""
