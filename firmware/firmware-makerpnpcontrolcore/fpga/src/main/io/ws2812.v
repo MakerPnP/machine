@@ -181,7 +181,7 @@ module ws2812 #(
                 (sync_addr >= WS_DATA_1 && sync_addr <= 6'h2C)) begin
 
                 frame_ready <= 0;
-                
+
                 if (write_ptr < MAX_LEDS) begin
                     wr_addr <= write_ptr;
                     case (mode)
@@ -230,7 +230,8 @@ module ws2812 #(
 
     reg [1:0]  phase;
 
-    reg [31:0] phase_counter;
+    // FUTURE reduce the size of this somehow
+    reg [15:0] phase_counter;
 
     reg is_last_led;
 
@@ -254,10 +255,9 @@ module ws2812 #(
                 PHASE_RESET: begin
                     phase_counter <= phase_counter + 1;
                     if (phase_counter == T_RESET) begin
-                        led_index <= 0;
-
-                        phase_counter <= 0;
-                        phase <= PHASE_FETCH;
+                        led_index     <= 8'd0;
+                        phase_counter <= 15'd0;
+                        phase         <= PHASE_FETCH;
                     end
                 end
                 PHASE_FETCH: begin
@@ -266,8 +266,8 @@ module ws2812 #(
 
                     phase_counter <= phase_counter + 1;
                     if (phase_counter == T_FETCH) begin
-                        phase_counter <= 0;
-                        phase <= PHASE_PREPARE;
+                        phase_counter <= 15'd0;
+                        phase         <= PHASE_PREPARE;
                     end
                 end
                 PHASE_PREPARE: begin
