@@ -224,6 +224,7 @@ module quadspi (
 
                     STATE_ADDR: begin
                         addr <= {addr[11:0], io_in};
+                        `ifndef SYNTHESIS
                         if (phase_counter == 4'd3) begin
                             if (cmd_is_write) begin
                                 $strobe("write address: 0x%04h", addr);
@@ -231,6 +232,7 @@ module quadspi (
                                 $strobe("read address: 0x%04h", addr);
                             end
                         end
+                        `endif
                     end
 
                     STATE_DATA_W: begin
