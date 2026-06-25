@@ -9,7 +9,7 @@ module buzzer (
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
 
-    output reg         buzzer,
+    output wire        buzzer,
 
     output reg [15:0]  debug
 );
@@ -58,7 +58,6 @@ module buzzer (
         if (reset) begin
             strobe_sync_r1 <= 1'b1;
             strobe_sync_r2 <= 1'b0;
-            buzzer         <= 1'b0;
             activity_flag  <= 1'b0;
             debug          <= 16'd0;
         end else begin
@@ -68,7 +67,6 @@ module buzzer (
             // Act on rising edge transition of our synchronized strobe signal
             if (strobe_sync_r1 && !strobe_sync_r2) begin
                 // Bit 0 enables the buzzer
-                buzzer <= buzzer_ctrl[0];
 
                 $display("BUZZER_CTRL: 0x%02h", buzzer_ctrl);
 
@@ -90,5 +88,7 @@ module buzzer (
             };
         end
     end
+
+    assign buzzer = buzzer_ctrl[0];
 
 endmodule
