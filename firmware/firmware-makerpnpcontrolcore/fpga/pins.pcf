@@ -29,10 +29,10 @@ set_io  FPGA_CLK_3 B11
 set_io  FPGA_CLK_4 A11
 
 ### QuadSPI 1 (MCU ONLY) ###
-set_io QUADSPI1_IO[0] J16
-set_io QUADSPI1_IO[1] K16
-set_io QUADSPI1_IO[2] J15
-set_io QUADSPI1_IO[3] K15
+set_io --warn-no-port QUADSPI1_IO[0] J16
+set_io --warn-no-port QUADSPI1_IO[1] K16
+set_io --warn-no-port QUADSPI1_IO[2] J15
+set_io --warn-no-port QUADSPI1_IO[3] K15
 set_io QUADSPI1_CLK G16
 set_io QUADSPI1_NCS L16
 
