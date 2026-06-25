@@ -211,10 +211,10 @@ module ws2812 #(
 
     reg [31:0] shift_reg;
 
-    localparam T0H = 40;  // ~0.4us @ 100MHz (adjust as needed)
-    localparam T1H = 80;  // ~0.8us
-    localparam T_TOTAL = 120;
-    localparam T_RESET = 8000; // 80us (50us min)
+    localparam T0H = 20;  // ~0.4us @ 50MHz (adjust as needed)
+    localparam T1H = 40;  // ~0.8us
+    localparam T_TOTAL = 60;
+    localparam T_RESET = 4000; // 80us (50us min)
 
     // BRAM is two-cycle delayed, after which rd_data is correct
     // NOTE: some documentation says one-cycle, but in sim it's two-cycle...
