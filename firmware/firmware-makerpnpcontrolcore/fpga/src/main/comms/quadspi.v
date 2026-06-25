@@ -48,7 +48,6 @@ module quadspi (
     // Tri-state buffer logic
     reg        io_out_en;
     reg [3:0]  io_out_reg;
-    wire [3:0] io_in;
 
     // -----------------------------------------------------------------
     // Structural Synchronizers to Prevent High Fanout Global Promotion
@@ -84,6 +83,13 @@ module quadspi (
     wire sck_falling = (sck_sync == 2'b10);
 
     // Explicitly instantiate the 4 physical bidirectional I/O buffers
+    wire [3:0] raw_io_in;
+    reg  [3:0] io_in;
+
+    always @(posedge sys_clk) begin
+        io_in <= raw_io_in; // Unconditional sample forces IOLOGIC packing
+    end
+
     genvar i;
     generate
         for (i = 0; i < 4; i = i + 1) begin : qspi_io_buffers
@@ -94,11 +100,11 @@ module quadspi (
                 .PACKAGE_PIN(io[i]),
                 .OUTPUT_ENABLE(io_out_en),
                 .D_OUT_0(io_out_reg[i]),
-                .D_IN_0(io_in[i])
+                .INPUT_CLK(sys_clk),
+                .D_IN_0(raw_io_in[i]) // Route to the raw wire
             );
         end
     endgenerate
-
     reg [31:0] in_buf;
     reg [31:0] out_buf;
     reg [31:0] next_buf;
