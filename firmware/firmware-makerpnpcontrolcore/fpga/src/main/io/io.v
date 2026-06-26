@@ -27,7 +27,11 @@ module io (
     wire [8:0] io_in_1;
     wire [7:0] io_in_2;
 
-    reg [3:0] io_out_1;
+    // Duplicated registers to isolate internal vs external logic paths
+    (* keep *)
+    reg [3:0] io_out_1_r;
+    reg [1:0] adc_mux_r;
+    reg [1:0] oec_r;
 
     reg        strobe_update;
 
@@ -36,6 +40,30 @@ module io (
 
     reg [7:0]  din_sync_m;
     reg [7:0]  din_sync_s;
+
+    SB_IO #(.PIN_TYPE(6'b0101_00)) io_adc_mux1 (
+        .PACKAGE_PIN(adc_mux[0]),
+        .OUTPUT_CLK(sys_clk),
+        .D_OUT_0(reset ? 1'b0 : adc_mux_r[0])
+    );
+
+    SB_IO #(.PIN_TYPE(6'b0101_00)) io_adc_mux2 (
+        .PACKAGE_PIN(adc_mux[1]),
+        .OUTPUT_CLK(sys_clk),
+        .D_OUT_0(reset ? 1'b0 : adc_mux_r[1])
+    );
+
+    SB_IO #(.PIN_TYPE(6'b0101_00)) io_oec1 (
+        .PACKAGE_PIN(oec[0]),
+        .OUTPUT_CLK(sys_clk),
+        .D_OUT_0(reset ? 1'b0 : oec_r[0])
+    );
+
+    SB_IO #(.PIN_TYPE(6'b0101_00)) io_oec2 (
+        .PACKAGE_PIN(oec[1]),
+        .OUTPUT_CLK(sys_clk),
+        .D_OUT_0(reset ? 1'b0 : oec_r[1])
+    );
 
     // CDC (Clock Domain Crossing) Flag Catching
     // Because strobe_update /may/ originate from a diffent clock domain a simple pulse synchronizer
@@ -46,11 +74,13 @@ module io (
     // --- 1. Synchronous Register Writes & Local Strobes ---
     always @(posedge sys_clk) begin
         if (reset) begin
-            io_ctrl        <= 32'd0;
-            strobe_update  <= 1'b1;
-            io_out_1       <= 4'b0000;
-            bus_dout          <= 32'h00000000;
-            bus_ack           <= 1'b0;
+            io_ctrl         <= 32'd0;
+            strobe_update   <= 1'b1;
+            io_out_1_r      <= 4'b0000;
+            oec_r             <= 2'b00;
+            adc_mux_r         <= 2'b00;
+            bus_dout        <= 32'h00000000;
+            bus_ack         <= 1'b0;
         end else begin
             // Automatic self-clearing single-cycle strobe pulse
             strobe_update  <= 1'b0;
@@ -67,7 +97,11 @@ module io (
                                 strobe_update <= 1'b1;
                             end
                             6'h10: begin
-                                io_out_1      <= {bus_din[9:8], bus_din[1:0]};
+                                // Update internal readback register
+                                io_out_1_r  <= {bus_din[9:8], bus_din[1:0]};
+                                // Update isolated top-level registers (clean IOB packing)
+                                oec_r       <= bus_din[1:0];
+                                adc_mux_r   <= bus_din[9:8];
                             end
                             default: begin end
                         endcase
@@ -77,7 +111,7 @@ module io (
                             6'h00:   bus_dout <= io_ctrl;
                             6'h04:   bus_dout <= {16'd0, io_in_1[8:5], 3'b000, io_in_1[4:4], 4'b0000, io_in_1[3:0]};
                             6'h08:   bus_dout <= {24'd0, io_in_2};
-                            6'h10:   bus_dout <= {22'd0, io_out_1[3:2], 6'd0, io_out_1[1:0]};
+                            6'h10:   bus_dout <= {22'd0, io_out_1_r[3:2], 6'd0, io_out_1_r[1:0]};
                             default: bus_dout <= 32'h33333333;
                         endcase
                     end
@@ -109,8 +143,8 @@ module io (
                 $display("IO_CTRL: 0x%08h", io_ctrl);
             end
 
-            io_sync_m <= {port_present, base_present, iak, btn};
-            io_sync_s <= io_sync_m;
+            io_sync_m  <= {port_present, base_present, iak, btn};
+            io_sync_s  <= io_sync_m;
 
             din_sync_m <= din;
             din_sync_s <= din_sync_m;
@@ -139,12 +173,10 @@ module io (
     // Inverted, as inputs are via optical isolators, active-low.
     //
     // Map present signals, non-inverted
-    assign io_in_1 = {io_sync_s[8:4], ~io_sync_s[3:0]};
+    assign io_in_1  = {io_sync_s[8:4], ~io_sync_s[3:0]};
 
     // Map DIN to io_in_2
     // Inverted (~btn) because external circuit pulls up to 5V5 though a octal bus tranceiver.
-    assign io_in_2 = ~din_sync_s[7:0];
+    assign io_in_2  = ~din_sync_s[7:0];
 
-    assign oec = io_out_1[1:0];
-    assign adc_mux = io_out_1[3:2];
 endmodule
