@@ -4,10 +4,12 @@ module leds (
     input  wire        sys_clk,
 
     // Bus Slave Interface
+    input  wire        bus_stb,
     input  wire        bus_we,
     input  wire [5:0]  bus_addr,
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
+    output reg         bus_ack,
 
     output reg         mcu_act,
     output reg         fpga_act,
@@ -24,37 +26,43 @@ module leds (
     reg        strobe_sync_r1, strobe_sync_r2;
     reg        activity_flag;
 
-    // --- 1. Synchronous Register Writes & Local Strobes ---
+    // --- Synchronous Register Read/Writes & Local Strobes ---
     always @(posedge sys_clk) begin
         if (reset) begin
             led_ctrl       <= {24'd0, 8'b0000_0011};
             strobe_update  <= 1'b1;
+            bus_dout       <= 32'h00000000;
+            bus_ack        <= 1'b0;
         end else begin
             // Automatic self-clearing single-cycle strobe pulse
             strobe_update  <= 1'b0;
 
-            if (bus_we) begin
-                $display("led bus write. addr: %02x, value: %08h", bus_addr, bus_din);
-                case (bus_addr)
-                    6'h00: begin
-                        led_ctrl      <= bus_din;
-                        strobe_update <= 1'b1;
+            if (bus_stb) begin
+                if (!bus_ack) begin
+                    bus_ack <= 1'b1;
+                    if (bus_we) begin
+                        $display("led bus write. addr: %02x, value: %08h", bus_addr, bus_din);
+                        case (bus_addr)
+                            6'h00: begin
+                                led_ctrl      <= bus_din;
+                                strobe_update <= 1'b1;
+                            end
+                            default: begin end
+                        endcase
+                    end else begin
+                        case (bus_addr)
+                            6'h00:   bus_dout <= led_ctrl;
+                            default: bus_dout <= 32'h44444444;
+                        endcase
                     end
-                    default: begin end
-                endcase
+                end
+            end else begin
+                bus_ack <= 1'b0;
             end
         end
     end
 
-    // --- 2. Instantaneous Combinational Readback ---
-    always @(*) begin
-        case (bus_addr)
-            6'h00:   bus_dout = led_ctrl;
-            default: bus_dout = 32'h44444444;
-        endcase
-    end
-
-    // --- 3. Internal Business Logic / CDC Core ---
+    // --- Internal Business Logic / CDC Core ---
     always @(posedge sys_clk) begin
         if (reset) begin
             strobe_sync_r1 <= 1'b1;

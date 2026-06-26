@@ -5,10 +5,12 @@ module encoders(
     input  wire        reset,
     
     // Bus Slave Interface
+    input  wire        bus_stb,
     input  wire        bus_we,
     input  wire [5:0]  bus_addr,
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
+    output reg         bus_ack,
 
     input  wire [2:0]  abz_a,
     input  wire [2:0]  abz_b,
@@ -93,41 +95,47 @@ module encoders(
     reg        strobe_sync_r1, strobe_sync_r2;
     reg        activity_flag;
 
-    // --- 1. Local Write & Command Decoder ---
+    // --- Local Read/Write & Command Decoder ---
     always @(posedge sys_clk) begin
         if (reset) begin
             strobe_update  <= 1'b1;
+            bus_dout        <= 32'h00000000;
+            bus_ack         <= 1'b0;
         end else begin
             // Automatic self-clearing single-cycle strobe pulse
             strobe_update  <= 1'b0;
 
-            if (bus_we) begin
-                $display("encoder bus write. addr: %02x, value: %08h", bus_addr, bus_din);
-                sync_addr = bus_addr;
-                sync_reg = bus_din;
-                strobe_update <= 1'b1;
+            if (bus_stb) begin
+                if (!bus_ack) begin
+                    bus_ack <= 1'b1;
+                    if (bus_we) begin
+                        $display("encoder bus write. addr: %02x, value: %08h", bus_addr, bus_din);
+                        sync_addr = bus_addr;
+                        sync_reg = bus_din;
+                        strobe_update <= 1'b1;
+                    end else begin
+                        case (bus_addr)
+                            6'h00: bus_dout <= enc_ctrl;
+                            // 6'h04-18 - write only (set count)
+                            6'h20: bus_dout <= {16'd0, encoder_count[0]};
+                            6'h24: bus_dout <= {16'd0, encoder_count[1]};
+                            6'h28: bus_dout <= {16'd0, encoder_count[2]};
+                            6'h2c: bus_dout <= {16'd0, encoder_count[3]};
+                            6'h30: bus_dout <= {16'd0, encoder_count[4]};
+                            6'h34: bus_dout <= {16'd0, encoder_count[5]};
+                            default: bus_dout <= 32'h22222222;
+                        endcase
+                    end
+                end
+            end else begin
+                bus_ack <= 1'b0;
             end
         end
     end
 
-    // --- 2. Localized Combinational Read Multiplexer ---
-    always @(*) begin
-        case (bus_addr)
-            6'h00: bus_dout = enc_ctrl;
-            // 6'h04-18 - write only (set count)
-            6'h20: bus_dout = {16'd0, encoder_count[0]};
-            6'h24: bus_dout = {16'd0, encoder_count[1]};
-            6'h28: bus_dout = {16'd0, encoder_count[2]};
-            6'h2c: bus_dout = {16'd0, encoder_count[3]};
-            6'h30: bus_dout = {16'd0, encoder_count[4]};
-            6'h34: bus_dout = {16'd0, encoder_count[5]};
-            default: bus_dout = 32'h22222222;
-        endcase
-    end
-
     reg initialized = 0;
 
-    // --- 3. Internal Business Logic / CDC Core ---
+    // --- Internal Business Logic / CDC Core ---
     always @(posedge sys_clk) begin
         if (reset) begin
             enc_ctrl       <= {24'd0, 8'b0000_0000};

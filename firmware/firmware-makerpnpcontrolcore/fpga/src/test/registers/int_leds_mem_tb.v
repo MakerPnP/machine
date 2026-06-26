@@ -8,6 +8,8 @@ module int_leds_mem_tb;
     reg RESET;
     reg TCXO = 0;
 
+    `include "src/test/bus_io.svh"
+
     wire FPGA_ACT;
     wire MCU_ACT;
 
@@ -18,10 +20,12 @@ module int_leds_mem_tb;
     reg        mem_en = 0;
     reg        mem_we = 0;
 
+    reg        led_we;
+    reg        led_stb;
     reg [5:0]  led_addr;
     reg [31:0] led_din;
     reg [31:0] led_dout;
-    reg        led_we;
+    reg        led_ack;
 
     wire [15:0] debug;
 
@@ -29,10 +33,12 @@ module int_leds_mem_tb;
         .reset(RESET),
         .sys_clk(TCXO),
 
+        .bus_stb(led_stb),
         .bus_we(led_we),
         .bus_addr(led_addr),
         .bus_din(led_din),
         .bus_dout(led_dout),
+        .bus_ack(led_ack),
 
         .mcu_act(MCU_ACT),
         .fpga_act(FPGA_ACT),
@@ -50,10 +56,12 @@ module int_leds_mem_tb;
         .dout_a(mem_dout),
         .valid_a(mem_valid),
 
+        .led_stb(led_stb),
         .led_we(led_we),
         .led_addr(led_addr),
         .led_din(led_din),
-        .led_dout(led_dout)
+        .led_dout(led_dout),
+        .led_ack(led_ack)
     );
 
     // Clock generation: 100 MHz simulated clock (10ns period)

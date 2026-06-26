@@ -3,11 +3,12 @@ module io (
     input  wire        reset,
     input  wire        sys_clk,
 
-    // Bus Slave Interface
+    input  wire        bus_stb,
     input  wire        bus_we,
     input  wire [5:0]  bus_addr,
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
+    output reg         bus_ack,
 
     input  wire [1:0]  btn,
     input  wire [1:0]  iak,
@@ -48,35 +49,43 @@ module io (
             io_ctrl        <= 32'd0;
             strobe_update  <= 1'b1;
             io_out_1       <= 4'b0000;
+            bus_dout          <= 32'h00000000;
+            bus_ack           <= 1'b0;
         end else begin
             // Automatic self-clearing single-cycle strobe pulse
             strobe_update  <= 1'b0;
 
-            if (bus_we) begin
-                $display("io bus write. addr: %02x, value: %08h", bus_addr, bus_din);
-                case (bus_addr)
-                    6'h00: begin
-                        io_ctrl       <= bus_din;
-                        strobe_update <= 1'b1;
+            if (bus_stb) begin
+                if (!bus_ack) begin
+                    // Process writes only when a cycle is valid, a write is asserted, and we haven't acknowledged yet
+                    bus_ack <= 1'b1;
+                    if (bus_we) begin
+                        $display("io bus write. addr: %02x, value: %08h", bus_addr, bus_din);
+                        case (bus_addr)
+                            6'h00: begin
+                                io_ctrl       <= bus_din;
+                                strobe_update <= 1'b1;
+                            end
+                            6'h10: begin
+                                io_out_1      <= {bus_din[9:8], bus_din[1:0]};
+                            end
+                            default: begin end
+                        endcase
+                    end else begin
+                        // Process reads cleanly from the fabric-only copy
+                        case (bus_addr)
+                            6'h00:   bus_dout <= io_ctrl;
+                            6'h04:   bus_dout <= {16'd0, io_in_1[8:5], 3'b000, io_in_1[4:4], 4'b0000, io_in_1[3:0]};
+                            6'h08:   bus_dout <= {24'd0, io_in_2};
+                            6'h10:   bus_dout <= {22'd0, io_out_1[3:2], 6'd0, io_out_1[1:0]};
+                            default: bus_dout <= 32'h33333333;
+                        endcase
                     end
-                    6'h10: begin
-                        io_out_1      <= {bus_din[9:8], bus_din[1:0]};
-                    end
-                    default: begin end
-                endcase
+                end
+            end else begin
+                bus_ack <= 1'b0;
             end
         end
-    end
-
-    // --- 2. Instantaneous Combinational Readback ---
-    always @(*) begin
-        case (bus_addr)
-            6'h00:   bus_dout = io_ctrl;
-            6'h04:   bus_dout = {16'd0, io_in_1[8:5], 3'b000, io_in_1[4:4], 4'b0000, io_in_1[3:0]};
-            6'h08:   bus_dout = {24'd0, io_in_2};
-            6'h10:   bus_dout = {22'd0, io_out_1[3:2], 6'd0, io_out_1[1:0]};
-            default: bus_dout = 32'h33333333;
-        endcase
     end
 
     // --- 3. Internal Business Logic / CDC Core ---
@@ -86,6 +95,10 @@ module io (
             strobe_sync_r2 <= 1'b0;
             activity_flag  <= 1'b0;
             debug          <= 16'd0;
+            io_sync_m      <= 9'd0;
+            io_sync_s      <= 9'd0;
+            din_sync_m     <= 8'd0;
+            din_sync_s     <= 8'd0;
         end else begin
             strobe_sync_r2 <= strobe_sync_r1;
             strobe_sync_r1 <= strobe_update;

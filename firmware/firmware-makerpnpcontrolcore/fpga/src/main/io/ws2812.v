@@ -7,10 +7,12 @@ module ws2812 #(
     // =========================
     // BUS INTERFACE
     // =========================
+    input  wire        bus_stb,
     input  wire        bus_we,
     input  wire [5:0]  bus_addr,
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
+    output reg         bus_ack,
 
     // =========================
     // WS OUTPUT
@@ -94,8 +96,22 @@ module ws2812 #(
         .MASK(16'h0000)
     );
 
+    always @(posedge sys_clk) begin
+        if (reset) begin
+            bus_ack        <= 1'b0;
+        end else begin
+            if (bus_stb) begin
+                if (!bus_ack) begin
+                    bus_ack <= 1'b1;
+                end
+            end else begin
+                bus_ack <= 1'b0;
+            end
+        end
+    end
+
     // ============================================================
-    // BUS WRITE CAPTURE (encoder-style)
+    // BUS WRITE CAPTURE
     // ============================================================
     reg [31:0] sync_reg;
     reg [5:0]  sync_addr;
@@ -109,10 +125,14 @@ module ws2812 #(
         end else begin
             strobe_update <= 0;
 
-            if (bus_we) begin
-                sync_addr <= bus_addr;
-                sync_reg  <= bus_din;
-                strobe_update <= 1;
+            if (bus_stb) begin
+                if (!bus_ack) begin
+                    if (bus_we) begin
+                        sync_addr <= bus_addr;
+                        sync_reg  <= bus_din;
+                        strobe_update <= 1;
+                    end
+                end
             end
         end
     end
@@ -120,13 +140,19 @@ module ws2812 #(
     // ============================================================
     // BUS READ
     // ============================================================
-    always @(*) begin
-        case (bus_addr)
-            WS_CTRL:   bus_dout = {29'b0, mode, enabled};
-            WS_TX_CONFIG: bus_dout = {23'b0, num_leds};
+    always @(posedge sys_clk) begin
+        if (bus_stb) begin
+            if (!bus_ack) begin
+                if (!bus_we) begin
+                    case (bus_addr)
+                        WS_CTRL:   bus_dout <= {29'b0, mode, enabled};
+                        WS_TX_CONFIG: bus_dout <= {23'b0, num_leds};
 
-            default:   bus_dout = 32'h00000000;
-        endcase
+                        default:   bus_dout <= 32'h00000000;
+                    endcase
+                end
+            end
+        end
     end
 
     // ============================================================

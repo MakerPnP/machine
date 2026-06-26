@@ -4,64 +4,29 @@
 
 module ws2812_tb;
 
-    // ============================================================
-    // CLOCK / RESET
-    // ============================================================
     reg RESET;
     reg TCXO = 0;
 
-    always #5 TCXO = ~TCXO; // 100 MHz
-
-    // ============================================================
-    // BUS SIGNALS
-    // ============================================================
-    reg  [5:0]  addr;
-    reg  [31:0] din;
-    wire [31:0] dout;
-    reg         we;
+    `include "src/test/bus_io.svh"
 
     wire ws_out;
     wire [15:0] debug;
 
-    // ============================================================
-    // DUT
-    // ============================================================
+    reg [31:0] result;
+
     ws2812 dut (
         .sys_clk(TCXO),
         .reset(RESET),
 
+        .bus_stb(stb),
         .bus_we(we),
         .bus_addr(addr),
         .bus_din(din),
         .bus_dout(dout),
+        .bus_ack(ack),
 
         .ws_out(ws_out)
     );
-
-    // ============================================================
-    // BUS WRITE TASK
-    // ============================================================
-    task write(input [4:0] a, input [31:0] d);
-    begin
-        addr = a;
-        din  = d;
-        we   = 1;
-        #10;
-        we   = 0;
-        #10;
-    end
-    endtask
-
-    // ============================================================
-    // BUS READ TASK
-    // ============================================================
-    task read(input [4:0] a);
-    begin
-        addr = a;
-        we   = 0;
-        #10;
-    end
-    endtask
 
     reg [31:0] expected [0:15];
     integer bit_count;
@@ -70,35 +35,25 @@ module ws2812_tb;
     integer decoded_leds;
     reg [23:0] led_data [0:255];
 
-    // ============================================================
-    // TEST SEQUENCE
-    // ============================================================
+    always #10 TCXO = ~TCXO; // 50 MHz
+
+    reg [7:0] test_index = 0;
+
     initial begin
         $dumpfile("ws2812_tb.vcd");
         $dumpvars(0, ws2812_tb);
 
-        // --------------------------------------------------------
-        // RESET
-        // --------------------------------------------------------
-        RESET = 1;
-        we = 0;
-        addr = 0;
-        din = 0;
-
-        #50;
-        RESET = 0;
-
-        #50;
+        sys_reset();
+        bus_init();
 
         // ============================================================
-        // TEST 1:
-        // Configure MODE + ENABLE
+        $display("TEST: CTRL enable + mode set");
+        test_index += 1;
         // Expect: output enabled BUT no LED transmission yet
         // ============================================================
         begin : CONFIGURE_AND_ENABLE
-            $display("TEST 1: CTRL enable + mode set");
 
-            write(5'h00, 32'b0000_0000_0000_0000_0000_0000_0000_0001);
+            bus_write(5'h00, 32'b0000_0000_0000_0000_0000_0000_0000_0001);
             // mode = RGB (00), enable = 1
 
             #200;
@@ -109,13 +64,12 @@ module ws2812_tb;
         end
 
         // ============================================================
-        // TEST 2:
-        // Configure NUM_LEDS = 16
+        $display("TEST: NUM_LEDS = 16");
+        test_index += 1;
         // ============================================================
         begin : SET_NUM_LEDS
-            $display("TEST 2: NUM_LEDS = 16");
 
-            write(5'h04, 32'd16);
+            bus_write(5'h04, 32'd16);
 
             #200;
 
@@ -126,30 +80,24 @@ module ws2812_tb;
         end
 
         // ============================================================
-        // TEST 3:
+        $display("TEST: Streaming RGB data");
+        test_index += 1;
         // STREAM RGB DATA (16 LEDs total)
         // Each LED = 0xRRGGBB
         // ============================================================
-
-
         begin : STREAM_DATA_1
             integer idx;
-
-            $display("TEST 3: Streaming RGB data");
-
 
             for (idx = 0; idx < 16; idx = idx + 1) begin
                 expected[idx] = {8'h00, idx[7:0], 8'h10, 8'h20};
                 $display("index: %d, value: 0x%08h", idx, expected[idx]);
-                write(5'h10 + idx, expected[idx]);
+                bus_write(5'h10 + idx, expected[idx]);
             end
-
-
         end
 
         // ============================================================
-        // TEST 4:
-        // Decode WS2812 waveform is correct
+        $display("TEST: Decode WS2812 waveform is correct");
+        test_index += 1;
         // ============================================================
         begin : WS2812_PROTOCOL_TEST
 
@@ -278,7 +226,8 @@ module ws2812_tb;
         end
 
         // ============================================================
-        // TEST 4:
+        $display("TEST: WS2812 RESET pulse validation");
+        test_index += 1;
         // Ensure reset pulse is present before next frame
         // ============================================================
 
@@ -291,7 +240,6 @@ module ws2812_tb;
             low_cycles = 0;
             max_cycles = 10000; // 100us margin at 100MHz
 
-            $display("TEST: WS2812 RESET pulse validation");
 
             low_cycles = 0;
 

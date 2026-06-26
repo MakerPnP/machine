@@ -64,31 +64,43 @@ module core_top (
     wire [31:0] led_din;
     wire [31:0] led_dout;
     wire        led_we;
+    wire        led_ack;
+    wire        led_stb;
 
     wire [5:0]  encoder_addr;
     wire [31:0] encoder_din;
     wire [31:0] encoder_dout;
     wire        encoder_we;
+    wire        encoder_stb;
+    wire        encoder_ack;
 
     wire [5:0]  io_addr;
     wire [31:0] io_din;
     wire [31:0] io_dout;
     wire        io_we;
+    wire        io_stb;
+    wire        io_ack;
 
     wire [5:0]  ws0_addr;
     wire [31:0] ws0_din;
     wire [31:0] ws0_dout;
     wire        ws0_we;
+    wire        ws0_stb;
+    wire        ws0_ack;
 
     wire [5:0]  ws1_addr;
     wire [31:0] ws1_din;
     wire [31:0] ws1_dout;
     wire        ws1_we;
+    wire        ws1_stb;
+    wire        ws1_ack;
 
     wire [5:0]  buzzer_addr;
     wire [31:0] buzzer_din;
     wire [31:0] buzzer_dout;
     wire        buzzer_we;
+    wire        buzzer_stb;
+    wire        buzzer_ack;
 
     wire [15:0] led_debug;
     wire [15:0] buzzer_debug;
@@ -144,10 +156,12 @@ module core_top (
         .reset(reset),
         .sys_clk(clk_100),
 
+        .bus_stb(led_stb),
         .bus_we(led_we),
         .bus_addr(led_addr),
         .bus_din(led_din),
         .bus_dout(led_dout),
+        .bus_ack(led_ack),
 
         .mcu_act(MCU_ACT),
         .fpga_act(FPGA_ACT),
@@ -161,10 +175,12 @@ module core_top (
         .reset(reset),
         .sys_clk(clk_100),
 
+        .bus_stb(buzzer_stb),
         .bus_we(buzzer_we),
         .bus_addr(buzzer_addr),
         .bus_din(buzzer_din),
         .bus_dout(buzzer_dout),
+        .bus_ack(buzzer_ack),
 
         .buzzer(BUZZER),
         .debug(buzzer_debug)
@@ -177,10 +193,13 @@ module core_top (
         .reset(reset),
         .sys_clk(clk_100),
 
+        .bus_stb(io_stb),
         .bus_we(io_we),
         .bus_addr(io_addr),
         .bus_din(io_din),
         .bus_dout(io_dout),
+        .bus_ack(io_ack),
+
         .btn(BTN),
         .iak(IAK),
         .din(DIN),
@@ -199,10 +218,12 @@ module core_top (
         .reset(reset),
         .sys_clk(clk_100),
 
+        .bus_stb(encoder_stb),
         .bus_we(encoder_we),
         .bus_addr(encoder_addr),
         .bus_din(encoder_din),
         .bus_dout(encoder_dout),
+        .bus_ack(encoder_ack),
 
         .abz_a(ENCODER_A),
         .abz_b(ENCODER_B),
@@ -221,10 +242,12 @@ module core_top (
         .sys_clk(clk_100),
         .reset(reset),
 
+        .bus_stb(ws0_stb),
         .bus_we(ws0_we),
         .bus_addr(ws0_addr),
         .bus_din(ws0_din),
         .bus_dout(ws0_dout),
+        .bus_ack(ws0_ack),
 
         .ws_out(RGB_PORTS)
     );
@@ -236,10 +259,12 @@ module core_top (
         .sys_clk(clk_100),
         .reset(reset),
 
+        .bus_stb(ws1_stb),
         .bus_we(ws1_we),
         .bus_addr(ws1_addr),
         .bus_din(ws1_din),
         .bus_dout(ws1_dout),
+        .bus_ack(ws1_ack),
 
         .ws_out(RGB_UP_CAM)
     );
@@ -257,35 +282,47 @@ module core_top (
         .dout_a(mem_dout),
         .valid_a(mem_valid),
 
+        .led_stb(led_stb),
         .led_we(led_we),
         .led_addr(led_addr),
         .led_din(led_din),
         .led_dout(led_dout),
+        .led_ack(led_ack),
 
+        .encoder_stb(encoder_stb),
         .encoder_we(encoder_we),
         .encoder_addr(encoder_addr),
         .encoder_din(encoder_din),
         .encoder_dout(encoder_dout),
+        .encoder_ack(encoder_ack),
 
+        .io_stb(io_stb),
         .io_we(io_we),
         .io_addr(io_addr),
         .io_din(io_din),
         .io_dout(io_dout),
+        .io_ack(io_ack),
 
+        .ws0_stb(ws0_stb),
         .ws0_we(ws0_we),
         .ws0_addr(ws0_addr),
         .ws0_din(ws0_din),
         .ws0_dout(ws0_dout),
+        .ws0_ack(ws0_ack),
 
+        .ws1_stb(ws1_stb),
         .ws1_we(ws1_we),
         .ws1_addr(ws1_addr),
         .ws1_din(ws1_din),
         .ws1_dout(ws1_dout),
+        .ws1_ack(ws1_ack),
 
+        .buzzer_stb(buzzer_stb),
         .buzzer_we(buzzer_we),
         .buzzer_addr(buzzer_addr),
         .buzzer_din(buzzer_din),
-        .buzzer_dout(buzzer_dout)
+        .buzzer_dout(buzzer_dout),
+        .buzzer_ack(buzzer_ack)
     );
 
     // ----------------------

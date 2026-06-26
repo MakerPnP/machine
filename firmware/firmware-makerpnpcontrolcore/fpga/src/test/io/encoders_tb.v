@@ -8,12 +8,7 @@ module encoders_tb;
     reg RESET;
     reg TCXO = 0;
 
-    reg [5:0]  addr;
-    reg [31:0] din;
-    reg [31:0] dout;
-    reg        we;
-
-    wire [15:0] debug;
+    `include "src/test/bus_io.svh"
 
     reg [2:0] ENC_ABZ [6] = '{
         3'b000,
@@ -24,15 +19,21 @@ module encoders_tb;
         3'b000
     };
 
+    wire [15:0] debug;
+
+    reg [31:0] result;
+
     // Instantiate the DUT (DUT = Device Under Test)
     encoders dut (
         .reset(RESET),
         .sys_clk(TCXO),
 
+        .bus_stb(stb),
         .bus_we(we),
         .bus_addr(addr),
         .bus_din(din),
         .bus_dout(dout),
+        .bus_ack(ack),
 
         .abz_a(ENC_ABZ[0]),
         .abz_b(ENC_ABZ[1]),
@@ -97,35 +98,24 @@ module encoders_tb;
         $dumpfile("encoders_tb.vcd");
         $dumpvars(0, encoders_tb);
 
-        // reset pulse
-        RESET = 1;
-        #20;
-        RESET = 0;
+        sys_reset();
+        bus_init();
 
-        #50;
+        bus_read(6'h00, result);
+        `ASSERT_EQ(result, 32'd0, "0x%08h", "ENCODER_CTRL default status");
 
-        addr = 6'h00;
-        #10;
-        `ASSERT_EQ(dout, 32'd0, "0x%08h", "ENCODER_CTRL default status");
+        bus_write(6'h00, {24'd0, 8'b0000_0001});
+        bus_read(6'h00, result);
 
-        // TODO wrap this is a function
-        addr = 6'h00;
-        din = {24'd0, 8'b0000_0001};
-        we = 1'b1;
-        #10;
-        we = 1'b0;
-        #50;
+        //#50;
 
-        `ASSERT_EQ(dout[0], 1'b0, "0b%1b", "ENCODER_CTRL reset flag not cleared");
+        `ASSERT_EQ(result[0], 1'b0, "0b%1b", "ENCODER_CTRL reset flag not cleared");
 
         // read the encoder
 
-        addr = 6'h20;
-        #10;
-        $display("ENC after reset: %0d", dout);
-        `ASSERT_EQ(dout, 32'd0, "0x%08h", "ENC_COUNT invalid");
-
-        // TODO debounce inputs
+        bus_read(6'h00, result);
+        $display("ENC after reset: %0d", result);
+        `ASSERT_EQ(result, 32'd0, "0x%08h", "ENC_COUNT invalid");
 
         // ----------------------------------------
         // Encoder counting test
@@ -137,59 +127,56 @@ module encoders_tb;
         repeat (10) step_forward();
 
         // Read encoder value
-        addr = 6'h20;
-        #10;
-        $display("ENC value after +10 steps: %0d", dout);
+        bus_read(6'h20, result);
+
+        $display("ENC value after +10 steps: %0d", result);
 
         // Expect 40 if x4 decoding (10 * 4)
-        `ASSERT_EQ(dout, 32'd40, "%0d", "ENC forward count failed");
+        `ASSERT_EQ(result, 32'd40, "%0d", "ENC forward count failed");
 
         // Step backward 5 steps
         repeat (5) step_backward();
 
-        addr = 6'h20;
-        #10;
-        $display("ENC value after -5 steps: %0d", dout);
+        bus_read(6'h20, result);
+        $display("ENC value after -5 steps: %0d", result);
 
-        `ASSERT_EQ(dout, 32'd20, "%0d", "ENC backward count failed");
+        `ASSERT_EQ(result, 32'd20, "%0d", "ENC backward count failed");
 
         // ----------------------------------------
         // Index reset test
         // ----------------------------------------
 
         pulse_index();
+        #20;
 
-        #50;
-
-        addr = 6'h20;
-        #10;
-        $display("ENC value z pulse: %0d", dout);
-        `ASSERT_EQ(dout, 32'd0, "%0d", "ENC index reset failed");
+        bus_read(6'h20, result);
+        $display("ENC value z pulse: %0d", result);
+        `ASSERT_EQ(result, 32'd0, "%0d", "ENC index reset failed");
 
         transition_forwards();
+        #20;
 
         // Read encoder value
-        addr = 6'h20;
-        #10;
-        $display("ENC value after +1 steps: %0d", dout);
-        `ASSERT_EQ(dout, 32'd1, "%0d", "Count after z pulse + 1 forward step incorrect");
+        bus_read(6'h20, result);
+
+
+        $display("ENC value after +1 steps: %0d", result);
+        `ASSERT_EQ(result, 32'd1, "%0d", "Count after z pulse + 1 forward step incorrect");
 
         pulse_index();
+        #20;
 
-        #50;
-
-        addr = 6'h20;
-        #10;
-        $display("ENC value z pulse: %0d", dout);
-        `ASSERT_EQ(dout, 32'd0, "%0d", "ENC index reset failed");
+        bus_read(6'h20, result);
+        $display("ENC value z pulse: %0d", result);
+        `ASSERT_EQ(result, 32'd0, "%0d", "ENC index reset failed");
 
         transition_backwards();
+        #20;
 
         // Read encoder value (wraps around)
-        addr = 6'h20;
-        #10;
-        $display("ENC value after +1 steps: %0d", dout);
-        `ASSERT_EQ(dout, 32'h0000_ffff, "%0d", "Count after z pulse + 1 reverse step incorrect");
+        bus_read(6'h20, result);
+        $display("ENC value after +1 steps: %0d", result);
+        `ASSERT_EQ(result, 32'h0000_ffff, "%0d", "Count after z pulse + 1 reverse step incorrect");
 
         // ----------------------------------------
         // Set counters
@@ -199,18 +186,12 @@ module encoders_tb;
             integer i;
 
             for (i = 0; i < 6; i = i + 1) begin
-                addr = 6'h04 + (i * 4);
-                din = 32'hbaad_beef;
-                we = 1'b1;
-                #10;
-                we = 1'b0;
-                #50;
 
-                addr = 6'h20 + (i * 4);
-                #100;
-                $display("ENC counter after ENC_SET_VALUE_%1d: %0d", i, dout);
+                bus_write(6'h04 + (i * 4), 32'hbaad_beef);
+                bus_read(6'h20 + (i * 4), result);
+                $display("ENC counter after ENC_SET_VALUE_%1d: %0d", i, result);
 
-                `ASSERT_EQ(dout, 32'h0000_beef, "0x%08h", $sformatf("ENC_SET_VALUE_%1d failed", i));
+                `ASSERT_EQ(result, 32'h0000_beef, "0x%08h", $sformatf("ENC_SET_VALUE_%1d failed", i));
             end
         end
 
