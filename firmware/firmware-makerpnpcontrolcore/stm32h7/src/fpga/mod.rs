@@ -357,14 +357,17 @@ impl<I: Instance> FpgaCore<I> {
     pub fn dump_registers(&mut self) {
         defmt::assert!(self.memory_mapped_mode_enabled);
 
-        defmt::debug!("FPGA register map (u32):");
+        defmt::debug!("FPGA register map memory mapped (u32):");
         let base = 0x9000_0000 as *const u32;
 
-        const FPGA_REG_SIZE: usize = 0x80;
+        const FPGA_REG_SIZE: usize = 0x10000 / 4;
 
-        for i in 0..FPGA_REG_SIZE {
-            let val = unsafe { core::ptr::read_volatile(base.add(i)) };
-            defmt::info!("{:03x}: {:08x}", i * 4, val);
+        for row in (0..FPGA_REG_SIZE).step_by(0x10) {
+            let mut row_values: [u32; 0x10] = [0xff; 0x10];
+            for col in 0..0x10_usize {
+                row_values[col] = unsafe { core::ptr::read_volatile(base.add(row + col)) };
+            }
+            defmt::info!("{:04x}: {:08x}", row * 4, row_values);
         }
     }
 

@@ -7,7 +7,7 @@ module encoders(
     // Bus Slave Interface
     input  wire        bus_stb,
     input  wire        bus_we,
-    input  wire [5:0]  bus_addr,
+    input  wire [7:0]  bus_addr,
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
     output reg         bus_ack,
@@ -22,6 +22,8 @@ module encoders(
     output reg [15:0]  debug
 );
 
+    `include "src/main/io/encoders_regs.svh"
+
     reg        strobe_encoder_reset;
 
     wire [15:0] encoder_count [6];
@@ -32,6 +34,7 @@ module encoders(
     reg [15:0] encoder_set_value_y;
     reg [15:0] encoder_set_value_z;
 
+    // one flag for each encoder
     reg [5:0] encoder_set;
 
     encoder encoder_a_inst (
@@ -86,7 +89,7 @@ module encoders(
     reg [31:0] enc_ctrl;
 
     reg [31:0] sync_reg;
-    reg [5:0]  sync_addr;
+    reg [7:0]  sync_addr;
     reg        strobe_update;
 
     // CDC (Clock Domain Crossing) Flag Catching
@@ -115,14 +118,14 @@ module encoders(
                         strobe_update <= 1'b1;
                     end else begin
                         case (bus_addr)
-                            6'h00: bus_dout <= enc_ctrl;
+                            REG_ENC_CTRL: bus_dout <= enc_ctrl;
                             // 6'h04-18 - write only (set count)
-                            6'h20: bus_dout <= {16'd0, encoder_count[0]};
-                            6'h24: bus_dout <= {16'd0, encoder_count[1]};
-                            6'h28: bus_dout <= {16'd0, encoder_count[2]};
-                            6'h2c: bus_dout <= {16'd0, encoder_count[3]};
-                            6'h30: bus_dout <= {16'd0, encoder_count[4]};
-                            6'h34: bus_dout <= {16'd0, encoder_count[5]};
+                            REG_ENC_COUNT_A: bus_dout <= {16'd0, encoder_count[0]};
+                            REG_ENC_COUNT_B: bus_dout <= {16'd0, encoder_count[1]};
+                            REG_ENC_COUNT_C: bus_dout <= {16'd0, encoder_count[2]};
+                            REG_ENC_COUNT_X: bus_dout <= {16'd0, encoder_count[3]};
+                            REG_ENC_COUNT_Y: bus_dout <= {16'd0, encoder_count[4]};
+                            REG_ENC_COUNT_Z: bus_dout <= {16'd0, encoder_count[5]};
                             default: bus_dout <= 32'h22222222;
                         endcase
                     end
@@ -151,8 +154,9 @@ module encoders(
 
             // Act on rising edge transition of our synchronized strobe signal
             if (strobe_sync_r1 && !strobe_sync_r2) begin
+                $display("ENC strobe");
                 case (sync_addr)
-                    6'h00: begin
+                    REG_ENC_CTRL: begin
                         $display("ENC_CTRL update");
                         // Bit 0 handles RESET
                         if (sync_reg[0] == 1'b1) begin
@@ -160,32 +164,32 @@ module encoders(
                             strobe_encoder_reset <= 1'b1;
                         end
                     end
-                    6'h04: begin
+                    REG_ENC_SET_COUNT_A: begin
                         $display("ENC_SET_COUNT_A update. value: 0x%08h", sync_reg);
                         encoder_set_value_a <= sync_reg;
                         encoder_set <= encoder_set | 6'b000001;
                     end
-                    6'h08: begin
+                    REG_ENC_SET_COUNT_B: begin
                         $display("ENC_SET_COUNT_B update. value: 0x%08h", sync_reg);
                         encoder_set_value_b <= sync_reg;
                         encoder_set <= encoder_set | 6'b000010;
                     end
-                    6'h0C: begin
+                    REG_ENC_SET_COUNT_C: begin
                         $display("ENC_SET_COUNT_C update. value: 0x%08h", sync_reg);
                         encoder_set_value_c <= sync_reg;
                         encoder_set <= encoder_set | 6'b000100;
                     end
-                    6'h10: begin
+                    REG_ENC_SET_COUNT_X: begin
                         $display("ENC_SET_COUNT_X update. value: 0x%08h", sync_reg);
                         encoder_set_value_x <= sync_reg;
                         encoder_set <= encoder_set | 6'b001000;
                     end
-                    6'h14: begin
+                    REG_ENC_SET_COUNT_Y: begin
                         $display("ENC_SET_COUNT_Y update. value: 0x%08h", sync_reg);
                         encoder_set_value_y <= sync_reg;
                         encoder_set <= encoder_set | 6'b010000;
                     end
-                    6'h18: begin
+                    REG_ENC_SET_COUNT_Z: begin
                         $display("ENC_SET_COUNT_Z update. value: 0x%08h", sync_reg);
                         encoder_set_value_z <= sync_reg;
                         encoder_set <= encoder_set | 6'b100000;

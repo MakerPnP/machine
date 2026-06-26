@@ -5,7 +5,7 @@ module io (
 
     input  wire        bus_stb,
     input  wire        bus_we,
-    input  wire [5:0]  bus_addr,
+    input  wire [7:0]  bus_addr,
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
     output reg         bus_ack,
@@ -20,6 +20,8 @@ module io (
 
     output reg [15:0]  debug
 );
+
+    `include "src/main/io/io_regs.svh"
 
     reg [31:0] io_ctrl;
 
@@ -92,11 +94,11 @@ module io (
                     if (bus_we) begin
                         $display("io bus write. addr: %02x, value: %08h", bus_addr, bus_din);
                         case (bus_addr)
-                            6'h00: begin
+                            REG_IO_CTRL: begin
                                 io_ctrl       <= bus_din;
                                 strobe_update <= 1'b1;
                             end
-                            6'h10: begin
+                            REG_IO_OUT_1: begin
                                 // Update internal readback register
                                 io_out_1_r  <= {bus_din[9:8], bus_din[1:0]};
                                 // Update isolated top-level registers (clean IOB packing)
@@ -108,10 +110,10 @@ module io (
                     end else begin
                         // Process reads cleanly from the fabric-only copy
                         case (bus_addr)
-                            6'h00:   bus_dout <= io_ctrl;
-                            6'h04:   bus_dout <= {16'd0, io_in_1[8:5], 3'b000, io_in_1[4:4], 4'b0000, io_in_1[3:0]};
-                            6'h08:   bus_dout <= {24'd0, io_in_2};
-                            6'h10:   bus_dout <= {22'd0, io_out_1_r[3:2], 6'd0, io_out_1_r[1:0]};
+                            REG_IO_CTRL:   bus_dout <= io_ctrl;
+                            REG_IO_IN_1:   bus_dout <= {16'd0, io_in_1[8:5], 3'b000, io_in_1[4:4], 4'b0000, io_in_1[3:0]};
+                            REG_IO_IN_2:   bus_dout <= {24'd0, io_in_2};
+                            REG_IO_OUT_1:   bus_dout <= {22'd0, io_out_1_r[3:2], 6'd0, io_out_1_r[1:0]};
                             default: bus_dout <= 32'h33333333;
                         endcase
                     end

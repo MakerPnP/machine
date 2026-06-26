@@ -60,42 +60,42 @@ module core_top (
     wire        mem_we;
     wire        mem_valid;
 
-    wire [5:0]  led_addr;
+    wire [7:0]  led_addr;
     wire [31:0] led_din;
     wire [31:0] led_dout;
     wire        led_we;
     wire        led_ack;
     wire        led_stb;
 
-    wire [5:0]  encoder_addr;
+    wire [7:0]  encoder_addr;
     wire [31:0] encoder_din;
     wire [31:0] encoder_dout;
     wire        encoder_we;
     wire        encoder_stb;
     wire        encoder_ack;
 
-    wire [5:0]  io_addr;
+    wire [7:0]  io_addr;
     wire [31:0] io_din;
     wire [31:0] io_dout;
     wire        io_we;
     wire        io_stb;
     wire        io_ack;
 
-    wire [5:0]  ws0_addr;
+    wire [7:0]  ws0_addr;
     wire [31:0] ws0_din;
     wire [31:0] ws0_dout;
     wire        ws0_we;
     wire        ws0_stb;
     wire        ws0_ack;
 
-    wire [5:0]  ws1_addr;
+    wire [7:0]  ws1_addr;
     wire [31:0] ws1_din;
     wire [31:0] ws1_dout;
     wire        ws1_we;
     wire        ws1_stb;
     wire        ws1_ack;
 
-    wire [5:0]  buzzer_addr;
+    wire [7:0]  buzzer_addr;
     wire [31:0] buzzer_din;
     wire [31:0] buzzer_dout;
     wire        buzzer_we;

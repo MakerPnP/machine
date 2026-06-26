@@ -6,7 +6,7 @@ module leds (
     // Bus Slave Interface
     input  wire        bus_stb,
     input  wire        bus_we,
-    input  wire [5:0]  bus_addr,
+    input  wire [7:0]  bus_addr,
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
     output reg         bus_ack,
@@ -16,6 +16,8 @@ module leds (
 
     output reg [15:0]  debug
 );
+
+    `include "src/main/io/leds_regs.svh"
 
     reg [31:0] led_ctrl;
     reg        strobe_update;
@@ -43,7 +45,7 @@ module leds (
                     if (bus_we) begin
                         $display("led bus write. addr: %02x, value: %08h", bus_addr, bus_din);
                         case (bus_addr)
-                            6'h00: begin
+                            REG_LED_CTRL: begin
                                 led_ctrl      <= bus_din;
                                 strobe_update <= 1'b1;
                             end
@@ -51,7 +53,7 @@ module leds (
                         endcase
                     end else begin
                         case (bus_addr)
-                            6'h00:   bus_dout <= led_ctrl;
+                            REG_LED_CTRL:   bus_dout <= led_ctrl;
                             default: bus_dout <= 32'h44444444;
                         endcase
                     end

@@ -1,8 +1,11 @@
 `timescale 1ns/1ps
 
 `include "src/test/assertions.svh"
+`include "src/main/registers/map.svh"
 
 module int_leds_mem_tb;
+
+    `include "src/main/io/leds_regs.svh"
 
     // Testbench signals
     reg RESET;
@@ -104,26 +107,26 @@ module int_leds_mem_tb;
         RESET = 0;
         repeat (4) @(posedge TCXO);
 
-        memory_write(16'h0040, 32'd0);
+        memory_write(LED_BASE + REG_LED_CTRL, 32'd0);
 
         #100;
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
         `ASSERT_EQ(FPGA_ACT, 1'b0, "0b%1b", "FPGA_ACT mismatch");
         `ASSERT_EQ(MCU_ACT, 1'b0, "0b%1b", "MCU_ACT mismatch");
 
-        memory_write(16'h0040, {24'd0, 8'b0000_0001});
+        memory_write(LED_BASE + REG_LED_CTRL, {24'd0, 8'b0000_0001});
 
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
         `ASSERT_EQ(FPGA_ACT, 1'b1, "0b%1b", "FPGA_ACT mismatch");
         `ASSERT_EQ(MCU_ACT, 1'b0, "0b%1b", "MCU_ACT mismatch");
 
-        memory_write(16'h0040, {24'd0, 8'b0000_0010});
+        memory_write(LED_BASE + REG_LED_CTRL, {24'd0, 8'b0000_0010});
 
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
         `ASSERT_EQ(FPGA_ACT, 1'b0, "0b%1b", "FPGA_ACT mismatch");
         `ASSERT_EQ(MCU_ACT, 1'b1, "0b%1b", "MCU_ACT mismatch");
 
-        memory_write(16'h0040, {24'd0, 8'b0000_0011});
+        memory_write(LED_BASE + REG_LED_CTRL, {24'd0, 8'b0000_0011});
 
         $display("LEDs. mcu: %d, fpga: %d", MCU_ACT, FPGA_ACT);
         `ASSERT_EQ(MCU_ACT, 1'b1, "0b%1b", "MCU_ACT mismatch");

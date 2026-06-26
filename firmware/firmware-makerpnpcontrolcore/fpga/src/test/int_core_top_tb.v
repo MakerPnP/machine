@@ -1,8 +1,16 @@
 `timescale 1ns / 1ps
 
 `include "src/test/assertions.svh"
+`include "src/main/registers/map.svh"
 
 module int_core_top_tb;
+
+    `include "src/main/io/io_regs.svh"
+    `include "src/main/io/leds_regs.svh"
+    `include "src/main/io/buzzer_regs.svh"
+    `include "src/main/io/encoders_regs.svh"
+    `include "src/main/registers/system0_regs.svh"
+    `include "src/main/registers/system1_regs.svh"
 
     reg TCXO = 0;
     // Simulated clock generation
@@ -230,7 +238,7 @@ module int_core_top_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h10);
-        send_address_word(16'h0000);
+        send_address_word(SYSTEM0_BASE + REG_IDENT);
         dummy_phase();
 
         read_long_word_data_be(read_word);
@@ -247,7 +255,7 @@ module int_core_top_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h11);
-        send_address_word(16'h0000);
+        send_address_word(SYSTEM0_BASE + REG_IDENT);
         dummy_phase();
 
         read_long_word_data_le(read_word);
@@ -276,7 +284,7 @@ module int_core_top_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h10);
-        send_address_word(16'h0084);
+        send_address_word(IO_BASE + REG_IO_IN_1);
         dummy_phase();
         read_long_word_data_be(read_word);
         cs_n = 1;
@@ -296,7 +304,7 @@ module int_core_top_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h10);
-        send_address_word(16'h0084);
+        send_address_word(IO_BASE + REG_IO_IN_1);
         dummy_phase();
         read_long_word_data_be(read_word);
         cs_n = 1;
@@ -316,7 +324,7 @@ module int_core_top_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h10);
-        send_address_word(16'h0088);
+        send_address_word(IO_BASE + REG_IO_IN_2);
         dummy_phase();
         read_long_word_data_be(read_word);
         cs_n = 1;
@@ -332,7 +340,7 @@ module int_core_top_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h10);
-        send_address_word(16'h0088);
+        send_address_word(IO_BASE + REG_IO_IN_2);
         dummy_phase();
         read_long_word_data_be(read_word);
         cs_n = 1;
@@ -348,7 +356,7 @@ module int_core_top_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h90);
-        send_address_word(16'h0090);
+        send_address_word(IO_BASE + REG_IO_OUT_1);
         send_long_word(32'h0000_0003);
         cs_n = 1;
 
@@ -366,7 +374,7 @@ module int_core_top_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h90);
-        send_address_word(16'h0040);
+        send_address_word(LED_BASE + REG_LED_CTRL);
         send_long_word(32'h0000_0003);
         cs_n = 1;
 
@@ -385,7 +393,7 @@ module int_core_top_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h90);
-        send_address_word(16'h00C0);
+        send_address_word(BUZZER_BASE + REG_BUZZER_CTRL);
         send_long_word(32'h0000_0001);
         cs_n = 1;
 
@@ -405,7 +413,7 @@ module int_core_top_tb;
         cs_n = 0;
         io_en = 1;
         send_command_byte(8'h10);
-        send_address_word(16'h0120);
+        send_address_word(ENCODER_BASE + REG_ENC_COUNT_A);
         dummy_phase();
 
         for (i = 0; i <= 5; i = i + 1) begin
@@ -418,13 +426,53 @@ module int_core_top_tb;
         #100;
 
         // -------------------------------------------------------------
-        $display("--- Test 8: Writing 0x01 to CONFIG_1 to Reset Encoders ---");
+        $display("--- Test 8: Setting encoders manually ---");
+        // -------------------------------------------------------------
+
+        begin
+            reg [15:0] expected_encoder_values[6];
+            cs_n  = 0;
+            io_en = 1;
+            send_command_byte(8'h90);
+            send_address_word(ENCODER_BASE + REG_ENC_SET_COUNT_A);
+            for (i = 1; i <= 6; i = i + 1) begin
+                expected_encoder_values[i - 1] = (i << 0) + (i << 4) + (i << 8) + (i << 12);
+                send_long_word(32'hffff_0000 | expected_encoder_values[i - 1]);
+            end
+            cs_n = 1;
+
+            // Allow the sys_clk domain several cycles to flush out the strobe
+            repeat (5) @(posedge TCXO);
+
+            #100;
+
+            // Verify Encoders were reset
+            cs_n  = 0;
+            io_en = 1;
+            send_command_byte(8'h10);
+            send_address_word(ENCODER_BASE + REG_ENC_COUNT_A);
+            dummy_phase();
+
+            for (i = 0; i <= 5; i = i + 1) begin
+                read_long_word_data_be(read_word);
+                $display("Encoder %0d value: 0x%08h", i + 1, read_word);
+                `ASSERT_EQ(read_word[15:0], expected_encoder_values[i], "0x%04h", $sformatf("Encoder %0d was not set", i));
+            end
+
+            cs_n = 1;
+
+            #100;
+
+        end
+
+        // -------------------------------------------------------------
+        $display("--- Test 9: Writing 0x01 to CONFIG_1 to Reset Encoders ---");
         // -------------------------------------------------------------
 
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h90);
-        send_address_word(16'h0100);
+        send_address_word(ENCODER_BASE + REG_ENC_CTRL);
         send_long_word(32'h0000_0001);
         cs_n = 1;
 
@@ -437,7 +485,7 @@ module int_core_top_tb;
         cs_n  = 0;
         io_en = 1;
         send_command_byte(8'h10);
-        send_address_word(16'h0120);
+        send_address_word(ENCODER_BASE + REG_ENC_COUNT_A);
         dummy_phase();
 
         for (i = 0; i <= 5; i = i + 1) begin
@@ -451,18 +499,18 @@ module int_core_top_tb;
         #100;
 
         // -------------------------------------------------------------
-        $display("--- Test 9: Wrap around and register map boundary ---");
+        $display("--- Test 10: Wrap around and register map boundary ---");
         // -------------------------------------------------------------
         begin
             reg [31:0] expected_data [3] = '{
                 // data from second to last address.
-                32'haa55aa55,
+                32'h55aa55aa,
                 // marker at last address.
                 32'hDEAD_C0DE,
                 // ident from first address, as address should wrap round to 0 at 0x200
                 32'hFACE_B00B
             };
-            reg [15:0] address = 16'h01f8;
+            reg [15:0] address = SYSTEM1_BASE + REG_MARKER - 8'h04;
 
             cs_n  = 0;
             io_en = 1;
@@ -484,6 +532,105 @@ module int_core_top_tb;
         cs_n = 1;
 
         #100;
+
+        // -------------------------------------------------------------
+        $display("--- Test 11: Long continuous read crossing 3 boundaries ---");
+        // -------------------------------------------------------------
+        // read from a system peripherial, followed by unmapped memory and
+        // then two consecutive peripherals.
+        //
+        // this test only works with these peripherals, in this order, adjust
+        // as-required if the memory map is changed.
+        `ASSERT_EQ(SYSTEM0_BASE, 16'h0000, "%d", "Invalid test setup (A)");
+        `ASSERT_EQ(RESERVED0_BASE, 16'h0100, "%d", "Invalid test setup (B)");
+        `ASSERT_EQ(LED_BASE, 16'h0200, "%d", "Invalid test setup (C)");
+        `ASSERT_EQ(BUZZER_BASE, 16'h0300, "%d", "Invalid test setup (D)");
+        begin
+            reg [31:0] block[16];
+            reg [15:0] capture_addresses[8] = '{
+                16'h0000,
+                16'h00FC,
+                16'h0100,
+                16'h01FC,
+                16'h0200,
+                16'h02FC,
+                16'h0300,
+                16'h03FC
+            };
+            reg [32:0] captured_values[8];
+            reg [32:0] expected_values[8] = '{
+                // ident
+                32'hface_b00b,
+                // system 0 marker
+                32'haa55_aa55,
+                // unmapped memory
+                32'h99ba_ad99,
+                32'h99ba_ad99,
+                // LED_CTRL reset value
+                32'h0000_0003,
+                // led marker
+                32'h4444_4444,
+                // BUZZER_CTRL reset value
+                32'h0000_0001,
+                // buzzer marker
+                32'h1111_1111
+            };
+            integer address, block_address, capture_index;
+
+            // memory addresses here are in bytes
+            localparam start_address = 16'h0000;
+            localparam end_address = 16'h03ff;
+
+            address = start_address;
+
+            cs_n = 0;
+            io_en = 1;
+            send_command_byte(8'h10);
+            send_address_word(address);
+            dummy_phase();
+
+            capture_index = 0;
+
+            for (; address <= end_address; address = address + (16 * 4)) begin
+                for (i = 0; i < 16; i = i + 1) begin
+                    read_long_word_data_be(read_word);
+                    block[i] = read_word;
+
+                    block_address = address + (i * 4);
+                    if (capture_addresses[capture_index] == block_address) begin
+                        captured_values[capture_index] = read_word;
+                        capture_index += 1;
+                    end
+                end
+                $display("0x%04h: 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h, 0x%08h",
+                    address,
+                    block[0],
+                    block[1],
+                    block[2],
+                    block[3],
+                    block[4],
+                    block[5],
+                    block[6],
+                    block[7],
+                    block[8],
+                    block[9],
+                    block[10],
+                    block[11],
+                    block[12],
+                    block[13],
+                    block[14],
+                    block[15],
+                );
+            end
+            cs_n = 1;
+
+            #100;
+
+            for (i = 0; i < 8; i++) begin
+                `ASSERT_EQ(captured_values[i], expected_values[i], "0x%08h", $sformatf("Captured value mismatch. address: ", capture_addresses[i]));
+            end
+        end
+
         report();
         $finish;
     end

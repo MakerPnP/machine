@@ -8,10 +8,10 @@
 
   <peripherals>
 
-    <!-- system1 block (0x0000 - 0x003f) -->
+    <!-- system0 block (0x0000 - 0x00ff) -->
     <peripheral>
-      <name>system1</name>
-      <description>system block 1</description>
+      <name>system0</name>
+      <description>system block 0</description>
       <baseAddress>0x90000000</baseAddress>
       <addressBlock>
         <offset>0x0</offset>
@@ -78,11 +78,11 @@
     </peripheral>
 
 
-    <!-- led block (0x0040 - 0x007f) -->
+    <!-- led block (0x0200 - 0x02ff) -->
     <peripheral>
       <name>led</name>
       <description>led control block</description>
-      <baseAddress>0x90000040</baseAddress>
+      <baseAddress>0x90000200</baseAddress>
       <addressBlock>
         <offset>0x0</offset>
         <size>0x40</size>
@@ -127,11 +127,52 @@
       </registers>
     </peripheral>
 
-    <!-- io block (0x0080 - 0x00bf) -->
+    <!-- buzzer block (0x0300 - 0x03ff) -->
+    <peripheral>
+      <name>buzzer</name>
+      <description>buzzer control block</description>
+      <baseAddress>0x90000300</baseAddress>
+      <addressBlock>
+        <offset>0x0</offset>
+        <size>0x40</size>
+        <usage>registers</usage>
+      </addressBlock>
+
+      <registers>
+
+        <register>
+          <name>buzzer_ctrl</name>
+          <description>buzzer control register</description>
+          <addressOffset>0x0000</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>buzzer</name>
+              <description>buzzer control (0 = off)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+      </registers>
+    </peripheral>
+
+
+    <!-- io block (0x0400 - 0x04ff) -->
     <peripheral>
       <name>io</name>
       <description>io control block</description>
-      <baseAddress>0x90000080</baseAddress>
+      <baseAddress>0x90000400</baseAddress>
       <addressBlock>
         <offset>0x0</offset>
         <size>0x40</size>
@@ -306,12 +347,11 @@
       </registers>
     </peripheral>
 
-
-    <!-- buzzer block (0x00c0 - 0x00ff) -->
+    <!-- ws2812_1 block (0x0800 - 0x08ff) -->
     <peripheral>
-      <name>buzzer</name>
-      <description>buzzer control block</description>
-      <baseAddress>0x900000c0</baseAddress>
+      <name>ws2812_1</name>
+      <description>ws2812 RGB LED block</description>
+      <baseAddress>0x90000800</baseAddress>
       <addressBlock>
         <offset>0x0</offset>
         <size>0x40</size>
@@ -321,38 +361,222 @@
       <registers>
 
         <register>
-          <name>buzzer_ctrl</name>
-          <description>buzzer control register</description>
+          <name>ws_ctrl</name>
+          <description>led control register</description>
           <addressOffset>0x0000</addressOffset>
           <size>32</size>
           <access>read-write</access>
           <resetValue>0x00000000</resetValue>
           <fields>
+
             <field>
-              <name>buzzer</name>
-              <description>buzzer control (0 = off)</description>
+              <name>enabled</name>
+              <description>enable led output (1 = on)</description>
               <bitOffset>0</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
 
             <field>
+              <name>mode</name>
+              <description>ws2812 color mode</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>2</bitWidth>
+
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>RGB</name>
+                  <description>rgb ordering</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>RGBW</name>
+                  <description>rgbw ordering</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>GRB</name>
+                  <description>grb ordering</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>GRBW</name>
+                  <description>grbw ordering</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
               <name>reserved</name>
               <description>reserved, keep at reset value</description>
-              <bitOffset>1</bitOffset>
-              <bitWidth>31</bitWidth>
+              <bitOffset>3</bitOffset>
+              <bitWidth>29</bitWidth>
             </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>ws_tx_config</name>
+          <description>ws2812 transmit configuration</description>
+          <addressOffset>0x04</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>leds_count</name>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <!-- ws_data registers -->
+        <register>
+          <name>ws_data_0</name>
+          <description>rgb(w) input</description>
+          <addressOffset>0x10</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
+          </fields>
+        </register>
+
+        <register>
+          <name>ws_data_1</name>
+          <description>rgb(w) input</description>
+          <addressOffset>0x14</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
+          </fields>
+        </register>
+
+        <register>
+          <name>ws_data_2</name>
+          <description>rgb(w) input</description>
+          <addressOffset>0x18</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
+          </fields>
+        </register>
+
+        <register>
+          <name>ws_data_3</name>
+          <description>rgb(w) input</description>
+          <addressOffset>0x1c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
+          </fields>
+        </register>
+
+        <register>
+          <name>ws_data_4</name>
+          <description>rgb(w) input</description>
+          <addressOffset>0x20</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
+          </fields>
+        </register>
+
+        <register>
+          <name>ws_data_5</name>
+          <description>rgb(w) input</description>
+          <addressOffset>0x24</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
+          </fields>
+        </register>
+
+        <register>
+          <name>ws_data_6</name>
+          <description>rgb(w) input</description>
+          <addressOffset>0x28</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
+          </fields>
+        </register>
+
+        <register>
+          <name>ws_data_7</name>
+          <description>rgb(w) input</description>
+          <addressOffset>0x2c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
+            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
           </fields>
         </register>
 
       </registers>
     </peripheral>
 
+    <!-- ws2812_2 block (0x0900 - 0x09ff) - same as ws2812_1, but with different base address-->
 
-    <!-- encoders block (0x0100 - 0x013f) -->
+    <!-- encoders block (0x0c00 - 0x0cff) -->
     <peripheral>
       <name>encoders</name>
       <description>encoders control block</description>
-      <baseAddress>0x90000100</baseAddress>
+      <baseAddress>0x90000c00</baseAddress>
       <addressBlock>
         <offset>0x0</offset>
         <size>0x40</size>
@@ -675,11 +899,11 @@
       </registers>
     </peripheral>
 
-    <!-- system2 block (0x01c0 - 0x01ff) -->
+    <!-- system1 block (0xff00 - 0xffff) -->
     <peripheral>
-      <name>system2</name>
-      <description>system block 2</description>
-      <baseAddress>0x900001c0</baseAddress>
+      <name>system1</name>
+      <description>system block 1</description>
+      <baseAddress>0x9000ff00</baseAddress>
       <addressBlock>
         <offset>0x0</offset>
         <size>0x40</size>
@@ -691,7 +915,7 @@
         <register>
           <name>marker</name>
           <description>fixed marker value</description>
-          <addressOffset>0x003c</addressOffset>
+          <addressOffset>0x00fc</addressOffset>
           <size>32</size>
           <access>read-only</access>
           <resetValue>0xdeadc0de</resetValue>
@@ -707,232 +931,6 @@
 
       </registers>
     </peripheral>
-
-
-    <!-- ws2812_1 block (0x0140 - 0x017f) -->
-    <peripheral>
-      <name>ws2812_1</name>
-      <description>ws2812 RGB LED block</description>
-      <baseAddress>0x90000140</baseAddress>
-      <addressBlock>
-        <offset>0x0</offset>
-        <size>0x40</size>
-        <usage>registers</usage>
-      </addressBlock>
-
-      <registers>
-
-        <register>
-          <name>ws_ctrl</name>
-          <description>led control register</description>
-          <addressOffset>0x0000</addressOffset>
-          <size>32</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-
-            <field>
-              <name>enabled</name>
-              <description>enable led output (1 = on)</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-
-            <field>
-              <name>mode</name>
-              <description>ws2812 color mode</description>
-              <bitOffset>1</bitOffset>
-              <bitWidth>2</bitWidth>
-
-              <enumeratedValues>
-
-                <enumeratedValue>
-                  <name>RGB</name>
-                  <description>rgb ordering</description>
-                  <value>0</value>
-                </enumeratedValue>
-
-                <enumeratedValue>
-                  <name>RGBW</name>
-                  <description>rgbw ordering</description>
-                  <value>1</value>
-                </enumeratedValue>
-
-                <enumeratedValue>
-                  <name>GRB</name>
-                  <description>grb ordering</description>
-                  <value>2</value>
-                </enumeratedValue>
-
-                <enumeratedValue>
-                  <name>GRBW</name>
-                  <description>grbw ordering</description>
-                  <value>3</value>
-                </enumeratedValue>
-
-              </enumeratedValues>
-            </field>
-
-            <field>
-              <name>reserved</name>
-              <description>reserved, keep at reset value</description>
-              <bitOffset>3</bitOffset>
-              <bitWidth>29</bitWidth>
-            </field>
-
-          </fields>
-        </register>
-
-        <register>
-          <name>ws_tx_config</name>
-          <description>ws2812 transmit configuration</description>
-          <addressOffset>0x04</addressOffset>
-          <size>32</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-
-            <field>
-              <name>leds_count</name>
-              <bitOffset>0</bitOffset>
-              <bitWidth>8</bitWidth>
-            </field>
-
-            <field>
-              <name>reserved</name>
-              <description>reserved, keep at reset value</description>
-              <bitOffset>8</bitOffset>
-              <bitWidth>24</bitWidth>
-            </field>
-
-          </fields>
-        </register>
-
-        <!-- ws_data registers -->
-        <register>
-          <name>ws_data_0</name>
-          <description>rgb(w) input</description>
-          <addressOffset>0x10</addressOffset>
-          <size>32</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
-          </fields>
-        </register>
-
-        <register>
-          <name>ws_data_1</name>
-          <description>rgb(w) input</description>
-          <addressOffset>0x14</addressOffset>
-          <size>32</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
-          </fields>
-        </register>
-
-        <register>
-          <name>ws_data_2</name>
-          <description>rgb(w) input</description>
-          <addressOffset>0x18</addressOffset>
-          <size>32</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
-          </fields>
-        </register>
-
-        <register>
-          <name>ws_data_3</name>
-          <description>rgb(w) input</description>
-          <addressOffset>0x1c</addressOffset>
-          <size>32</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
-          </fields>
-        </register>
-
-        <register>
-          <name>ws_data_4</name>
-          <description>rgb(w) input</description>
-          <addressOffset>0x20</addressOffset>
-          <size>32</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
-          </fields>
-        </register>
-
-        <register>
-          <name>ws_data_5</name>
-          <description>rgb(w) input</description>
-          <addressOffset>0x24</addressOffset>
-          <size>32</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
-          </fields>
-        </register>
-
-        <register>
-          <name>ws_data_6</name>
-          <description>rgb(w) input</description>
-          <addressOffset>0x28</addressOffset>
-          <size>32</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
-          </fields>
-        </register>
-
-        <register>
-          <name>ws_data_7</name>
-          <description>rgb(w) input</description>
-          <addressOffset>0x2c</addressOffset>
-          <size>32</size>
-          <access>read-write</access>
-          <resetValue>0x00000000</resetValue>
-          <fields>
-            <field><name>b</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>g</name><bitOffset>8</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>r</name><bitOffset>16</bitOffset><bitWidth>8</bitWidth></field>
-            <field><name>w</name><bitOffset>24</bitOffset><bitWidth>8</bitWidth></field>
-          </fields>
-        </register>
-
-      </registers>
-    </peripheral>
-
-    <!-- ws2812_2 block (0x0180 - 0x01bf) - same as ws2812_1, but with different base address-->
 
 
   </peripherals>

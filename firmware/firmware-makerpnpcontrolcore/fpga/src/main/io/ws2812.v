@@ -9,7 +9,7 @@ module ws2812 #(
     // =========================
     input  wire        bus_stb,
     input  wire        bus_we,
-    input  wire [5:0]  bus_addr,
+    input  wire [7:0]  bus_addr,
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
     output reg         bus_ack,

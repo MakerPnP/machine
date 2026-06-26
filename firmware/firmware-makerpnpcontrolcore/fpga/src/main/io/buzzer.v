@@ -6,7 +6,7 @@ module buzzer (
     // Bus Slave Interface
     input  wire        bus_stb,
     input  wire        bus_we,
-    input  wire [5:0]  bus_addr,
+    input  wire [7:0]  bus_addr,
     input  wire [31:0] bus_din,
     output reg  [31:0] bus_dout,
     output reg         bus_ack,
@@ -15,6 +15,8 @@ module buzzer (
 
     output reg [15:0]  debug
 );
+
+    `include "src/main/io/buzzer_regs.svh"
 
     reg [31:0] buzzer_ctrl;
     reg        strobe_update;
@@ -42,7 +44,7 @@ module buzzer (
                     if (bus_we) begin
                         $display("led bus write. addr: %02x, value: %08h", bus_addr, bus_din);
                         case (bus_addr)
-                            6'h00: begin
+                            REG_BUZZER_CTRL: begin
                                 buzzer_ctrl     <= bus_din;
                                 strobe_update   <= 1'b1;
                             end
@@ -50,7 +52,7 @@ module buzzer (
                         endcase
                     end else begin
                         case (bus_addr)
-                            6'h00:   bus_dout <= buzzer_ctrl;
+                            REG_BUZZER_CTRL:   bus_dout <= buzzer_ctrl;
                             default: bus_dout <= 32'h11111111;
                         endcase
                     end

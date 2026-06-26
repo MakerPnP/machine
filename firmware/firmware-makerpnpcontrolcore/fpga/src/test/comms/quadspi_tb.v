@@ -379,9 +379,9 @@ module quadspi_tb;
         // -------------------------------------------------------------
 
         begin
-            reg [15:0] address = 16'h01f8;
+            reg [15:0] address = 16'hfff8;
             reg [15:0] expected_addresses[4] = '{
-                16'h01fc,
+                16'hfffc,
                 16'h0000,
                 16'h0004,
                 16'h0008

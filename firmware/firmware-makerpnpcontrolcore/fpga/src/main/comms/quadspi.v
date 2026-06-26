@@ -301,7 +301,7 @@ module quadspi (
 
                     STATE_DATA_R: begin
                         if (phase_counter == 4'd4) begin
-                            if (mem_addr == 16'h01FC)
+                            if (mem_addr == 16'hFFFC)
                                 mem_addr <= 16'h0000;
                             else
                                 mem_addr <= mem_addr + 16'd4;
@@ -382,7 +382,7 @@ module quadspi (
                 $display("disabling mem_we flag");
                 commit_flag   <= 1'b0;
                 $display("incrementing address after write");
-                if (mem_addr == 16'h01FC)
+                if (mem_addr == 16'hFFFC)
                     mem_addr <= 16'h0000;
                 else
                     mem_addr <= mem_addr + 16'd4;

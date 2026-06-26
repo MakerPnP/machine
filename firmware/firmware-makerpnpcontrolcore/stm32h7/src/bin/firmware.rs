@@ -208,7 +208,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         clock_mode: false,
         wrap_size: WrapSize::None,
         // TODO increase this speed as much as possible
-        //clock_prescaler: 5, // 133.33Mhz / (5+1) = 22.22Mhz
+        // clock_prescaler: 5, // 133.33Mhz / (5+1) = 22.22Mhz
         clock_prescaler: 13, // 133.33Mhz / (13+1) = 9.5Mhz
         // clock_prescaler: 132, // 133.33Mhz / (132+1) = 1.0Mhz
         // clock_prescaler: 254, // 133.33Mhz / (254+1) = 0.522Mhz
@@ -250,6 +250,8 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         }
     }
 
+    const EXPECTED_IDENT: u32 = 0xFACEB00B;
+
     let mut fpga = FpgaCore::new(ospi1).await;
     fpga.enable_memory_mapped_mode();
 
@@ -266,7 +268,6 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
                 continue;
             }
 
-            const EXPECTED_IDENT: u32 = 0xFACEB00B;
 
             if ident == EXPECTED_IDENT {
                 break
@@ -281,27 +282,33 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     fpga.disable_memory_mapped_mode();
 
     if true {
-        let mut fpga_mem: [u8; 0x200] = [0x00; 0x200];
+        let mut fpga_mem: [u8; 0x10000] = [0x00; 0x10000];
         fpga.read_block(0x0000, &mut fpga_mem);
-        debug!("FPGA register map (u8):\n{:02x}", fpga_mem);
+        debug!("FPGA register map (u8):");
+        dump_mem_u8_be(&fpga_mem);
+    }
 
-        let mut fpga_mem: [u32; 0x200 / 4] = [0x0000_0000; 0x200 / 4];
+    if false {
+        let mut fpga_mem: [u32; 0x10000 / 4] = [0x0000_0000; 0x10000 / 4];
         fpga.read_block_u32(0x0000, &mut fpga_mem);
-        debug!("FPGA register map (u32):\n{:08x}", fpga_mem);
+        debug!("FPGA register map (u32):");
+        dump_mem_u32(&fpga_mem);
+
+        defmt::assert!(fpga_mem[0x0000] == EXPECTED_IDENT);
     }
 
     if false {
         let mut encoder_mem: [u32; 6] = [0xdead_beef; 6];
 
         for _ in 0..10 {
-            fpga.read_block_u32(0x0120, &mut encoder_mem);
+            fpga.read_block_u32(0x0c20, &mut encoder_mem);
             debug!("Encoder values (u32):\n{:08x}", encoder_mem);
 
             // set encoder values
             encoder_mem = [0x1100_0011, 0x2200_0022, 0x3300_0033, 0x4400_0044, 0x5500_0055, 0x6600_0066];
-            fpga.write_block_u32_chunked::<16>(0x0104, &mut encoder_mem);
+            fpga.write_block_u32_chunked::<16>(0x0c04, &mut encoder_mem);
             // read encoder values
-            fpga.read_block_u32(0x0120, &mut encoder_mem);
+            fpga.read_block_u32(0x0c20, &mut encoder_mem);
             debug!("Encoder values after explicit set (u32):\n{:08x}", encoder_mem);
         }
     }
@@ -311,16 +318,16 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
             let mut ctrl_and_tx_config = [0x0000_0000; 2];
 
             // 4x WS2812 leds with GRB color order.
-            fpga.write_u32(0x140, 0b00000000000000000000000000000101);
-            fpga.write_u32(0x144, 4);
+            fpga.write_u32(0x0800, 0b00000000000000000000000000000101);
+            fpga.write_u32(0x0804, 4);
             // Red, green, blue, white
-            fpga.write_block_u32_chunked::<16>(0x150, &[0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF]);
-            fpga.read_block_u32(0x140, &mut ctrl_and_tx_config);
+            fpga.write_block_u32_chunked::<16>(0x0810, &[0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF]);
+            fpga.read_block_u32(0x0800, &mut ctrl_and_tx_config);
             debug!("CTRL: 0x{:08x}, TX_CONFIG: 0x{:08x}", ctrl_and_tx_config[0], ctrl_and_tx_config[1]);
 
             // External LED strip - 32 leds
-            fpga.write_u32(0x180, 0b00000000000000000000000000000101);
-            fpga.write_u32(0x184, 32);
+            fpga.write_u32(0x900, 0b00000000000000000000000000000101);
+            fpga.write_u32(0x904, 32);
             fpga.write_block_u32_chunked::<16>(0x190, &[
                 0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
                 0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
@@ -334,7 +341,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
                 0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
                 0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFFFF,
             ]);
-            fpga.read_block_u32(0x140, &mut ctrl_and_tx_config);
+            fpga.read_block_u32(0x900, &mut ctrl_and_tx_config);
             debug!("CTRL: 0x{:08x}, TX_CONFIG: 0x{:08x}", ctrl_and_tx_config[0], ctrl_and_tx_config[1]);
         }
     }
@@ -356,6 +363,8 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
     if true {
         fpga.dump_registers();
+    }
+    if true {
         fpga.buzzer_enable();
         Timer::after(Duration::from_millis(250)).await;
         fpga.buzzer_disable();
@@ -871,5 +880,35 @@ mod rcc_setup {
         config.rcc.mux.adcsel = Adcsel::Pll2P; // 80Mhz
 
         embassy_stm32::init(config)
+    }
+}
+
+pub fn dump_mem_u8_be(mem: &[u8]) {
+    for row in (0..mem.len()).step_by(0x10 * 4) {
+        let mut row_values: [u32; 0x10] = [0x00000000; 0x10];
+        for col in (0..0x10) {
+            let offset: usize = row + (col * 4);
+            if offset < mem.len() {
+                row_values[col] =
+                    (mem[offset] as u32) << 24 |
+                    (mem[offset+1] as u32) << 16 |
+                    (mem[offset+2] as u32) << 8 |
+                    (mem[offset+3] as u32) << 0;
+            }
+        }
+        defmt::info!("{:04x}: {:08x}", row, row_values);
+    }
+}
+
+pub fn dump_mem_u32(mem: &[u32]) {
+    for row in (0..mem.len()).step_by(0x10) {
+        let mut row_values: [u32; 0x10] = [0x00; 0x10];
+        for col in 0..0x10_usize {
+            let offset: usize = row * 0x0F + col;
+            if offset < mem.len() {
+                row_values[col] = mem[offset];
+            }
+        }
+        defmt::info!("{:04x}: {:08x}", row * 4, row_values);
     }
 }

@@ -6,22 +6,22 @@
 #[doc = "system block 1"]
 pub const SYSTEM1: system1::system1 = unsafe { system1::system1::from_ptr(0x9000_0000usize as _) };
 #[doc = "led control block"]
-pub const LED: led::led = unsafe { led::led::from_ptr(0x9000_0040usize as _) };
-#[doc = "io control block"]
-pub const IO: io::io = unsafe { io::io::from_ptr(0x9000_0080usize as _) };
+pub const LED: led::led = unsafe { led::led::from_ptr(0x9000_0200usize as _) };
 #[doc = "buzzer control block"]
-pub const BUZZER: buzzer::buzzer = unsafe { buzzer::buzzer::from_ptr(0x9000_00c0usize as _) };
-#[doc = "encoders control block"]
-pub const ENCODERS: encoders::encoders =
-    unsafe { encoders::encoders::from_ptr(0x9000_0100usize as _) };
+pub const BUZZER: buzzer::buzzer = unsafe { buzzer::buzzer::from_ptr(0x9000_0300usize as _) };
+#[doc = "io control block"]
+pub const IO: io::io = unsafe { io::io::from_ptr(0x9000_0400usize as _) };
 #[doc = "ws2812 RGB LED block"]
 pub const WS2812_1: ws2812_1::ws2812_1 =
-    unsafe { ws2812_1::ws2812_1::from_ptr(0x9000_0140usize as _) };
+    unsafe { ws2812_1::ws2812_1::from_ptr(0x9000_0800usize as _) };
 #[doc = "ws2812 RGB LED block"]
 pub const WS2812_2: ws2812_1::ws2812_1 =
-    unsafe { ws2812_1::ws2812_1::from_ptr(0x9000_0180usize as _) };
+    unsafe { ws2812_1::ws2812_1::from_ptr(0x9000_0900usize as _) };
+#[doc = "encoders control block"]
+pub const ENCODERS: encoders::encoders =
+    unsafe { encoders::encoders::from_ptr(0x9000_0c00usize as _) };
 #[doc = "system block 2"]
-pub const SYSTEM2: system2::system2 = unsafe { system2::system2::from_ptr(0x9000_01c0usize as _) };
+pub const SYSTEM2: system2::system2 = unsafe { system2::system2::from_ptr(0x9000_ff00usize as _) };
 #[cfg(feature = "rt")]
 pub use cortex_m_rt::interrupt;
 #[cfg(feature = "rt")]
@@ -1679,7 +1679,7 @@ pub mod system2 {
         #[doc = "fixed marker value."]
         #[inline(always)]
         pub const fn marker(self) -> crate::common::Reg<regs::marker, crate::common::R> {
-            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x3cusize) as _) }
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0xfcusize) as _) }
         }
     }
     pub mod regs {
