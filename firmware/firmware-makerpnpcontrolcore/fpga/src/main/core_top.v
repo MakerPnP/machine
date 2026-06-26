@@ -145,7 +145,7 @@ module core_top (
         .reset(reset),
         .sys_clk(clk_100),
         .la_io(LA_IO),
-        .la_src_in(la_src),
+        .la_src(la_src),
         .la_in(la_in)
     );
 

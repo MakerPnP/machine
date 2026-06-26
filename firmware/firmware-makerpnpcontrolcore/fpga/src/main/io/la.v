@@ -4,7 +4,7 @@ module la
         input reset,
         input sys_clk,
         output wire [15:0] la_io,
-        input wire [7:0] la_src_in,
+        input wire [7:0] la_src,
         input wire [15:0] la_in
     );
 
@@ -13,14 +13,17 @@ module la
     localparam SRC_INPUT = 8'd2;
 
     reg [15:0] counter = 0;
-    reg [7:0] la_src;
+
+    reg [7:0] la_src_r;
+    reg [15:0] la_in_r;
 
     always @(posedge sys_clk) begin
         if (reset) begin
             counter <= 0;
-            la_src <= SRC_DISABLED;
+            la_src_r <= SRC_DISABLED;
         end else begin
-            la_src <= la_src_in;
+            la_src_r <= la_src;
+            la_in_r <= la_in;
             counter <= counter + 1;
         end
     end
@@ -28,17 +31,17 @@ module la
     function [15:0] la_mux;
         input [7:0] sel;
         input [15:0] counter;
-        input [15:0] la_in;
+        input [15:0] in;
 
         begin
             case (sel)
                 SRC_COUNTER: la_mux = counter;
-                SRC_INPUT:   la_mux = la_in;
+                SRC_INPUT:   la_mux = in;
                 default:     la_mux = 16'd0;
             endcase
         end
     endfunction
 
-    assign la_io = la_mux(la_src, counter, la_in);
+    assign la_io = la_mux(la_src_r, counter, la_in_r);
 endmodule
 
