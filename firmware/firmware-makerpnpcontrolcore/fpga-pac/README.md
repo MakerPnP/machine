@@ -57,3 +57,17 @@ fpga_pac::WS2812_1.ws_tx_config().write(|w| {
 
 In the latter example, modifying 2 register fields result in a read from the first register, followed by a single 
 OctoSPI transaction that writes to 2 adjacent registers.
+
+## Updating patches
+
+This is currently a manual process.
+
+* rebase on a commit before the patches were applied
+* move patch comments to the end of commit history
+* add a break before the commits are applied
+* disable patches in rebuild.sh, commit
+* rebuild, commit unpatched svd.
+* continue rebasing, updating patches.
+* run git format patch HEAD~n for the patch commits
+* revert the disable patches commit
+* run rebuild, commit updated patches.
