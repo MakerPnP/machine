@@ -3,15 +3,6 @@
 #![allow(non_upper_case_globals)]
 #![doc = "Peripheral access API (generated using chiptool v0.1.0 (bcf538a 2026-05-18))"]
 #![no_std]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum Interrupt {}
-unsafe impl cortex_m::interrupt::InterruptNumber for Interrupt {
-    #[inline(always)]
-    fn number(self) -> u16 {
-        self as u16
-    }
-}
 #[cfg(feature = "rt")]
 mod _vectors {
     unsafe extern "C" {}
@@ -39,10 +30,6 @@ pub const ENCODERS: encoders::encoders =
     unsafe { encoders::encoders::from_ptr(0x9000_0c00usize as _) };
 #[doc = "system block 1"]
 pub const SYSTEM1: system1::system1 = unsafe { system1::system1::from_ptr(0x9000_ff00usize as _) };
-#[cfg(feature = "rt")]
-pub use cortex_m_rt::interrupt;
-#[cfg(feature = "rt")]
-pub use Interrupt as interrupt;
 pub mod buzzer {
     #[doc = "buzzer control block."]
     #[derive(Copy, Clone, Eq, PartialEq)]
