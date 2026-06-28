@@ -46,11 +46,11 @@ fpga_pac::LED.led_ctrl().modify(|w| {
 #### Configuring WS2812 LEDs
 
 ```rust
-fpga_pac::WS2812_1.ws_ctrl().modify(|w| {
+fpga_pac::ws2812_0.ws_ctrl().modify(|w| {
     w.set_enabled(true);
     w.set_mode(self.color_ordering.into());
 });
-fpga_pac::WS2812_1.ws_tx_config().write(|w| {
+fpga_pac::ws2812_0.ws_tx_config().write(|w| {
     w.set_leds_count(self.led_count);
 });
 ```

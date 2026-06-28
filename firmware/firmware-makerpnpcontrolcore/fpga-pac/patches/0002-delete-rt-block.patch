@@ -1,14 +1,14 @@
-From 83463f0a54a091f1c9157c3cb2cf55b87d1a68eb Mon Sep 17 00:00:00 2001
+From e91fc7b6296553ffdca529a117dee27f396522cb Mon Sep 17 00:00:00 2001
 From: Dominic Clifton <me@dominicclifton.name>
 Date: Thu, 18 Jun 2026 12:19:11 +0200
-Subject: [PATCH 2/3] delete-rt-block
+Subject: [PATCH 2/4] delete-rt-block
 
 ---
  .../firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs  | 11 -----------
  1 file changed, 11 deletions(-)
 
 diff --git a/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs b/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
-index f262e9a..175c9d0 100644
+index a723787..f087c24 100644
 --- a/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
 +++ b/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
 @@ -3,17 +3,6 @@
@@ -26,8 +26,8 @@ index f262e9a..175c9d0 100644
 -    #[unsafe(no_mangle)]
 -    pub static __INTERRUPTS: [Vector; 0] = [];
 -}
- #[doc = "system block 1"]
- pub const SYSTEM1: system1::system1 = unsafe { system1::system1::from_ptr(0x9000_0000usize as _) };
+ #[doc = "system block 0"]
+ pub const SYSTEM0: system0::system0 = unsafe { system0::system0::from_ptr(0x9000_0000usize as _) };
  #[doc = "led control block"]
 -- 
 2.53.0.windows.2

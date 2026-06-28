@@ -1,0 +1,26 @@
+From d63527c7e2aa4b2292f1252c6b2e458a40856f6a Mon Sep 17 00:00:00 2001
+From: Dominic Clifton <me@dominicclifton.name>
+Date: Sun, 28 Jun 2026 16:22:28 +0200
+Subject: [PATCH 4/4] add-ws2812_1
+
+---
+ firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs b/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
+index 8d2c6ac..228ffb9 100644
+--- a/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
++++ b/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
+@@ -14,6 +14,9 @@ pub const IO: io::io = unsafe { io::io::from_ptr(0x9000_0400usize as _) };
+ #[doc = "ws2812 RGB LED block"]
+ pub const WS2812_0: ws2812_0::ws2812_0 =
+     unsafe { ws2812_0::ws2812_0::from_ptr(0x9000_0800usize as _) };
++#[doc = "ws2812 RGB LED block"]
++pub const WS2812_1: ws2812_0::ws2812_0 =
++    unsafe { ws2812_0::ws2812_0::from_ptr(0x9000_0900usize as _) };
+ #[doc = "encoders control block"]
+ pub const ENCODERS: encoders::encoders =
+     unsafe { encoders::encoders::from_ptr(0x9000_0c00usize as _) };
+-- 
+2.53.0.windows.2
+
