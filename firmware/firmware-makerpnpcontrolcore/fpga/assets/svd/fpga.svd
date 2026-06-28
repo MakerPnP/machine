@@ -347,9 +347,9 @@
       </registers>
     </peripheral>
 
-    <!-- ws2812_1 block (0x0800 - 0x08ff) -->
+    <!-- ws2812_0 block (0x0800 - 0x08ff) -->
     <peripheral>
-      <name>ws2812_1</name>
+      <name>ws2812_0</name>
       <description>ws2812 RGB LED block</description>
       <baseAddress>0x90000800</baseAddress>
       <addressBlock>
@@ -570,7 +570,7 @@
       </registers>
     </peripheral>
 
-    <!-- ws2812_2 block (0x0900 - 0x09ff) - same as ws2812_1, but with different base address-->
+    <!-- ws2812_1 block (0x0900 - 0x09ff) - same as ws2812_0, but with different base address-->
 
     <!-- encoders block (0x0c00 - 0x0cff) -->
     <peripheral>
