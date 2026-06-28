@@ -43,13 +43,13 @@ impl<I: Instance> FpgaCore<I> {
     pub fn read_ident(&mut self) -> u32 {
         defmt::assert!(self.memory_mapped_mode_enabled);
 
-        fpga_pac::SYSTEM1.ident().read().0
+        fpga_pac::SYSTEM0.ident().read().0
     }
 
     pub fn read_version(&mut self) -> FpgaVersion {
         defmt::assert!(self.memory_mapped_mode_enabled);
 
-        FpgaVersion::from_u32(fpga_pac::SYSTEM1.version().read().0)
+        FpgaVersion::from_u32(fpga_pac::SYSTEM0.version().read().0)
     }
 
     pub fn read_buttons(&mut self) -> u8 {
@@ -501,7 +501,7 @@ impl FpgaVersion {
 
 pub mod ws2812 {
     pub struct Ws2812LedController {
-        instance: fpga_pac::ws2812_1::ws2812_1,
+        instance: fpga_pac::ws2812_0::ws2812_0,
     }
 
     impl Ws2812LedController {
@@ -517,7 +517,7 @@ pub mod ws2812 {
     impl Ws2812LedController {
 
         /// use the builder to create a configured instance
-        fn new(instance: fpga_pac::ws2812_1::ws2812_1) -> Self {
+        fn new(instance: fpga_pac::ws2812_0::ws2812_0) -> Self {
             Self {
                 instance
             }
@@ -551,8 +551,8 @@ pub mod ws2812 {
 
         pub fn enable(self) -> Ws2812LedController {
             let instance = match self.instance {
-                0 => fpga_pac::WS2812_1,
-                1 => fpga_pac::WS2812_2,
+                0 => fpga_pac::WS2812_0,
+                1 => fpga_pac::WS2812_1,
                 _ => panic!("Invalid instance"),
             };
 
@@ -576,13 +576,13 @@ pub mod ws2812 {
         GRBW,
     }
 
-    impl Into<fpga_pac::ws2812_1::vals::mode> for ColorOrdering {
-        fn into(self) -> fpga_pac::ws2812_1::vals::mode {
+    impl Into<fpga_pac::ws2812_0::vals::mode> for ColorOrdering {
+        fn into(self) -> fpga_pac::ws2812_0::vals::mode {
             match self {
-                ColorOrdering::RGB => fpga_pac::ws2812_1::vals::mode::RGB,
-                ColorOrdering::RGBW => fpga_pac::ws2812_1::vals::mode::RGBW,
-                ColorOrdering::GRB => fpga_pac::ws2812_1::vals::mode::GRB,
-                ColorOrdering::GRBW => fpga_pac::ws2812_1::vals::mode::GRBW,
+                ColorOrdering::RGB => fpga_pac::ws2812_0::vals::mode::RGB,
+                ColorOrdering::RGBW => fpga_pac::ws2812_0::vals::mode::RGBW,
+                ColorOrdering::GRB => fpga_pac::ws2812_0::vals::mode::GRB,
+                ColorOrdering::GRBW => fpga_pac::ws2812_0::vals::mode::GRBW,
             }
         }
     }
