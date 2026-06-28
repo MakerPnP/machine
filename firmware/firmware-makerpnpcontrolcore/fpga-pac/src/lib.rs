@@ -14,6 +14,9 @@ pub const IO: io::io = unsafe { io::io::from_ptr(0x9000_0400usize as _) };
 #[doc = "ws2812 RGB LED block"]
 pub const WS2812_0: ws2812_0::ws2812_0 =
     unsafe { ws2812_0::ws2812_0::from_ptr(0x9000_0800usize as _) };
+#[doc = "ws2812 RGB LED block"]
+pub const WS2812_1: ws2812_0::ws2812_0 =
+    unsafe { ws2812_0::ws2812_0::from_ptr(0x9000_0900usize as _) };
 #[doc = "encoders control block"]
 pub const ENCODERS: encoders::encoders =
     unsafe { encoders::encoders::from_ptr(0x9000_0c00usize as _) };
