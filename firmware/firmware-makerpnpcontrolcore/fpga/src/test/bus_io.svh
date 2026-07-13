@@ -8,7 +8,8 @@ reg        ack;
 task sys_reset;
     begin
         $display("Resetting...");
-        // reset pulse
+        @(negedge TCXO); // Ensure we are away from the rising edge
+        // reset pulse (1 clock cycles minimum)
         RESET = 1;
         #20;
         RESET = 0;
