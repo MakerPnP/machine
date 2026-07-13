@@ -1,7 +1,7 @@
 module memory (
     input              reset,
     input  wire        clk_a,
-    input  wire        en_a,
+    input  wire        stb_a,
     input  wire        we_a,
     input  wire [15:0] addr_a,
     input  wire [31:0] din_a,
@@ -84,7 +84,7 @@ module memory (
     reg [31:0] io_din_r, led_din_r, buzzer_din_r, encoder_din_r, ws0_din_r, ws1_din_r;
 
     // Pipeline tracking elements
-    reg        req_valid_r;
+    reg        req_stb_r;
     reg        req_we_r;
     reg [7:0]  req_addr_r;
     reg [31:0] req_din_r;
@@ -141,10 +141,10 @@ module memory (
     always @(posedge clk_a) begin
         if (reset) begin
             dout_a          <= 32'h00000000;
-            ack_a         <= 1'b0;
+            ack_a           <= 1'b0;
             bus_busy        <= 1'b0;
 
-            req_valid_r     <= 1'b0;
+            req_stb_r       <= 1'b0;
             req_we_r        <= 1'b0;
             req_addr_r      <= 8'd0;
             req_din_r       <= 32'd0;
@@ -180,9 +180,7 @@ module memory (
                     // Handshake resolved! Capture response and release the bus pipeline
                     bus_busy    <= 1'b0;
                     rsp_valid_r <= 1'b0;
-
-                    // Assert master read valid if this was a read cycle
-                    ack_a     <= !req_we_r;
+                    ack_a       <= 1'b1;
 
                     case (rsp_target_r)
                         TARGET_LED:      dout_a <= led_dout;
@@ -213,14 +211,14 @@ module memory (
             // =================================================================
             else begin
                 // --- STAGE 0: Fetch master interface ports ---
-                req_valid_r  <= en_a;
+                req_stb_r  <= stb_a;
                 req_we_r     <= we_a;
                 req_addr_r   <= addr_a[7:0];
                 req_din_r    <= din_a;
                 req_target_r <= target_a;
 
                 // --- STAGE 1: Dispatch Decoded Operations ---
-                if (req_valid_r) begin
+                if (req_stb_r == 1'b1) begin
                     rsp_target_r <= req_target_r;
                     // Peripheral transaction initiated: engage the registered stall interlock
                     bus_busy    <= 1'b1;
@@ -245,7 +243,7 @@ module memory (
             end
 
             // If the bus is free and a valid request matches, latch it instantly!
-            if (!bus_busy && req_valid_r) begin
+            if (!bus_busy && req_stb_r) begin
                 if (ws0_select) begin
                     ws0_addr_r <= req_addr_r;
                     ws0_din_r  <= req_din_r;

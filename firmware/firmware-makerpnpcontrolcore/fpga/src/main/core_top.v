@@ -56,7 +56,7 @@ module core_top (
     wire [15:0] mem_addr;
     wire [31:0] mem_din;
     wire [31:0] mem_dout;
-    wire        mem_en;
+    wire        mem_stb;
     wire        mem_we;
     wire        mem_ack;
 
@@ -276,7 +276,7 @@ module core_top (
         .reset(reset),
         .clk_a(clk_100),
         .we_a(mem_we),
-        .en_a(mem_en),
+        .stb_a(mem_stb),
         .addr_a(mem_addr),
         .din_a(mem_din),
         .dout_a(mem_dout),
@@ -333,7 +333,7 @@ module core_top (
         .sck(QUADSPI1_CLK),
         .cs_n(QUADSPI1_NCS),
         .io(QUADSPI1_IO),
-        .mem_en(mem_en),
+        .mem_stb(mem_stb),
         .mem_addr(mem_addr),
         .mem_din(mem_din),
         .mem_dout(mem_dout),

@@ -25,7 +25,7 @@ module quadspi_tb;
     wire [31:0] mem_din;
     reg  [31:0] mem_dout;
     wire        mem_we;
-    reg         mem_en;
+    reg         mem_stb;
     reg         mem_ack;
 
 
@@ -38,7 +38,7 @@ module quadspi_tb;
         .mem_din(mem_din),
         .mem_dout(mem_dout),
         .mem_we(mem_we),
-        .mem_en(mem_en),
+        .mem_stb(mem_stb),
         .mem_ack(mem_ack)
     );
 
@@ -195,7 +195,7 @@ module quadspi_tb;
 
         @(posedge TCXO);
 
-        // TODO wait for mem_en, then enable mem_ack in parallel with the test
+        // TODO wait for mem_stb, then enable mem_ack in parallel with the test
         mem_ack = 1'b1;
         mem_dout = 32'h1234_5678;
 
@@ -225,7 +225,7 @@ module quadspi_tb;
         $display("--- Test 2: Sequential READ_U32_LE ---");
         // -------------------------------------------------------------
 
-        // TODO wait for mem_en, then enable mem_ack in parallel with the test
+        // TODO wait for mem_stb, then enable mem_ack in parallel with the test
         mem_ack = 1'b1;
         mem_dout = 32'h1234_5678;
 

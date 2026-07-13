@@ -19,8 +19,8 @@ module int_leds_mem_tb;
     reg [15:0] mem_addr;
     reg [31:0] mem_din;
     reg [31:0] mem_dout;
-    wire       mem_valid;
-    reg        mem_en = 0;
+    wire       mem_ack;
+    reg        mem_stb = 0;
     reg        mem_we = 0;
 
     reg        led_we;
@@ -52,12 +52,12 @@ module int_leds_mem_tb;
     memory memory_map_inst (
         .reset(RESET),
         .clk_a(TCXO),
-        .en_a(mem_en),
+        .stb_a(mem_stb),
         .we_a(mem_we),
         .addr_a(mem_addr),
         .din_a(mem_din),
         .dout_a(mem_dout),
-        .ack_a(mem_valid),
+        .ack_a(mem_ack),
 
         .led_stb(led_stb),
         .led_we(led_we),
@@ -79,11 +79,11 @@ module int_leds_mem_tb;
             mem_addr = address;
             mem_din  = data;
             mem_we   = 1'b1;
-            mem_en   = 1'b1;
+            mem_stb   = 1'b1;
 
             @(negedge TCXO);
             mem_we   = 1'b0;
-            mem_en   = 1'b0;
+            mem_stb   = 1'b0;
 
             // memory.v accepts the request, emits the downstream write strobe,
             // then leds.v consumes its internal strobe and updates outputs.
@@ -98,7 +98,7 @@ module int_leds_mem_tb;
 
         mem_addr = 16'd0;
         mem_din  = 32'd0;
-        mem_en   = 1'b0;
+        mem_stb   = 1'b0;
         mem_we   = 1'b0;
 
         // reset pulse

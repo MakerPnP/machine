@@ -8,7 +8,7 @@ module quadspi (
     inout  wire [3:0] io,
 
     // Memory Interface Port A
-    output reg        mem_en    = 0,
+    output reg        mem_stb   = 0,
     output reg [15:0] mem_addr,
     output reg [31:0] mem_din,
     input  wire [31:0] mem_dout,
@@ -258,7 +258,7 @@ module quadspi (
     // Block C: Memory Port Interface and Driving Engine (Medium Fanout Load)
     // -----------------------------------------------------------------
     always @(posedge sys_clk) begin
-        mem_en <= 1'b0;
+        mem_stb <= 1'b0;
 
         if (cs_mem) begin
             io_out_reg       <= 4'b0;
@@ -294,8 +294,8 @@ module quadspi (
 
                     STATE_DUMMY: begin
                         if (phase_counter == 4'd0) begin
-                            mem_en <= 1'b1;
-                            mem_we <= 1'b0;
+                            mem_stb <= 1'b1;
+                            mem_we  <= 1'b0;
                         end
                     end
 
@@ -306,7 +306,7 @@ module quadspi (
                             else
                                 mem_addr <= mem_addr + 16'd4;
 
-                            mem_en           <= 1'b1;
+                            mem_stb          <= 1'b1;
                             mem_we           <= 1'b0;
                             pending_prefetch <= 1'b1;
                         end
@@ -369,8 +369,8 @@ module quadspi (
                     mem_din <= in_buf;
                 end
 
-                mem_en  <= 1'b1;
-                mem_we  <= 1'b1;
+                mem_stb  <= 1'b1;
+                mem_we   <= 1'b1;
             end
 
             if (mem_we) begin
