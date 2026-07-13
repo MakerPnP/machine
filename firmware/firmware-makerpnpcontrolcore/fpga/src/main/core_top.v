@@ -16,7 +16,15 @@ module core_top (
     output wire       RGB_PORTS,
     output wire       RGB_UP_CAM,
 
-    output  wire [15:0] LA_IO,
+    output wire [15:0] LA_IO,
+
+    output wire [3:0] XYZF_STEP_PINS,
+    output wire [3:0] XYZF_DIR_PINS,
+
+    output wire [3:0] BCDE_STEP_PINS,
+    output wire [3:0] BCDE_DIR_PINS,
+
+    output wire [1:0] XYZF_BCDE_EN,
 
     (* PULLUP = 1 *)
     input NWAKE_IN,
@@ -102,6 +110,13 @@ module core_top (
     wire        buzzer_stb;
     wire        buzzer_ack;
 
+    wire [7:0]  steppers_addr;
+    wire [31:0] steppers_din;
+    wire [31:0] steppers_dout;
+    wire        steppers_we;
+    wire        steppers_stb;
+    wire        steppers_ack;
+
     wire [15:0] led_debug;
     wire [15:0] buzzer_debug;
     wire [15:0] io_debug;
@@ -110,6 +125,23 @@ module core_top (
     reg [7:0] la_src = 2;
     //wire [15:0] la_in = buzzer_debug;
     wire [15:0] la_in = 16'h0F0F;
+
+
+    wire global_motor_en;
+    reg emergency_stop_r = 1'b0;
+    assign global_motor_en = !emergency_stop_r;
+
+
+    always @(posedge clk_100) begin
+        if (reset) begin
+            emergency_stop_r = 1'b1;
+        end else begin
+            // TODO add e-stop hardware support
+            //      probably via some system configuration registers.
+            //      and use an output from the IO module.
+            emergency_stop_r = 1'b0;
+        end
+    end
 
     reg [7:0] reset_cnt = 0;
     reg reset_r = 1;
@@ -270,6 +302,37 @@ module core_top (
     );
 
     // ----------------------
+    // Steppers
+    // ----------------------
+
+    wire stepper_clk;
+
+    stepper_clk stepper_clk_inst (
+        .sys_clk(clk_100),
+        .reset(reset),
+        .stepper_clk(stepper_clk)
+    );
+
+    steppers steppers_inst (
+        .sys_clk(clk_100),
+        .reset(reset),
+
+        .stepper_clk(stepper_clk),
+
+        .bus_stb(steppers_stb),
+        .bus_we(steppers_we),
+        .bus_addr(steppers_addr),
+        .bus_din(steppers_din),
+        .bus_dout(steppers_dout),
+        .bus_ack(steppers_ack),
+
+        .step_pins({XYZF_STEP_PINS, BCDE_STEP_PINS}),
+        .dir_pins({XYZF_DIR_PINS, BCDE_DIR_PINS}),
+        .bank_enable_pins(XYZF_BCDE_EN),
+        .global_motor_en(global_motor_en)
+    );
+
+    // ----------------------
     // Instantiate Central Address Decoder
     // ----------------------
     memory memory_map_inst (
@@ -316,6 +379,13 @@ module core_top (
         .ws1_din(ws1_din),
         .ws1_dout(ws1_dout),
         .ws1_ack(ws1_ack),
+
+        .steppers_stb(steppers_stb),
+        .steppers_we(steppers_we),
+        .steppers_addr(steppers_addr),
+        .steppers_din(steppers_din),
+        .steppers_dout(steppers_dout),
+        .steppers_ack(steppers_ack),
 
         .buzzer_stb(buzzer_stb),
         .buzzer_we(buzzer_we),

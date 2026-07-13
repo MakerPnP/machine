@@ -54,8 +54,15 @@ module memory (
     output wire [7:0]  ws1_addr,
     output wire [31:0] ws1_din,
     input  wire [31:0] ws1_dout,
-    input  wire        ws1_ack
+    input  wire        ws1_ack,
 
+    // Bus Interface to Steppers 0
+    output reg         steppers_stb,
+    output wire        steppers_we,
+    output wire [7:0]  steppers_addr,
+    output wire [31:0] steppers_din,
+    input  wire [31:0] steppers_dout,
+    input  wire        steppers_ack
 );
 
     `include "src/main/registers/map.svh"
@@ -69,19 +76,20 @@ module memory (
     localparam PERIPHERAL_BITS = 8;
     localparam ADDRESS_BITS = 8;
 
-    localparam [7:0] TARGET_SYSTEM0 = SYSTEM0_BASE >> PERIPHERAL_BITS;
-    localparam [7:0] TARGET_LED     = LED_BASE >> PERIPHERAL_BITS;
-    localparam [7:0] TARGET_IO      = IO_BASE >> PERIPHERAL_BITS;
-    localparam [7:0] TARGET_BUZZER  = BUZZER_BASE >> PERIPHERAL_BITS;
-    localparam [7:0] TARGET_ENCODER = ENCODER_BASE >> PERIPHERAL_BITS;
-    localparam [7:0] TARGET_WS0     = WS0_BASE >> PERIPHERAL_BITS;
-    localparam [7:0] TARGET_WS1     = WS1_BASE >> PERIPHERAL_BITS;
-    localparam [7:0] TARGET_SYSTEM1 = SYSTEM1_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_SYSTEM0     = SYSTEM0_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_LED         = LED_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_IO          = IO_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_BUZZER      = BUZZER_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_ENCODER     = ENCODER_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_WS0         = WS0_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_WS1         = WS1_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_STEPPERS    = STEPPERS_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_SYSTEM1     = SYSTEM1_BASE >> PERIPHERAL_BITS;
 
     // Static Control Registers
-    reg        io_we_r, led_we_r, buzzer_we_r, encoder_we_r, ws0_we_r, ws1_we_r;
-    reg [8:0]  io_addr_r, led_addr_r, buzzer_addr_r, encoder_addr_r, ws0_addr_r, ws1_addr_r;
-    reg [31:0] io_din_r, led_din_r, buzzer_din_r, encoder_din_r, ws0_din_r, ws1_din_r;
+    reg        io_we_r, led_we_r, buzzer_we_r, encoder_we_r, ws0_we_r, ws1_we_r, steppers_we_r;
+    reg [8:0]  io_addr_r, led_addr_r, buzzer_addr_r, encoder_addr_r, ws0_addr_r, ws1_addr_r, steppers_addr_r;
+    reg [31:0] io_din_r, led_din_r, buzzer_din_r, encoder_din_r, ws0_din_r, ws1_din_r, steppers_din_r;
 
     // Pipeline tracking elements
     reg        req_stb_r;
@@ -103,6 +111,7 @@ module memory (
     assign encoder_we    = encoder_we_r;    assign encoder_addr  = encoder_addr_r;  assign encoder_din   = encoder_din_r;
     assign ws0_we        = ws0_we_r;        assign ws0_addr      = ws0_addr_r;      assign ws0_din       = ws0_din_r;
     assign ws1_we        = ws1_we_r;        assign ws1_addr      = ws1_addr_r;      assign ws1_din       = ws1_din_r;
+    assign steppers_we   = steppers_we_r;   assign steppers_addr = steppers_addr_r; assign steppers_din  = steppers_din_r;
 
     // Fast, localized combinatorial target decode
     wire [7:0] target_a = addr_a[15:8];
@@ -114,7 +123,7 @@ module memory (
     reg unmapped_stb = 0;
     reg unmapped_ack = 0;
 
-    wire active_ack = led_ack | io_ack | buzzer_ack | encoder_ack | ws0_ack | ws1_ack | system0_ack | system1_ack | unmapped_ack;
+    wire active_ack = led_ack | io_ack | buzzer_ack | encoder_ack | ws0_ack | ws1_ack | system0_ack | system1_ack | unmapped_ack | steppers_ack;
 
     // These evaluate completely independently of bus_busy or ack_a logic loops
     wire system0_select   = (req_target_r == TARGET_SYSTEM0);
@@ -125,6 +134,7 @@ module memory (
     wire io_select        = (req_target_r == TARGET_IO);
     wire buzzer_select    = (req_target_r == TARGET_BUZZER);
     wire encoder_select   = (req_target_r == TARGET_ENCODER);
+    wire steppers_select  = (req_target_r == TARGET_STEPPERS);
 
     wire unmapped_select = !(
         system0_select |
@@ -134,6 +144,7 @@ module memory (
         io_select |
         led_select |
         buzzer_select |
+        steppers_select |
         encoder_select
     );
 
@@ -159,6 +170,7 @@ module memory (
             encoder_stb <= 1'b0;
             ws0_stb <= 1'b0;
             ws1_stb <= 1'b0;
+            steppers_stb <= 1'b0;
             system0_stb <= 1'b0;
             system1_stb <= 1'b0;
             unmapped_stb <= 1'b0;
@@ -169,6 +181,7 @@ module memory (
             encoder_we_r <= 1'b0;
             ws0_we_r <= 1'b0;
             ws1_we_r <= 1'b0;
+            steppers_we_r <= 1'b0;
         end else begin
             ack_a <= 1'b0;
 
@@ -189,6 +202,7 @@ module memory (
                         TARGET_ENCODER:  dout_a <= encoder_dout;
                         TARGET_WS0:      dout_a <= ws0_dout;
                         TARGET_WS1:      dout_a <= ws1_dout;
+                        TARGET_STEPPERS: dout_a <= steppers_dout;
                         // SYSTEM0/SYSTEM1 or un-mapped
                         default:         dout_a <= global_dout_r;
                     endcase
@@ -237,6 +251,7 @@ module memory (
                 encoder_stb <= 1'b0;
                 ws0_stb <= 1'b0;
                 ws1_stb <= 1'b0;
+                steppers_stb <= 1'b0;
                 system0_stb <= 1'b0;
                 system1_stb <= 1'b0;
                 unmapped_stb <= 1'b0;
@@ -279,6 +294,12 @@ module memory (
                     encoder_din_r  <= req_din_r;
                     encoder_we_r   <= req_we_r;
                     encoder_stb    <= 1'b1;
+                end
+                if (steppers_select) begin
+                    steppers_addr_r <= req_addr_r;
+                    steppers_din_r  <= req_din_r;
+                    steppers_we_r   <= req_we_r;
+                    steppers_stb    <= 1'b1;
                 end
                 // FUTURE consider making system0 and system1 real peripherals
                 if (system0_select) begin
