@@ -1,3 +1,5 @@
+`include "src/main/logging.svh"
+
 // Dedicated LED control module
 module leds (
     input  wire        reset,
@@ -43,7 +45,7 @@ module leds (
                 if (!bus_ack) begin
                     bus_ack <= 1'b1;
                     if (bus_we) begin
-                        $display("led bus write. addr: %02x, value: %08h", bus_addr, bus_din);
+                        `DBG_LOG(("led bus write. addr: %02x, value: %08h", bus_addr, bus_din));
                         case (bus_addr)
                             REG_LED_CTRL: begin
                                 led_ctrl      <= bus_din;
@@ -84,7 +86,7 @@ module leds (
                 // Bit 1 handles USER MCU_ACT status
                 mcu_act <= led_ctrl[1];
 
-                $display("LED_CTRL: 0x%08h", led_ctrl);
+                `DBG_LOG(("LED_CTRL: 0x%08h", led_ctrl));
             end
 
             activity_flag <= ~activity_flag;
