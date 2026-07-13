@@ -1,3 +1,5 @@
+`include "src/main/logging.svh"
+
 // Dedicated IO control module
 module io (
     input  wire        reset,
@@ -92,7 +94,7 @@ module io (
                     // Process writes only when a cycle is valid, a write is asserted, and we haven't acknowledged yet
                     bus_ack <= 1'b1;
                     if (bus_we) begin
-                        $display("io bus write. addr: %02x, value: %08h", bus_addr, bus_din);
+                        `DBG_LOG(("io bus write. addr: %02x, value: %08h", bus_addr, bus_din));
                         case (bus_addr)
                             REG_IO_CTRL: begin
                                 io_ctrl       <= bus_din;
@@ -142,7 +144,7 @@ module io (
             // Act on rising edge transition of our synchronized strobe signal
             if (strobe_sync_r1 && !strobe_sync_r2) begin
                 // TODO use io_ctrl_sync as required
-                $display("IO_CTRL: 0x%08h", io_ctrl);
+                `DBG_LOG(("IO_CTRL: 0x%08h", io_ctrl));
             end
 
             io_sync_m  <= {port_present, base_present, iak, btn};
