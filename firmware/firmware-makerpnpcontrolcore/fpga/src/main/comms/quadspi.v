@@ -1,3 +1,5 @@
+`include "src/main/logging.svh"
+
 // QuadSPI handling engine
 module quadspi (
     input  wire       sys_clk,
@@ -120,12 +122,12 @@ module quadspi (
     always @(posedge sys_clk) begin
         if (cs_ctrl) begin
             if (io_out_en) begin
-                $display("disabling quadspi outputs");
+                `DBG_LOG(("disabling quadspi outputs"));
             end
             io_out_en <= 1'b0;
         end else begin
             if (sck_rising && state == STATE_DUMMY && phase_counter == 4'd3) begin
-                $display("enabling quadspi outputs");
+                `DBG_LOG(("enabling quadspi outputs"));
                 io_out_en  <= 1'b1;
             end
         end
@@ -143,10 +145,10 @@ module quadspi (
             case (state)
                 STATE_PROCESS: begin
                     if (cmd_is_read || cmd_is_write) begin
-                        $display("command received: 0x%02h", cmd);
+                        `DBG_LOG(("command received: 0x%02h", cmd));
                         state <= STATE_ADDR;
                     end else begin
-                        $display("unknown command ignored: 0x%02h", cmd);
+                        `DBG_LOG(("unknown command ignored: 0x%02h", cmd));
                         state <= STATE_IGNORE;
                     end
                 end
@@ -241,7 +243,7 @@ module quadspi (
                         end else begin
                             in_buf <= in_buf << 4 | io_in;
                             if (phase_counter == 4'd7) begin
-                                $display("in_buf: 0x%08h", (in_buf << 4 | io_in));
+                                `DBG_LOG(("in_buf: 0x%08h", (in_buf << 4 | io_in)));
                             end
                         end
                     end
@@ -379,9 +381,9 @@ module quadspi (
             end
 
             if (commit_flag) begin
-                $display("disabling mem_we flag");
+                `DBG_LOG(("disabling mem_we flag"));
                 commit_flag   <= 1'b0;
-                $display("incrementing address after write");
+                `DBG_LOG(("incrementing address after write"));
                 if (mem_addr == 16'hFFFC)
                     mem_addr <= 16'h0000;
                 else
