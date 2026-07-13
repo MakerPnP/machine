@@ -1,3 +1,5 @@
+`include "src/main/logging.svh"
+
 // Dedicated LED control module
 module buzzer (
     input  wire        reset,
@@ -42,7 +44,7 @@ module buzzer (
                 if (!bus_ack) begin
                     bus_ack <= 1'b1;
                     if (bus_we) begin
-                        $display("led bus write. addr: %02x, value: %08h", bus_addr, bus_din);
+                        `DBG_LOG(("buzzer bus write. addr: %02x, value: %08h", bus_addr, bus_din));
                         case (bus_addr)
                             REG_BUZZER_CTRL: begin
                                 buzzer_ctrl     <= bus_din;
@@ -78,7 +80,7 @@ module buzzer (
             if (strobe_sync_r1 && !strobe_sync_r2) begin
                 // Bit 0 enables the buzzer
 
-                $display("BUZZER_CTRL: 0x%02h", buzzer_ctrl);
+                `DBG_LOG(("BUZZER_CTRL: 0x%02h", buzzer_ctrl));
 
             end
 
