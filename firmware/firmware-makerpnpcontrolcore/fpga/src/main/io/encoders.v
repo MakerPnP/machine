@@ -1,5 +1,5 @@
-// encoders.v
-// Example of an internal module managing registers in real time
+`include "src/main/logging.svh"
+
 module encoders(
     input  wire        sys_clk,
     input  wire        reset,
@@ -112,7 +112,7 @@ module encoders(
                 if (!bus_ack) begin
                     bus_ack <= 1'b1;
                     if (bus_we) begin
-                        $display("encoder bus write. addr: %02x, value: %08h", bus_addr, bus_din);
+                        `DBG_LOG(("encoder bus write. addr: %02x, value: %08h", bus_addr, bus_din));
                         sync_addr = bus_addr;
                         sync_reg = bus_din;
                         strobe_update <= 1'b1;
@@ -154,55 +154,55 @@ module encoders(
 
             // Act on rising edge transition of our synchronized strobe signal
             if (strobe_sync_r1 && !strobe_sync_r2) begin
-                $display("ENC strobe");
+                `DBG_LOG(("ENC strobe"));
                 case (sync_addr)
                     REG_ENC_CTRL: begin
-                        $display("ENC_CTRL update");
+                        `DBG_LOG(("ENC_CTRL update"));
                         // Bit 0 handles RESET
                         if (sync_reg[0] == 1'b1) begin
-                            $display("Enable encoder reset strobe");
+                            `DBG_LOG(("Enable encoder reset strobe"));
                             strobe_encoder_reset <= 1'b1;
                         end
                     end
                     REG_ENC_SET_COUNT_A: begin
-                        $display("ENC_SET_COUNT_A update. value: 0x%08h", sync_reg);
+                        `DBG_LOG(("ENC_SET_COUNT_A update. value: 0x%08h", sync_reg));
                         encoder_set_value_a <= sync_reg;
                         encoder_set <= encoder_set | 6'b000001;
                     end
                     REG_ENC_SET_COUNT_B: begin
-                        $display("ENC_SET_COUNT_B update. value: 0x%08h", sync_reg);
+                        `DBG_LOG(("ENC_SET_COUNT_B update. value: 0x%08h", sync_reg));
                         encoder_set_value_b <= sync_reg;
                         encoder_set <= encoder_set | 6'b000010;
                     end
                     REG_ENC_SET_COUNT_C: begin
-                        $display("ENC_SET_COUNT_C update. value: 0x%08h", sync_reg);
+                        `DBG_LOG(("ENC_SET_COUNT_C update. value: 0x%08h", sync_reg));
                         encoder_set_value_c <= sync_reg;
                         encoder_set <= encoder_set | 6'b000100;
                     end
                     REG_ENC_SET_COUNT_X: begin
-                        $display("ENC_SET_COUNT_X update. value: 0x%08h", sync_reg);
+                        `DBG_LOG(("ENC_SET_COUNT_X update. value: 0x%08h", sync_reg));
                         encoder_set_value_x <= sync_reg;
                         encoder_set <= encoder_set | 6'b001000;
                     end
                     REG_ENC_SET_COUNT_Y: begin
-                        $display("ENC_SET_COUNT_Y update. value: 0x%08h", sync_reg);
+                        `DBG_LOG(("ENC_SET_COUNT_Y update. value: 0x%08h", sync_reg));
                         encoder_set_value_y <= sync_reg;
                         encoder_set <= encoder_set | 6'b010000;
                     end
                     REG_ENC_SET_COUNT_Z: begin
-                        $display("ENC_SET_COUNT_Z update. value: 0x%08h", sync_reg);
+                        `DBG_LOG(("ENC_SET_COUNT_Z update. value: 0x%08h", sync_reg));
                         encoder_set_value_z <= sync_reg;
                         encoder_set <= encoder_set | 6'b100000;
                     end
                 endcase
 
-                $display("ENC_CTRL: 0x%08h", enc_ctrl);
-                $display("ENC_COUNT_A: 0x%08h", encoder_count[0]);
-                $display("ENC_COUNT_B: 0x%08h", encoder_count[1]);
-                $display("ENC_COUNT_C: 0x%08h", encoder_count[2]);
-                $display("ENC_COUNT_X: 0x%08h", encoder_count[3]);
-                $display("ENC_COUNT_Y: 0x%08h", encoder_count[4]);
-                $display("ENC_COUNT_Z: 0x%08h", encoder_count[5]);
+                `DBG_LOG(("ENC_CTRL: 0x%08h", enc_ctrl));
+                `DBG_LOG(("ENC_COUNT_A: 0x%08h", encoder_count[0]));
+                `DBG_LOG(("ENC_COUNT_B: 0x%08h", encoder_count[1]));
+                `DBG_LOG(("ENC_COUNT_C: 0x%08h", encoder_count[2]));
+                `DBG_LOG(("ENC_COUNT_X: 0x%08h", encoder_count[3]));
+                `DBG_LOG(("ENC_COUNT_Y: 0x%08h", encoder_count[4]));
+                `DBG_LOG(("ENC_COUNT_Z: 0x%08h", encoder_count[5]));
             end
 
             if (strobe_encoder_reset) begin
