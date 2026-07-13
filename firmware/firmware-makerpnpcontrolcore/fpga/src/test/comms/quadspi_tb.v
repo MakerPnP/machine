@@ -26,7 +26,7 @@ module quadspi_tb;
     reg  [31:0] mem_dout;
     wire        mem_we;
     reg         mem_en;
-    reg         mem_valid;
+    reg         mem_ack;
 
 
     quadspi qspi_uut (
@@ -39,7 +39,7 @@ module quadspi_tb;
         .mem_dout(mem_dout),
         .mem_we(mem_we),
         .mem_en(mem_en),
-        .mem_valid(mem_valid)
+        .mem_ack(mem_ack)
     );
 
     // Clock generator helper - Starts from 1, pulls low, then drives high
@@ -195,8 +195,8 @@ module quadspi_tb;
 
         @(posedge TCXO);
 
-        // TODO wait for mem_en, then enable mem_valid in parallel with the test
-        mem_valid = 1'b1;
+        // TODO wait for mem_en, then enable mem_ack in parallel with the test
+        mem_ack = 1'b1;
         mem_dout = 32'h1234_5678;
 
         cs_n  = 0;
@@ -216,7 +216,7 @@ module quadspi_tb;
         `ASSERT_EQ(mem_dout, 32'h1234_5678, "0x%08h", "data mismatch");
 
         cs_n = 1;
-        mem_valid = 1'b0;
+        mem_ack = 1'b0;
 
 
         #100;
@@ -225,8 +225,8 @@ module quadspi_tb;
         $display("--- Test 2: Sequential READ_U32_LE ---");
         // -------------------------------------------------------------
 
-        // TODO wait for mem_en, then enable mem_valid in parallel with the test
-        mem_valid = 1'b1;
+        // TODO wait for mem_en, then enable mem_ack in parallel with the test
+        mem_ack = 1'b1;
         mem_dout = 32'h1234_5678;
 
         cs_n  = 0;
@@ -244,7 +244,7 @@ module quadspi_tb;
         `ASSERT_EQ(mem_dout, 32'h1234_5678, "0x%08h", "data mismatch");
 
         cs_n = 1;
-        mem_valid = 1'b0;
+        mem_ack = 1'b0;
 
         #100;
 

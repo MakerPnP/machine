@@ -58,7 +58,7 @@ module core_top (
     wire [31:0] mem_dout;
     wire        mem_en;
     wire        mem_we;
-    wire        mem_valid;
+    wire        mem_ack;
 
     wire [7:0]  led_addr;
     wire [31:0] led_din;
@@ -280,7 +280,7 @@ module core_top (
         .addr_a(mem_addr),
         .din_a(mem_din),
         .dout_a(mem_dout),
-        .valid_a(mem_valid),
+        .ack_a(mem_ack),
 
         .led_stb(led_stb),
         .led_we(led_we),
@@ -337,7 +337,7 @@ module core_top (
         .mem_addr(mem_addr),
         .mem_din(mem_din),
         .mem_dout(mem_dout),
-        .mem_valid(mem_valid),
+        .mem_ack(mem_ack),
         .mem_we(mem_we)
     );
 

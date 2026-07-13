@@ -57,7 +57,7 @@ module int_leds_mem_tb;
         .addr_a(mem_addr),
         .din_a(mem_din),
         .dout_a(mem_dout),
-        .valid_a(mem_valid),
+        .ack_a(mem_valid),
 
         .led_stb(led_stb),
         .led_we(led_we),

@@ -12,7 +12,7 @@ module quadspi (
     output reg [15:0] mem_addr,
     output reg [31:0] mem_din,
     input  wire [31:0] mem_dout,
-    input  wire       mem_valid,
+    input  wire       mem_ack,
     output reg        mem_we    = 0
 );
 
@@ -327,7 +327,7 @@ module quadspi (
             end
 
             // Internal FPGA Clock Domain Memory Transactions
-            if (mem_valid) begin
+            if (mem_ack) begin
                 if (pending_prefetch) begin
                     if (cmd_is_le) begin
                         next_buf <= {

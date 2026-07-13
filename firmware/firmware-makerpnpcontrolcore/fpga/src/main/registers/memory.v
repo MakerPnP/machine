@@ -6,7 +6,7 @@ module memory (
     input  wire [15:0] addr_a,
     input  wire [31:0] din_a,
     output reg  [31:0] dout_a,
-    output reg         valid_a,
+    output reg         ack_a,
 
     // Bus Interface to LED Module
     output reg         led_stb,
@@ -116,7 +116,7 @@ module memory (
 
     wire active_ack = led_ack | io_ack | buzzer_ack | encoder_ack | ws0_ack | ws1_ack | system0_ack | system1_ack | unmapped_ack;
 
-    // These evaluate completely independently of bus_busy or valid_a logic loops
+    // These evaluate completely independently of bus_busy or ack_a logic loops
     wire system0_select   = (req_target_r == TARGET_SYSTEM0);
     wire system1_select   = (req_target_r == TARGET_SYSTEM1);
     wire ws0_select       = (req_target_r == TARGET_WS0);
@@ -141,7 +141,7 @@ module memory (
     always @(posedge clk_a) begin
         if (reset) begin
             dout_a          <= 32'h00000000;
-            valid_a         <= 1'b0;
+            ack_a         <= 1'b0;
             bus_busy        <= 1'b0;
 
             req_valid_r     <= 1'b0;
@@ -170,7 +170,7 @@ module memory (
             ws0_we_r <= 1'b0;
             ws1_we_r <= 1'b0;
         end else begin
-            valid_a <= 1'b0;
+            ack_a <= 1'b0;
 
             // =================================================================
             // STATE A: Bus is Busy / Waiting for an Active Peripheral Handshake
@@ -182,7 +182,7 @@ module memory (
                     rsp_valid_r <= 1'b0;
 
                     // Assert master read valid if this was a read cycle
-                    valid_a     <= !req_we_r;
+                    ack_a     <= !req_we_r;
 
                     case (rsp_target_r)
                         TARGET_LED:      dout_a <= led_dout;
