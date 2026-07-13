@@ -18,7 +18,7 @@ module io_tb;
 
     reg        stb;
     reg        we;
-    reg [5:0]  addr;
+    reg [7:0]  addr;
     reg [31:0] din;
     reg [31:0] dout;
     reg        ack;

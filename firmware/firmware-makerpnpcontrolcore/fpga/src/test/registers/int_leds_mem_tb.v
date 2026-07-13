@@ -25,7 +25,7 @@ module int_leds_mem_tb;
 
     reg        led_we;
     reg        led_stb;
-    reg [5:0]  led_addr;
+    reg [7:0]  led_addr;
     reg [31:0] led_din;
     reg [31:0] led_dout;
     reg        led_ack;

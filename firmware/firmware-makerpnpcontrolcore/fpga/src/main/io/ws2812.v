@@ -116,7 +116,7 @@ module ws2812 #(
     // BUS WRITE CAPTURE
     // ============================================================
     reg [31:0] sync_reg;
-    reg [5:0]  sync_addr;
+    reg [7:0]  sync_addr;
     reg        strobe_update;
 
     reg strobe_r1, strobe_r2;
