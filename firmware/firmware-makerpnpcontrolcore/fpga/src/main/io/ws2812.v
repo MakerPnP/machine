@@ -1,3 +1,5 @@
+`include "src/main/logging.svh"
+
 module ws2812 #(
     parameter MAX_LEDS = 256
 )(
@@ -193,7 +195,7 @@ module ws2812 #(
                     MODE_RGBW, MODE_GRBW: bit_count <= 31;
                 endcase
 
-                $display("enabled flag: %1d, mode: 0b%02b", sync_reg[0], sync_reg[2:1]);
+                `DBG_LOG(("enabled flag: %1d, mode: 0b%02b", sync_reg[0], sync_reg[2:1]));
             end
 
             if (strobe_update && sync_addr == WS_TX_CONFIG) begin
@@ -287,7 +289,7 @@ module ws2812 #(
                     end
                 end
                 PHASE_FETCH: begin
-                    $display("fetch");
+                    `DBG_LOG(("fetch"));
                     rd_addr <= led_index;   // request read
 
                     phase_counter <= phase_counter + 1;
@@ -297,7 +299,7 @@ module ws2812 #(
                     end
                 end
                 PHASE_PREPARE: begin
-                    $display("prepare");
+                    `DBG_LOG(("prepare"));
                     shift_reg <= rd_data[31:0];
                     tcount    <= 0;
                     bit_index <= bit_count;
@@ -307,7 +309,7 @@ module ws2812 #(
                 PHASE_TRANSMIT: begin
                     // Loaded new LED
                     if (bit_index == bit_count && tcount == 0) begin
-                        $display("transmit. index: %d, shift_reg: 0x%08h", led_index, shift_reg);
+                        `DBG_LOG(("transmit. index: %d, shift_reg: 0x%08h", led_index, shift_reg));
                     end
 
                     // Timing engine
@@ -329,10 +331,10 @@ module ws2812 #(
 
                             // next LED
                             if (is_last_led) begin
-                                $display("finished leds");
+                                `DBG_LOG(("finished leds"));
                                 phase <= PHASE_RESET;
                             end else begin
-                                $display("next led. led_index: %d", led_index);
+                                `DBG_LOG(("next led. led_index: %d", led_index));
                                 led_index <= led_index + 1'b1;
                                 phase <= PHASE_FETCH;
                             end
