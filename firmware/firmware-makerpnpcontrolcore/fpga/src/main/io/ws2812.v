@@ -249,7 +249,8 @@ module ws2812 #(
     localparam T_FETCH = 1; // [0,1] = [first cycle, second cycle]
 
 
-    reg [7:0]  tcount;
+    // Max value ever needed is T_TOTAL (60), which needs exactly 6 bits
+    reg [5:0]  tcount;
 
     localparam PHASE_RESET     = 2'd0;
     localparam PHASE_FETCH     = 2'd1;
@@ -258,8 +259,8 @@ module ws2812 #(
 
     reg [1:0]  phase;
 
-    // FUTURE reduce the size of this somehow
-    reg [15:0] phase_counter;
+    // Max value ever needed is T_RESET (4000), which needs exactly 12 bits
+    reg [11:0] phase_counter;
 
     reg is_last_led;
 
@@ -284,7 +285,7 @@ module ws2812 #(
                     phase_counter <= phase_counter + 1;
                     if (phase_counter == T_RESET) begin
                         led_index     <= 8'd0;
-                        phase_counter <= 15'd0;
+                        phase_counter <= 12'd0;
                         phase         <= PHASE_FETCH;
                     end
                 end
@@ -294,7 +295,7 @@ module ws2812 #(
 
                     phase_counter <= phase_counter + 1;
                     if (phase_counter == T_FETCH) begin
-                        phase_counter <= 15'd0;
+                        phase_counter <= 12'd0;
                         phase         <= PHASE_PREPARE;
                     end
                 end
