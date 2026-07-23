@@ -27,12 +27,7 @@ module encoders(
     reg        strobe_encoder_reset;
 
     wire [15:0] encoder_count [6];
-    reg [15:0] encoder_set_value_a;
-    reg [15:0] encoder_set_value_b;
-    reg [15:0] encoder_set_value_c;
-    reg [15:0] encoder_set_value_x;
-    reg [15:0] encoder_set_value_y;
-    reg [15:0] encoder_set_value_z;
+    reg [15:0] encoder_set_value;
 
     // one flag for each encoder
     reg [5:0] encoder_set;
@@ -41,7 +36,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[0]),
-        .set_value(encoder_set_value_a),
+        .set_value(encoder_set_value),
         .set(encoder_set[0]),
         .abz(abz_a)
     );
@@ -49,7 +44,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[1]),
-        .set_value(encoder_set_value_b),
+        .set_value(encoder_set_value),
         .set(encoder_set[1]),
         .abz(abz_b)
     );
@@ -57,7 +52,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[2]),
-        .set_value(encoder_set_value_c),
+        .set_value(encoder_set_value),
         .set(encoder_set[2]),
         .abz(abz_c)
     );
@@ -65,7 +60,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[3]),
-        .set_value(encoder_set_value_x),
+        .set_value(encoder_set_value),
         .set(encoder_set[3]),
         .abz(abz_x)
     );
@@ -73,7 +68,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[4]),
-        .set_value(encoder_set_value_y),
+        .set_value(encoder_set_value),
         .set(encoder_set[4]),
         .abz(abz_y)
     );
@@ -81,7 +76,7 @@ module encoders(
         .sys_clk(sys_clk),
         .reset(strobe_encoder_reset),
         .count(encoder_count[5]),
-        .set_value(encoder_set_value_z),
+        .set_value(encoder_set_value),
         .set(encoder_set[5]),
         .abz(abz_z)
     );
@@ -166,32 +161,32 @@ module encoders(
                     end
                     REG_ENC_SET_COUNT_A: begin
                         `DBG_LOG(("ENC_SET_COUNT_A update. value: 0x%08h", sync_reg));
-                        encoder_set_value_a <= sync_reg;
+                        encoder_set_value <= sync_reg;
                         encoder_set <= encoder_set | 6'b000001;
                     end
                     REG_ENC_SET_COUNT_B: begin
                         `DBG_LOG(("ENC_SET_COUNT_B update. value: 0x%08h", sync_reg));
-                        encoder_set_value_b <= sync_reg;
+                        encoder_set_value <= sync_reg;
                         encoder_set <= encoder_set | 6'b000010;
                     end
                     REG_ENC_SET_COUNT_C: begin
                         `DBG_LOG(("ENC_SET_COUNT_C update. value: 0x%08h", sync_reg));
-                        encoder_set_value_c <= sync_reg;
+                        encoder_set_value <= sync_reg;
                         encoder_set <= encoder_set | 6'b000100;
                     end
                     REG_ENC_SET_COUNT_X: begin
                         `DBG_LOG(("ENC_SET_COUNT_X update. value: 0x%08h", sync_reg));
-                        encoder_set_value_x <= sync_reg;
+                        encoder_set_value <= sync_reg;
                         encoder_set <= encoder_set | 6'b001000;
                     end
                     REG_ENC_SET_COUNT_Y: begin
                         `DBG_LOG(("ENC_SET_COUNT_Y update. value: 0x%08h", sync_reg));
-                        encoder_set_value_y <= sync_reg;
+                        encoder_set_value <= sync_reg;
                         encoder_set <= encoder_set | 6'b010000;
                     end
                     REG_ENC_SET_COUNT_Z: begin
                         `DBG_LOG(("ENC_SET_COUNT_Z update. value: 0x%08h", sync_reg));
-                        encoder_set_value_z <= sync_reg;
+                        encoder_set_value <= sync_reg;
                         encoder_set <= encoder_set | 6'b100000;
                     end
                 endcase
