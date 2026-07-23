@@ -46,6 +46,15 @@ module encoder(
                (transition == 4'b0100);
 
     // --- Core Sequential Logic ---
+    // Single shared adder: the operand (+1 or -1, as two's complement)
+    // is muxed once, rather than writing count+1 and count-1 as two
+    // separate expressions in different branches - the latter needs two
+    // full 16-bit carry chains for what's really one +/-1 operation,
+    // since each branch's expression gets its own adder unless something
+    // explicitly merges them.
+    wire [15:0] count_operand = dec ? 16'hFFFF : 16'h0001; // -1 (two's complement) or +1
+    wire        count_change  = inc | dec;
+
     always @(posedge sys_clk) begin
         if (reset) begin
             count       <= 15'd0;
@@ -61,13 +70,8 @@ module encoder(
                 initialized <= 1'b1;
             end else if (z_rise) begin
                 count <= 15'd0;
-            end else begin
-                // Synchronous accumulation happens here safely on the clock edge
-                if (inc) begin
-                    count <= count + 1;
-                end else if (dec) begin
-                    count <= count - 1;
-                end
+            end else if (count_change) begin
+                count <= count + count_operand;
             end
         end
     end
