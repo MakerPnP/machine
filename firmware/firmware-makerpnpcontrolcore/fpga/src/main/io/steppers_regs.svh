@@ -1,5 +1,7 @@
 localparam REG_STEP_CTRL = 8'h00;
 localparam REG_STEP_TX_CONFIG = 8'h04;
+localparam REG_STEP_PLS_CONFIG = 8'h08; // per-motor step pulse width preset (tick count - 1), 4 bits each: motor0=bits[3:0], motor1=[7:4], ... motor7=[31:28]
+localparam REG_STEP_PLS_PRESCALER = 8'h0c; // per-bank step pulse width prescaler (sys_clk cycles per tick - 1), 6 bits each: bank0=bits[5:0] (low 16-bit half), bank1=bits[21:16] (high 16-bit half)
 localparam REG_STEP_SEG_CTST = 8'h10;
 localparam REG_STEP_SEG_SPDM = 8'h14;
 

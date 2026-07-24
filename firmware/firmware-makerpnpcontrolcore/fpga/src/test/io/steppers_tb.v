@@ -132,6 +132,44 @@ module steppers_tb;
         end
 
         // ============================================================
+        $display("TEST: Exhaustive memory exercise - all motors, all segments");
+        test_index += 1;
+        // Writes and reads back dut.MAX_SEG segments for every one of the
+        // 8 motors - every (motor, segment, word) address the segment
+        // table can express gets exercised at least once. Uses a
+        // deterministic, recomputable value per (motor, segment) rather
+        // than a fixed table, so it automatically adapts if MAX_SEG is
+        // ever changed again.
+        // ============================================================
+        begin : EXHAUSTIVE_MEMORY_TEST
+            integer m, i;
+            reg [31:0] ctst_expected, spdm_expected;
+            reg [31:0] ctst_readback, spdm_readback;
+
+            for (m = 0; m < 8; m = m + 1) begin
+                $display("  [WRITE] motor %0d: writing all %0d segments...", m, dut.MAX_SEG);
+                bus_write(REG_STEP_TX_CONFIG, {16'h0000, {5'd0, m[2:0]}, dut.MAX_SEG});
+
+                for (i = 0; i < dut.MAX_SEG; i = i + 1) begin
+                    ctst_expected = ((m & 8'hF) << 28) | ((i & 8'hFF) << 8) | ((m ^ i) & 8'hFF);
+                    spdm_expected = ((i & 16'hFFFF) << 16) | (((m << 8) | (i ^ 8'hAA)) & 16'hFFFF);
+                    bus_write(REG_STEP_SEG_CTST, ctst_expected);
+                    bus_write(REG_STEP_SEG_SPDM, spdm_expected);
+                end
+
+                $display("  [READ]  motor %0d: reading all %0d segments back...", m, dut.MAX_SEG);
+                for (i = 0; i < dut.MAX_SEG; i = i + 1) begin
+                    ctst_expected = ((m & 8'hF) << 28) | ((i & 8'hFF) << 8) | ((m ^ i) & 8'hFF);
+                    spdm_expected = ((i & 16'hFFFF) << 16) | (((m << 8) | (i ^ 8'hAA)) & 16'hFFFF);
+                    bus_read(REG_STEP_SEG_CTST, ctst_readback);
+                    bus_read(REG_STEP_SEG_SPDM, spdm_readback);
+                    `ASSERT_EQ(ctst_readback, ctst_expected, "0x%08h", $sformatf("motor %0d segment %0d CTST mismatch", m, i));
+                    `ASSERT_EQ(spdm_readback, spdm_expected, "0x%08h", $sformatf("motor %0d segment %0d SPDM mismatch", m, i));
+                end
+            end
+        end
+
+        // ============================================================
         // END
         // ============================================================
         report();
