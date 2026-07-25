@@ -29,7 +29,7 @@ task bus_init;
 endtask
 
 
-task bus_write(input [5:0] w_addr, input [31:0] w_data);
+task bus_write(input [7:0] w_addr, input [31:0] w_data);
     begin
         @(posedge TCXO);
         addr <= w_addr;
@@ -51,7 +51,7 @@ task bus_write(input [5:0] w_addr, input [31:0] w_data);
     end
 endtask
 
-task bus_read(input [5:0] r_addr, output [31:0] r_data);
+task bus_read(input [7:0] r_addr, output [31:0] r_data);
     begin
         @(posedge TCXO);
         addr <= r_addr;
