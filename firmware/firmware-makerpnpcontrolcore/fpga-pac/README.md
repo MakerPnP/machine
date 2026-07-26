@@ -63,11 +63,15 @@ OctoSPI transaction that writes to 2 adjacent registers.
 This is currently a manual process.
 
 * rebase on a commit before the patches were applied
-* move patch comments to the end of commit history
+* COPY patch commits to the end of commit history
 * add a break before the commits are applied
 * disable patches in rebuild.sh, commit
 * rebuild, commit unpatched svd.
-* continue rebasing, updating patches.
-* run git format patch HEAD~n for the patch commits
-* revert the disable patches commit
-* run rebuild, commit updated patches.
+* continue rebasing, updating patch commits, resolve merge conflicts if they don't apply cleanly to the generated code. do not modify the patch files themselves.
+* run git format-patch HEAD~n for the patch commits
+* move the updated patch files to the patches directory.
+* run git add on the updated patch files.
+* run git rm on any unused patch files.
+* add the patches back to rebuild.sh, run rebuild.sh, when it applies cleanly commit updated patches and rebuild.sh as one commit.
+* if any new patches are required, create commits that modify the generated code. then as a separate commit, use format-patch again and add them to the repo.
+* rebase if required to clean up the history.
