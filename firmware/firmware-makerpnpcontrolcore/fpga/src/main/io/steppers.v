@@ -255,7 +255,7 @@ module steppers (
 
     // CTST word layout (as written by the host):
     //   [31:28] reserved
-    //   [27]    period_increasing (PERIOD_INCREASING/PERIOD_DECREASING)
+    //   [27]    ramp              (RAMP_DOWN/RAMP_UP)
     //   [26]    dir               (DIR_NORMAL/DIR_REVERSE)
     //   [25:24] cmd               (CMD_MOVE/CMD_MOVE_HALT/CMD_MOVE_HALT_WAIT)
     //   [23:0]  n_steps           (steps in this segment)

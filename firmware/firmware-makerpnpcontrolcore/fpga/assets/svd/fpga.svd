@@ -1187,20 +1187,20 @@
             </field>
 
             <field>
-              <name>period_increasing</name>
-              <description>whether this segment's period increases or decreases as it progresses</description>
+              <name>ramp</name>
+              <description>whether this segment's period ramps up or down progresses</description>
               <bitOffset>27</bitOffset>
               <bitWidth>1</bitWidth>
               <enumeratedValues>
 
                 <enumeratedValue>
-                  <name>DECREASING</name>
+                  <name>UP</name>
                   <description>period decreases each step (accelerating)</description>
                   <value>0</value>
                 </enumeratedValue>
 
                 <enumeratedValue>
-                  <name>INCREASING</name>
+                  <name>DOWN</name>
                   <description>period increases each step (decelerating)</description>
                   <value>1</value>
                 </enumeratedValue>

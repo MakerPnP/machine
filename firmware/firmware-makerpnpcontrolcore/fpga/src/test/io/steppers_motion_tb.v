@@ -81,14 +81,14 @@ module steppers_motion_tb;
     function automatic integer period_at_step;
         input integer start_period;
         input integer delta_magnitude;
-        input integer period_increasing;
+        input integer ramp;
         input integer step_index;
         integer i;
         integer current;
         begin
             current = start_period;
             for (i = 0; i < step_index; i = i + 1) begin
-                if (period_increasing) begin
+                if (ramp == RAMP_DOWN) begin
                     if (current + delta_magnitude > 65535) current = 65535;
                     else current = current + delta_magnitude;
                 end else begin
@@ -138,7 +138,7 @@ module steppers_motion_tb;
     reg  [15:0] seg_sp[0:MAX_SEGMENTS-1];
     reg  [15:0] seg_dm[0:MAX_SEGMENTS-1];
     integer     seg_n[0:MAX_SEGMENTS-1];
-    reg         seg_increasing[0:MAX_SEGMENTS-1];
+    reg         seg_ramp[0:MAX_SEGMENTS-1];
     reg         seg_halt[0:MAX_SEGMENTS-1];
     integer     num_segments;
     integer     plan_total_steps;
@@ -237,7 +237,7 @@ module steppers_motion_tb;
                     seg_sp[num_segments]         = sp_i[15:0];
                     seg_dm[num_segments]         = (sp_i - ep_i) / n_i;
                     seg_n[num_segments]          = n_i;
-                    seg_increasing[num_segments] = 1'b0; // PERIOD_DECREASING
+                    seg_ramp[num_segments]       = RAMP_UP;
                     seg_halt[num_segments]       = 1'b0;
                     num_segments     = num_segments + 1;
                     plan_total_steps = plan_total_steps + n_i;
@@ -252,7 +252,7 @@ module steppers_motion_tb;
                 seg_sp[num_segments]         = sp_i[15:0];
                 seg_dm[num_segments]         = 16'd0;
                 seg_n[num_segments]          = n_i;
-                seg_increasing[num_segments] = 1'b0;
+                seg_ramp[num_segments]       = RAMP_UP;
                 seg_halt[num_segments]       = 1'b0;
                 num_segments     = num_segments + 1;
                 plan_total_steps = plan_total_steps + n_i;
@@ -269,7 +269,7 @@ module steppers_motion_tb;
                     seg_sp[num_segments]         = sp_i[15:0];
                     seg_dm[num_segments]         = (ep_i - sp_i) / n_i;
                     seg_n[num_segments]          = n_i;
-                    seg_increasing[num_segments] = 1'b1; // PERIOD_INCREASING
+                    seg_ramp[num_segments]       = RAMP_DOWN;
                     seg_halt[num_segments]       = 1'b0;
                     num_segments     = num_segments + 1;
                     plan_total_steps = plan_total_steps + n_i;
@@ -297,9 +297,9 @@ module steppers_motion_tb;
                 cmd_i = seg_halt[i] ? CMD_MOVE_HALT : CMD_MOVE;
                 $display("  segment %0d: SP=%0d DM=%0d n=%0d %s %s",
                           i, seg_sp[i], seg_dm[i], seg_n[i],
-                          seg_increasing[i] ? "INCREASING" : "DECREASING",
+                          seg_ramp[i] ? "DOWN" : "UP",
                           seg_halt[i] ? "MOVE_HALT" : "MOVE");
-                bus_write(REG_STEP_SEG_CTST, {4'd0, seg_increasing[i], DIR_NORMAL, cmd_i, seg_n[i][23:0]});
+                bus_write(REG_STEP_SEG_CTST, {4'd0, seg_ramp[i], DIR_NORMAL, cmd_i, seg_n[i][23:0]});
                 bus_write(REG_STEP_SEG_SPDM, {seg_sp[i], seg_dm[i]});
                 #200;
             end
@@ -549,7 +549,7 @@ module steppers_motion_tb;
                 $display("  -> Step Index %0d: Delta = %0d sys_clk cycles, DIR = %b", k, capture_duration[k], capture_dir[k]);
                 `ASSERT_EQ(capture_dir[k], 1'b0, "%b", $sformatf("Direction mismatch at step phase array element %0d (Expected Forward)", k));
                 if (k > 0) begin
-                    `ASSERT_EQ(capture_duration[k], period_at_step(start_period, delta_magnitude, PERIOD_DECREASING, k) * TICKS_TO_SYS_CYCLES, "%0d", $sformatf("Step time interval mismatch at historical sequence point %0d", k));
+                    `ASSERT_EQ(capture_duration[k], period_at_step(start_period, delta_magnitude, RAMP_UP, k) * TICKS_TO_SYS_CYCLES, "%0d", $sformatf("Step time interval mismatch at historical sequence point %0d", k));
                 end
             end
 
@@ -578,15 +578,15 @@ module steppers_motion_tb;
             // 2) Load 3 point trajectory segments (CTST steps field is a
             //    relative step count for that segment, not an absolute
             //    coordinate)
-            bus_write(REG_STEP_SEG_CTST,    {4'd0, PERIOD_DECREASING, DIR_NORMAL, CMD_MOVE_HALT_WAIT, 24'd10});
+            bus_write(REG_STEP_SEG_CTST,    {4'd0, RAMP_UP, DIR_NORMAL, CMD_MOVE_HALT_WAIT, 24'd10});
             bus_write(REG_STEP_SEG_SPDM,    {16'd1, 16'd1});
             #200;
 
-            bus_write(REG_STEP_SEG_CTST,    {4'd0, PERIOD_DECREASING, DIR_REVERSE, CMD_MOVE, 24'd6});
+            bus_write(REG_STEP_SEG_CTST,    {4'd0, RAMP_UP, DIR_REVERSE, CMD_MOVE, 24'd6});
             bus_write(REG_STEP_SEG_SPDM,    {16'd2, 16'd2});
             #200;
 
-            bus_write(REG_STEP_SEG_CTST,    {4'd0, PERIOD_DECREASING, DIR_REVERSE, CMD_MOVE_HALT, 24'd4});
+            bus_write(REG_STEP_SEG_CTST,    {4'd0, RAMP_UP, DIR_REVERSE, CMD_MOVE_HALT, 24'd4});
             bus_write(REG_STEP_SEG_SPDM,    {16'd3, 16'd3});
             #200;
 
@@ -617,7 +617,7 @@ module steppers_motion_tb;
                 `ASSERT_EQ(capture_dir[k], 1'b0, "%b", $sformatf("[PHASE 1] Expected FORWARD direction (0) at index %0d", k));
                 if (k > 0) begin
                     // point 1: SP=1, DM=1
-                    `ASSERT_EQ(capture_duration[k], period_at_step(1, 1, PERIOD_DECREASING, k) * TICKS_TO_SYS_CYCLES, "%0d", $sformatf("[PHASE 1] Step time period drift at step index %0d", k));
+                    `ASSERT_EQ(capture_duration[k], period_at_step(1, 1, RAMP_UP, k) * TICKS_TO_SYS_CYCLES, "%0d", $sformatf("[PHASE 1] Step time period drift at step index %0d", k));
                 end
             end
 
@@ -654,11 +654,11 @@ module steppers_motion_tb;
                 if (k > 0) begin
                     if (k < 6) begin
                         // point 2: SP=2, DM=2 - local step index k
-                        `ASSERT_EQ(capture_duration[k], period_at_step(2, 2, PERIOD_DECREASING, k) * TICKS_TO_SYS_CYCLES, "%0d", $sformatf("[PHASE 2] Step period drift at step index %0d", k));
+                        `ASSERT_EQ(capture_duration[k], period_at_step(2, 2, RAMP_UP, k) * TICKS_TO_SYS_CYCLES, "%0d", $sformatf("[PHASE 2] Step period drift at step index %0d", k));
                     end else begin
                         // point 3: SP=3, DM=3 - fresh reload at the segment
                         // boundary, so its own local step index is k - 6
-                        `ASSERT_EQ(capture_duration[k], period_at_step(3, 3, PERIOD_DECREASING, k - 6) * TICKS_TO_SYS_CYCLES, "%0d", $sformatf("[PHASE 2] Step period drift at step index %0d", k));
+                        `ASSERT_EQ(capture_duration[k], period_at_step(3, 3, RAMP_UP, k - 6) * TICKS_TO_SYS_CYCLES, "%0d", $sformatf("[PHASE 2] Step period drift at step index %0d", k));
                     end
                 end
             end
