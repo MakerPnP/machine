@@ -985,7 +985,7 @@ module steppers (
         end
     end
 
-`ifdef SIM_BUS_DEBUG
+`ifdef SIM_STEPPER_BUS_DEBUG
     // Pure observer - never drives anything, just reports every cycle
     // bus_stb is asserted plus the cycle immediately after it drops.
     reg dbg_stb_d;
