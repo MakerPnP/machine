@@ -520,7 +520,7 @@ module steppers_motion_tb;
             #200;
 
             // 2) Send payload
-            bus_write(REG_STEP_SEG_CTST, {6'd0, CMD_MOVE_HALT, target_steps[23:0]});
+            bus_write(REG_STEP_SEG_CTST, {4'd0, 2'b00, CMD_MOVE_HALT, target_steps[23:0]});
             bus_write(REG_STEP_SEG_SPDM, {start_period[15:0], delta_magnitude[15:0]});
             #200;
 
