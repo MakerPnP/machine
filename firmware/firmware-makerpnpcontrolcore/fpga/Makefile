@@ -43,6 +43,8 @@ EXTRA_SRCS_timer_mux :=
 EXTRA_SRCS_clock_out :=
 EXTRA_SRCS_quadspi := $(SRC_MAIN)/registers/memory.v
 EXTRA_SRCS_encoders := $(SRC_MAIN)/io/encoder.v
+EXTRA_SRCS_steppers := $(SRC_MAIN)/io/stepper_clk.v
+EXTRA_SRCS_steppers_motion := $(SRC_MAIN)/io/stepper_clk.v $(SRC_MAIN)/io/steppers.v
 EXTRA_SRCS_leds :=
 
 # Special / integration TBs
@@ -78,7 +80,7 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 $(BUILD)/$(PROJECT)-design.json: $(VERILOGS) $(BUILD) Makefile
-	yosys -q -l $(BUILD)/yosys.log -p 'synth_${FAMILY} -top $(TOP) -json $(BUILD)/$(PROJECT)-design.json' $(VERILOGS)
+	yosys -q -l $(BUILD)/yosys.log -p 'synth_${FAMILY} -top $(TOP) -json $(BUILD)/$(PROJECT)-design.json; share' $(VERILOGS)
 
 $(BUILD)/$(PROJECT).asc: $(BUILD)/$(PROJECT)-design.json pins.pcf
 	nextpnr-${FAMILY} -q -l $(BUILD)/nextpnr.log --${TYPE} --package ${PACKAGE} --top $(TOP) --json $(BUILD)/$(PROJECT)-design.json --write $(BUILD)/$(PROJECT)-place.json --report $(BUILD)/$(PROJECT)-report.json --pcf pins.pcf --asc $(BUILD)/$(PROJECT).asc --placed-svg $(BUILD)/$(PROJECT)-placed.svg --freq $(FREQ) -v $(NEXTPNR_EXTRA_ARGS)

@@ -1,17 +1,17 @@
-From 161ac28ee2590e5d6a16f1cec31ef55f88bd2a83 Mon Sep 17 00:00:00 2001
+From 4bad8de36ab42e6fa5799e6598e75802843ca5cb Mon Sep 17 00:00:00 2001
 From: Dominic Clifton <me@dominicclifton.name>
 Date: Thu, 18 Jun 2026 12:08:08 +0200
-Subject: [PATCH 3/4] octospi-fifo-bypass
+Subject: [PATCH 3/3] octospi-fifo-bypass
 
 ---
  .../fpga-pac/src/lib.rs                       | 56 +++++++++++++++++++
  1 file changed, 56 insertions(+)
 
 diff --git a/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs b/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
-index f087c24..8d2c6ac 100644
+index c20d45f..1a98bf6 100644
 --- a/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
 +++ b/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
-@@ -102,7 +102,47 @@ pub mod buzzer {
+@@ -108,7 +108,47 @@ pub mod buzzer {
      }
  }
  pub mod common {
@@ -59,7 +59,7 @@ index f087c24..8d2c6ac 100644
      #[derive(Copy, Clone, PartialEq, Eq)]
      pub struct RW;
      #[derive(Copy, Clone, PartialEq, Eq)]
-@@ -147,12 +187,28 @@ pub mod common {
+@@ -153,12 +193,28 @@ pub mod common {
              self.ptr as _
          }
      }

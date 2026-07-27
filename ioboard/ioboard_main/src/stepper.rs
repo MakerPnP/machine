@@ -1,4 +1,5 @@
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+#[derive(defmt::Format)]
 pub enum StepperDirection {
     #[default]
     Normal,

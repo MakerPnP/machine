@@ -31,6 +31,9 @@ endtask
 
 task bus_write(input [7:0] w_addr, input [31:0] w_data);
     begin
+`ifdef SIM_BUS_VERBOSE
+        $display("[BUS_WRITE] address: %04h, value: %08h", w_addr, w_data);
+`endif
         @(posedge TCXO);
         addr <= w_addr;
         din  <= w_data;
@@ -70,6 +73,9 @@ task bus_read(input [7:0] r_addr, output [31:0] r_data);
         while (ack) begin
             @(posedge TCXO);
         end
+`ifdef SIM_BUS_VERBOSE
+        $display("[BUS_READ] address: %04h, value: %08h", r_addr, r_data);
+`endif
     end
 endtask
 

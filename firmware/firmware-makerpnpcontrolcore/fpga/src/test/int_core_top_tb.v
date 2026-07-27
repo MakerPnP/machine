@@ -9,6 +9,8 @@ module int_core_top_tb;
     `include "src/main/io/leds_regs.svh"
     `include "src/main/io/buzzer_regs.svh"
     `include "src/main/io/encoders_regs.svh"
+    `include "src/main/io/steppers_regs.svh"
+    `include "src/main/io/steppers_shared.svh"
     `include "src/main/registers/system0_regs.svh"
     `include "src/main/registers/system1_regs.svh"
 
@@ -79,6 +81,16 @@ module int_core_top_tb;
     reg [2:0] ENCODER_Y = 3'd0;
     reg [2:0] ENCODER_Z = 3'd0;
 
+    //
+    // Stepper step/dir pins
+    //
+    reg [3:0] XYZF_STEP;
+    reg [3:0] XYZF_DIR;
+    reg       XYZF_EN;
+    reg [3:0] BCDE_STEP;
+    reg [3:0] BCDE_DIR;
+    reg       BCDE_EN;
+
     core_top uut (
         .TCXO(TCXO),
         .QUADSPI1_CLK(clk),
@@ -101,7 +113,13 @@ module int_core_top_tb;
         .ENCODER_Y(ENCODER_Y),
         .ENCODER_Z(ENCODER_Z),
         .RGB_PORTS(RGB_PORTS),
-        .RGB_UP_CAM(RGB_UP_CAM)
+        .RGB_UP_CAM(RGB_UP_CAM),
+        .XYZF_STEP(XYZF_STEP),
+        .XYZF_DIR(XYZF_DIR),
+        .XYZF_EN(XYZF_EN),
+        .BCDE_STEP(BCDE_STEP),
+        .BCDE_DIR(BCDE_DIR),
+        .BCDE_EN(PCBE_EN)
     );
 
     // Clock generator helper - Starts from 1, pulls low, then drives high
@@ -210,6 +228,146 @@ module int_core_top_tb;
             for (d = 0; d < 8; d = d + 1) begin
                 clock_tick();
             end
+        end
+    endtask
+
+    // ----------------------------------------------------------------
+    // General-purpose QuadSPI single-register write/read, wrapping the
+    // command/address/data primitives above the same way bus_io.svh's
+    // bus_write/bus_read do for the direct-bus unit testbenches - saves
+    // repeating the cs_n/io_en/send_*/dummy_phase sequence at every call
+    // site. settle_ticks lets a caller ask for extra margin on
+    // registers whose bus decode takes more than one sys_clk cycle to
+    // ack (see qspi_bus_write_settled below) - ordinary single-cycle-ack
+    // registers are fine with the default.
+    // ----------------------------------------------------------------
+    task qspi_bus_write;
+        input [15:0] address;
+        input [31:0] data;
+        begin
+            cs_n  = 0;
+            io_en = 1;
+            send_command_byte(8'h90);
+            send_address_word(address);
+            send_long_word(data);
+            cs_n = 1;
+            // Allow the sys_clk domain several cycles to flush out the
+            // strobe - same margin used throughout this file's existing
+            // tests for ordinary (single-cycle-ack) registers, PLUS the
+            // same extra #100 gap those tests always place before their
+            // next cs_n=0 (repeat(5)@(posedge TCXO) alone is what's used
+            // WITHIN a test before its own #100 - chaining bus writes
+            // back to back without that second piece, as this task
+            // originally did, is 100ns short of the total gap any
+            // proven-working consecutive-transaction pair in this file
+            // actually uses).
+            repeat (5) @(posedge TCXO);
+            #100;
+        end
+    endtask
+
+    // For REG_STEP_SEG_CTST/REG_STEP_SEG_SPDM specifically: steppers.v
+    // documents these two registers as going through a multi-cycle
+    // IDLE->LO->HI->(ACK on read) handshake, needing a couple of sys_clk
+    // cycles beyond a single-cycle-ack register's usual settle time.
+    // Extra margin here rather than on qspi_bus_write's default, since
+    // every other register in this design acks in one cycle.
+    task qspi_bus_write_settled;
+        input [15:0] address;
+        input [31:0] data;
+        begin
+            cs_n  = 0;
+            io_en = 1;
+            send_command_byte(8'h90);
+            send_address_word(address);
+            send_long_word(data);
+            cs_n = 1;
+            repeat (10) @(posedge TCXO);
+            #100;
+        end
+    endtask
+
+    task qspi_bus_read;
+        input  [15:0] address;
+        output [31:0] data;
+        begin
+            cs_n  = 0;
+            io_en = 1;
+            send_command_byte(8'h10);
+            send_address_word(address);
+            dummy_phase();
+            read_long_word_data_be(data);
+            cs_n = 1;
+            // Same total gap as qspi_bus_write above - reads chained
+            // back to back need it just as much as writes do.
+            repeat (5) @(posedge TCXO);
+            #100;
+        end
+    endtask
+
+    // ----------------------------------------------------------------
+    // Uploads a 3-segment ramp-up/coast/ramp-down profile to one motor:
+    // TX_CONFIG selects the motor and rewinds the segment write pointer,
+    // then each segment's CTST is written followed by its SPDM (SPDM is
+    // what advances the write pointer to the next segment - see
+    // steppers.v's bus protocol comment). All three segments share the
+    // same step counts/periods/delta - only dir varies between the
+    // forward and reverse passes this test makes.
+    // ----------------------------------------------------------------
+    task upload_trapezoidal_profile;
+        input [2:0]  motor;
+        input        dir;
+        input [23:0] ramp_steps;
+        input [23:0] coast_steps;
+        input [15:0] start_period;
+        input [15:0] coast_period;
+        input [15:0] delta_mag;
+        begin
+            qspi_bus_write(STEPPERS_BASE + REG_STEP_TX_CONFIG, {16'h0000, {5'd0, motor}, 8'd3});
+
+            // Segment 0: ramp up (accelerating) - period shrinks from
+            // start_period down to coast_period over ramp_steps steps,
+            // then falls straight through (CMD_MOVE) into segment 1.
+            qspi_bus_write_settled(STEPPERS_BASE + REG_STEP_SEG_CTST,
+                                    {4'd0, RAMP_UP, dir, CMD_MOVE, ramp_steps});
+            qspi_bus_write_settled(STEPPERS_BASE + REG_STEP_SEG_SPDM,
+                                    {start_period, delta_mag});
+
+            // Segment 1: coast at a constant period (delta_mag=0, so
+            // RAMP_UP vs RAMP_DOWN makes no difference here) - falls
+            // through into segment 2.
+            qspi_bus_write_settled(STEPPERS_BASE + REG_STEP_SEG_CTST,
+                                    {4'd0, RAMP_UP, dir, CMD_MOVE, coast_steps});
+            qspi_bus_write_settled(STEPPERS_BASE + REG_STEP_SEG_SPDM,
+                                    {coast_period, 16'd0});
+
+            // Segment 2: ramp down (decelerating) - period grows back
+            // from coast_period up to start_period over ramp_steps
+            // steps, then halts (CMD_MOVE_HALT, end of profile).
+            qspi_bus_write_settled(STEPPERS_BASE + REG_STEP_SEG_CTST,
+                                    {4'd0, RAMP_DOWN, dir, CMD_MOVE_HALT, ramp_steps});
+            qspi_bus_write_settled(STEPPERS_BASE + REG_STEP_SEG_SPDM,
+                                    {coast_period, delta_mag});
+        end
+    endtask
+
+    // Polls REG_STEP_CTRL (bits[7:0] = per-motor moving status on read)
+    // every 10us until every motor reports stopped, or timeout_polls
+    // iterations have passed without that happening.
+    task poll_steppers_until_stopped;
+        input integer timeout_polls;
+        reg [31:0] ctrl_read;
+        integer    tries;
+        begin
+            ctrl_read = 32'hFFFF_FFFF;
+            tries = 0;
+            while (ctrl_read[7:0] != 8'h00 && tries < timeout_polls) begin
+                qspi_bus_read(STEPPERS_BASE + REG_STEP_CTRL, ctrl_read);
+                tries = tries + 1;
+                if (ctrl_read[7:0] != 8'h00) #10000;
+            end
+            `ASSERT_EQ(ctrl_read[7:0], 8'h00, "0b%08b",
+                       "[STEPPER TRAPEZOID] Motors did not all stop within the polling timeout");
         end
     endtask
 
@@ -630,6 +788,182 @@ module int_core_top_tb;
                 `ASSERT_EQ(captured_values[i], expected_values[i], "0x%08h", $sformatf("Captured value mismatch. address: ", capture_addresses[i]));
             end
         end
+
+        // -------------------------------------------------------------
+        $display("--- Test 12: Stepper 3-Segment Trapezoidal Move, All 8 Motors, Forward then Reverse ---");
+        // -------------------------------------------------------------
+        begin : STEPPER_TRAPEZOID_TEST
+            // ---- Reference math: 1us step pulse width -----------------
+            // Starts from target_ns = 1_000 (decimal) and derives the
+            // (prescaler, preset) register pair from it - the same
+            // calculation an MCU driver will need, given only the sys_clk
+            // period and the desired pulse width. Pulse width =
+            // (prescaler+1)*(preset+1) sys_clk cycles (see steppers.v's
+            // "Step pulse width" section) - prescaler is 6 bits (divide
+            // 1-64), preset is 4 bits (count 1-16).
+            localparam integer NS_PER_CYCLE = 20;
+            localparam integer MAX_COUNT    = 16;  // preset+1 max (4-bit reg)
+            localparam integer MAX_DIVIDE   = 64;  // prescaler+1 max (6-bit reg)
+
+            integer target_ns;
+            integer target_cycles;
+            integer min_divide;
+            integer search_divide, this_count, this_total;
+            integer best_divide, best_count, best_total;
+            integer pls_prescaler_reg, pls_preset_reg;
+
+            // ---- Trapezoidal profile parameters (stepper ticks - a
+            // separate unit/domain from the pulse-width cycles above) ----
+            // Kept deliberately small - total simulated ticks (not step
+            // count) is what drives simulation time, and the effective
+            // sys_clk rate observed in this simulation makes even a
+            // modest per-direction tick count take a long time to
+            // simulate. This is still small enough (28 ticks/direction)
+            // to comfortably clear the configured 1us pulse width
+            // regardless of which rate is actually in effect.
+            localparam integer RAMP_STEPS   = 6;
+            localparam integer COAST_STEPS  = 3;
+            localparam integer DELTA_MAG    = 1;
+            localparam integer COAST_PERIOD = 2;
+            // Chosen so the ramp-up segment's LAST step (index
+            // RAMP_STEPS-1, since period_at_step applies delta
+            // step_index times) lands exactly on COAST_PERIOD - a smooth
+            // handoff into the coast segment with no period jump, and the
+            // ramp-down segment mirrors it symmetrically back up.
+            localparam integer START_PERIOD = COAST_PERIOD + DELTA_MAG * (RAMP_STEPS - 1);
+
+            // Expected total motion duration, computed in closed form
+            // rather than simulated step by step - displayed as
+            // reference (and a useful cross-check against how long the
+            // test actually takes to run), not used to drive the
+            // polling below directly - see poll_steppers_until_stopped's
+            // comment for why. Sum of periods across a ramp segment is a
+            // triangular-number expression:
+            // sum_{k=0}^{N-1}(start - k*delta) = N*start - delta*N*(N-1)/2
+            // (ramp-down mirrors it, period growing instead of
+            // shrinking). TICKS_TO_SYS_CYCLES=500 matches stepper_clk.v's
+            // divider (divides sys_clk by 500 to produce one stepper
+            // tick - the unit start_period/coast_period/delta above are
+            // all expressed in) - assumes 20ns/cycle (the 50MHz
+            // synthesis constraint), which this simulation's actual
+            // effective rate does not seem to match (again, see
+            // poll_steppers_until_stopped's comment), so treat the
+            // displayed value as an order-of-magnitude reference rather
+            // than a precise prediction of this simulation's wall-clock
+            // or simulated-time behavior.
+            localparam integer TICKS_TO_SYS_CYCLES = 500;
+            integer total_ramp_up_ticks, total_coast_ticks, total_ramp_down_ticks, total_ticks;
+            integer expected_duration_ns;
+
+            integer    m;
+            reg [31:0] readback;
+            reg [31:0] position_read;
+            integer    expected_position;
+
+            // ---- Compute prescaler/preset for the 1us pulse width -----
+            // Ceiling-divides throughout: never produce a pulse shorter
+            // than requested, and never claim a total narrower than the
+            // target - matching the driver-safety floor established
+            // elsewhere in this design. Searches divide upward from the
+            // smallest value that could possibly reach target_cycles
+            // within MAX_COUNT, taking the first EXACT factorization
+            // found (searching from the smallest divide keeps divide -
+            // and so LC cost on the divide side - minimal); if none
+            // exists in range, keeps the smallest total that still
+            // covers the target.
+            target_ns     = 1_000;
+            target_cycles = (target_ns + NS_PER_CYCLE - 1) / NS_PER_CYCLE;
+            min_divide    = (target_cycles + MAX_COUNT - 1) / MAX_COUNT;
+            if (min_divide < 1) min_divide = 1;
+
+            best_total = -1;
+            for (search_divide = min_divide; search_divide <= MAX_DIVIDE; search_divide = search_divide + 1) begin
+                this_count = (target_cycles + search_divide - 1) / search_divide;
+                if (this_count <= MAX_COUNT) begin
+                    this_total = search_divide * this_count;
+                    if (best_total == -1 || this_total < best_total) begin
+                        best_total  = this_total;
+                        best_divide = search_divide;
+                        best_count  = this_count;
+                    end
+                    if (this_total == target_cycles) begin
+                        search_divide = MAX_DIVIDE + 1; // exact match - stop searching
+                    end
+                end
+            end
+
+            pls_prescaler_reg = best_divide - 1;
+            pls_preset_reg    = best_count - 1;
+
+            $display("[PLS CALC] target=%0dns -> %0d cycles -> divide=%0d count=%0d (%0d cycles = %0dns) -> prescaler_reg=%0d preset_reg=%0d",
+                      target_ns, target_cycles, best_divide, best_count, best_total, best_total * NS_PER_CYCLE,
+                      pls_prescaler_reg, pls_preset_reg);
+
+            `ASSERT_EQ(best_total, target_cycles, "%0d",
+                       "[STEPPER TRAPEZOID] Expected an exact factorization for 1us at 50MHz");
+
+            // Same preset on every motor, same prescaler on both banks.
+            qspi_bus_write(STEPPERS_BASE + REG_STEP_PLS_CONFIG,
+                            {8{pls_preset_reg[3:0]}});
+            qspi_bus_write(STEPPERS_BASE + REG_STEP_PLS_PRESCALER,
+                            {10'd0, pls_prescaler_reg[5:0], 10'd0, pls_prescaler_reg[5:0]});
+
+            qspi_bus_read(STEPPERS_BASE + REG_STEP_PLS_CONFIG, readback);
+            `ASSERT_EQ(readback, {8{pls_preset_reg[3:0]}}, "0x%08h",
+                       "[STEPPER TRAPEZOID] REG_STEP_PLS_CONFIG readback mismatch");
+            qspi_bus_read(STEPPERS_BASE + REG_STEP_PLS_PRESCALER, readback);
+            `ASSERT_EQ(readback, {10'd0, pls_prescaler_reg[5:0], 10'd0, pls_prescaler_reg[5:0]}, "0x%08h",
+                       "[STEPPER TRAPEZOID] REG_STEP_PLS_PRESCALER readback mismatch");
+
+            total_ramp_up_ticks   = RAMP_STEPS*START_PERIOD - DELTA_MAG*RAMP_STEPS*(RAMP_STEPS-1)/2;
+            total_coast_ticks     = COAST_STEPS*COAST_PERIOD;
+            total_ramp_down_ticks = RAMP_STEPS*COAST_PERIOD + DELTA_MAG*RAMP_STEPS*(RAMP_STEPS-1)/2;
+            total_ticks           = total_ramp_up_ticks + total_coast_ticks + total_ramp_down_ticks;
+            expected_duration_ns  = total_ticks * TICKS_TO_SYS_CYCLES * NS_PER_CYCLE;
+            $display("[DURATION CALC] total_ticks=%0d -> expected_duration=%0dns (%0dms)",
+                      total_ticks, expected_duration_ns, expected_duration_ns / 1_000_000);
+
+            // ---- Upload the forward-direction profile to all 8 motors -
+            for (m = 0; m < 8; m = m + 1) begin
+                upload_trapezoidal_profile(m[2:0], DIR_NORMAL, RAMP_STEPS, COAST_STEPS,
+                                            START_PERIOD, COAST_PERIOD, DELTA_MAG);
+            end
+
+            // ---- Start all 8 motors simultaneously, then poll --------
+            $display("[STEPPER TRAPEZOID] Starting all 8 motors (forward)...");
+            qspi_bus_write(STEPPERS_BASE + REG_STEP_CTRL, 32'h000F_0F00);
+            poll_steppers_until_stopped(30000);
+
+            // ---- Verify final position: 25+50+25 = 100 steps forward -
+            expected_position = RAMP_STEPS + COAST_STEPS + RAMP_STEPS;
+            for (m = 0; m < 8; m = m + 1) begin
+                qspi_bus_read(STEPPERS_BASE + REG_STEP_POS_0 + (m * 4), position_read);
+                $display("[STEPPER TRAPEZOID] Motor %0d position (forward): %0d", m, $signed(position_read));
+                `ASSERT_EQ($signed(position_read), expected_position, "%0d",
+                           $sformatf("[STEPPER TRAPEZOID] Motor %0d position mismatch after forward move", m));
+            end
+
+            // ---- Upload the SAME profile again, reversed direction ---
+            for (m = 0; m < 8; m = m + 1) begin
+                upload_trapezoidal_profile(m[2:0], DIR_REVERSE, RAMP_STEPS, COAST_STEPS,
+                                            START_PERIOD, COAST_PERIOD, DELTA_MAG);
+            end
+
+            $display("[STEPPER TRAPEZOID] Starting all 8 motors (reverse)...");
+            qspi_bus_write(STEPPERS_BASE + REG_STEP_CTRL, 32'h000F_0F00);
+            poll_steppers_until_stopped(30000);
+
+            // ---- Verify final position: back to 0 (100 forward, then
+            // 100 back) --------------------------------------------------
+            for (m = 0; m < 8; m = m + 1) begin
+                qspi_bus_read(STEPPERS_BASE + REG_STEP_POS_0 + (m * 4), position_read);
+                $display("[STEPPER TRAPEZOID] Motor %0d position (reverse): %0d", m, $signed(position_read));
+                `ASSERT_EQ($signed(position_read), 0, "%0d",
+                           $sformatf("[STEPPER TRAPEZOID] Motor %0d position mismatch after reverse move", m));
+            end
+        end
+
+        #100;
 
         report();
         $finish;

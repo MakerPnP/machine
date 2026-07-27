@@ -6,6 +6,7 @@ use embassy_stm32::ospi::{
 };
 use embassy_stm32::ospi::enums::DummyCycles;
 use defmt::*;
+use fpga_pac::steppers::vals::cmd;
 
 mod commands {
     pub const CMD_READ_U32_BE: u8 = 0x10;
@@ -23,7 +24,9 @@ mod registers {
 }
 pub use registers::*;
 use crate::fpga::adc::FpgaAdcMux;
+use crate::fpga::steppers::FpgaStepperBank;
 use crate::fpga::ws2812::Ws2812LedControllerBuilder;
+use crate::stepper::fpgastepper::Command;
 
 pub struct FpgaCore<I: Instance> {
     ospi: Ospi<'static, I, Blocking>,
@@ -71,7 +74,7 @@ impl<I: Instance> FpgaCore<I> {
         let value = fpga_pac::IO.io_in_1().read();
 
         let buttons = (value.user0() as u8) | ((value.user1() as u8) << 1);
-        defmt::debug!("FPGA value: 0x{:08x}, buttons: 0b{:02b}", value.0, buttons);
+        defmt::trace!("FPGA value: 0x{:08x}, buttons: 0b{:02b}", value.0, buttons);
 
         buttons
     }
@@ -86,7 +89,7 @@ impl<I: Instance> FpgaCore<I> {
         let value = fpga_pac::IO.io_in_1().read();
 
         let iak = (value.iak1() as u8) | ((value.iak2() as u8) << 1);
-        defmt::debug!("FPGA value: 0x{:08x}, iak: 0b{:02b}", value.0, iak);
+        defmt::trace!("FPGA value: 0x{:08x}, iak: 0b{:02b}", value.0, iak);
 
         iak
     }
@@ -99,7 +102,7 @@ impl<I: Instance> FpgaCore<I> {
         let value = fpga_pac::IO.io_in_2().read();
 
         let din = value.din();
-        defmt::debug!("FPGA value: 0x{:08x}, din: 0b{:08b}", value.0, din);
+        defmt::trace!("FPGA value: 0x{:08x}, din: 0b{:08b}", value.0, din);
 
         din
     }
@@ -448,7 +451,7 @@ impl<I: Instance> FpgaCore<I> {
         let value = fpga_pac::IO.io_in_1().read();
 
         let present = value.base_present();
-        defmt::debug!("FPGA value: 0x{:08x}, base_present: 0b{:01b}", value.0, present);
+        defmt::info!("FPGA value: 0x{:08x}, base_present: 0b{:01b}", value.0, present);
 
         present
     }
@@ -462,11 +465,14 @@ impl<I: Instance> FpgaCore<I> {
 
         let present = value.port_present() & 0b1111;
 
-        defmt::debug!("FPGA value: 0x{:08x}, port_present: 0b{:04b}", value.0, present);
+        defmt::info!("FPGA value: 0x{:08x}, port_present: 0b{:04b}", value.0, present);
 
         present
     }
 
+    pub fn stepper_bank(&self, bank: u8) -> FpgaStepperBank {
+        FpgaStepperBank::new(bank)
+    }
 }
 
 #[derive(defmt::Format)]
@@ -495,6 +501,116 @@ impl FpgaVersion {
             minor: bytes[1],
             patch: bytes[2],
             build: bytes[3],
+        }
+    }
+}
+
+pub mod steppers {
+    use fpga_pac::steppers::vals::{dir, ramp};
+    use ioboard_main::stepper::StepperDirection;
+    use crate::stepper::fpgastepper::{RampMode, Segment};
+
+    pub struct FpgaStepperBank {
+        pub index: u8,
+        instance: fpga_pac::steppers::steppers,
+    }
+
+    impl FpgaStepperBank {
+        pub fn new(index: u8) -> Self {
+            Self {
+                index,
+                instance: fpga_pac::STEPPERS,
+            }
+        }
+
+        pub fn enable(&mut self) {
+            // currently a No-OP
+        }
+
+        pub fn set_pulse_width(&mut self, motor: u8, pulse_width: u16) {
+
+            // TODO math for calculating preset and prescaler from pulse width
+            // hard-coded to 1us for now (FPGA sys clock = 50Mhz, stepper clock = 100kHz).
+            let preset = 9;
+            let prescaler = 4;
+
+            // TODO select the right motor, hardcoded to motor 0 for now
+            self.instance.step_pls_config().modify(|w| {
+                w.set_preset0(preset);
+                defmt::trace!("PLS_CONFIG: {:08x}", w.0);
+            });
+
+            // TODO fix silently overriding the prescaler for other motors on the same bank
+            // TODO select the right bank, hardcoded to bank 0 for now
+            self.instance.step_pls_prescaler().modify(|w| {
+                w.set_prescaler0(prescaler);
+                defmt::trace!("PLS_PRESCALER: {:08x}", w.0);
+            });
+        }
+
+        pub fn send_sequence(&self, motor: u8, segments: &[Segment; 1]) {
+
+            // TODO fail gracefully if the sequence is too long or empty
+            assert!(segments.len() <= 127, "Current FPGA implementation only supports up to 127 segments per motor");
+            assert!(segments.len() > 0, "Current FPGA implementation requires at least one segment");
+
+            self.instance.step_tx_config().write(|w| {
+                w.set_motor_instance(motor);
+                w.set_num_points(segments.len() as u8);
+                defmt::trace!("TX_CONFIG: {:08x}", w.0);
+            });
+
+            for segment in segments {
+
+                // TODO extract these match blocks into 'into' impls.
+
+                let ramp = match segment.ramp_mode {
+                    RampMode::Up => ramp::UP,
+                    RampMode::Down => ramp::DOWN,
+                };
+
+                let direction = match segment.direction {
+                    StepperDirection::Normal => dir::NORMAL,
+                    StepperDirection::Reversed => dir::REVERSE,
+                };
+
+                self.instance.step_seg_ctst().write(|w| {
+                    w.set_cmd(segment.command.into());
+                    w.set_n_steps(segment.steps);
+                    w.set_dir(direction);
+                    w.set_ramp(ramp);
+                    defmt::trace!("CTST: {:08x}", w.0);
+                });
+                self.instance.step_seg_spdm().write(|w|{
+                    w.set_start_period(segment.start_period);
+                    w.set_delta_magnitude(segment.delta_magnitude);
+                    defmt::trace!("SPDM: {:08x}", w.0);
+                });
+            }
+        }
+
+        pub fn start_motor(&self, motor: u8) {
+            if self.index == 0 {
+                self.instance.step_ctrl().write(|w| {
+                    w.set_start_bank0(1 << motor);
+                    defmt::trace!("CTRL: {:08x}", w.0);
+                })
+            } else {
+                self.instance.step_ctrl().write(|w| {
+                    w.set_start_bank1(1 << motor);
+                    defmt::trace!("CTRL: {:08x}", w.0);
+                })
+            }
+        }
+    }
+}
+
+impl Into<cmd> for Command {
+    fn into(self) -> cmd {
+        match self {
+            Command::Move => cmd::MOVE,
+            Command::MoveHalt => cmd::MOVE_HALT,
+            Command::MoveHaltPause => cmd::MOVE_HALT_WAIT,
         }
     }
 }

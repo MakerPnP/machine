@@ -14,12 +14,15 @@ pub const IO: io::io = unsafe { io::io::from_ptr(0x9000_0400usize as _) };
 #[doc = "ws2812 RGB LED block"]
 pub const WS2812_0: ws2812_0::ws2812_0 =
     unsafe { ws2812_0::ws2812_0::from_ptr(0x9000_0800usize as _) };
-#[doc = "ws2812 RGB LED block"]
+#[doc = "ws2812 RGB LED block (second instance)"]
 pub const WS2812_1: ws2812_0::ws2812_0 =
     unsafe { ws2812_0::ws2812_0::from_ptr(0x9000_0900usize as _) };
 #[doc = "encoders control block"]
 pub const ENCODERS: encoders::encoders =
     unsafe { encoders::encoders::from_ptr(0x9000_0c00usize as _) };
+#[doc = "8-channel stepper motor step/dir pulse generator (2 banks of 4)"]
+pub const STEPPERS: steppers::steppers =
+    unsafe { steppers::steppers::from_ptr(0x9000_0d00usize as _) };
 #[doc = "system block 1"]
 pub const SYSTEM1: system1::system1 = unsafe { system1::system1::from_ptr(0x9000_ff00usize as _) };
 pub mod buzzer {
@@ -1507,6 +1510,1532 @@ pub mod led {
                     self.mcu_led(),
                     self.reserved()
                 )
+            }
+        }
+    }
+}
+pub mod steppers {
+    #[doc = "8-channel stepper motor step/dir pulse generator (2 banks of 4)."]
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    pub struct steppers {
+        ptr: *mut u8,
+    }
+    unsafe impl Send for steppers {}
+    unsafe impl Sync for steppers {}
+    impl steppers {
+        #[inline(always)]
+        pub const unsafe fn from_ptr(ptr: *mut ()) -> Self {
+            Self { ptr: ptr as _ }
+        }
+        #[inline(always)]
+        pub const fn as_ptr(&self) -> *mut () {
+            self.ptr as _
+        }
+        #[doc = "start/stop control - WRITE: start/stop strobes per motor (bank 0 = motors 0-3, bank 1 = motors 4-7); READ: per-motor moving status."]
+        #[inline(always)]
+        pub const fn step_ctrl(self) -> crate::common::Reg<regs::step_ctrl, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x0usize) as _) }
+        }
+        #[doc = "segment table streaming configuration - selects which motor subsequent step_seg_ctst/step_seg_spdm writes and reads target, and rewinds both the write and read pointers to segment 0."]
+        #[inline(always)]
+        pub const fn step_tx_config(
+            self,
+        ) -> crate::common::Reg<regs::step_tx_config, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x04usize) as _) }
+        }
+        #[doc = "per-motor step pulse width preset (tick count - 1). Combined with that motor's bank prescaler in step_pls_prescaler: pulse width = (prescaler+1) * (preset+1) sys_clk cycles."]
+        #[inline(always)]
+        pub const fn step_pls_config(
+            self,
+        ) -> crate::common::Reg<regs::step_pls_config, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x08usize) as _) }
+        }
+        #[doc = "per-bank step pulse width prescaler (sys_clk cycles per tick - 1). Bank 0 = motors 0-3 (low 16-bit half, bits\\[5:0\\]), bank 1 = motors 4-7 (high 16-bit half, bits\\[21:16\\]) - split this way so either field can widen, or other per-bank config bits can be added, without touching the other bank's half."]
+        #[inline(always)]
+        pub const fn step_pls_prescaler(
+            self,
+        ) -> crate::common::Reg<regs::step_pls_prescaler, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x0cusize) as _) }
+        }
+        #[doc = "segment table CTST word - command/direction/step-count for the segment addressed by step_tx_config's motor_instance and the current streaming pointer (advances on step_seg_spdm access, not this one)."]
+        #[inline(always)]
+        pub const fn step_seg_ctst(
+            self,
+        ) -> crate::common::Reg<regs::step_seg_ctst, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x10usize) as _) }
+        }
+        #[doc = "segment table SPDM word - start period/delta magnitude for the segment addressed by step_tx_config's motor_instance and the current streaming pointer (advances the streaming pointer on access - write or read)."]
+        #[inline(always)]
+        pub const fn step_seg_spdm(
+            self,
+        ) -> crate::common::Reg<regs::step_seg_spdm, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x14usize) as _) }
+        }
+        #[doc = "motor 0 status."]
+        #[inline(always)]
+        pub const fn step_status_0(
+            self,
+        ) -> crate::common::Reg<regs::step_status_0, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x20usize) as _) }
+        }
+        #[doc = "motor 1 status."]
+        #[inline(always)]
+        pub const fn step_status_1(
+            self,
+        ) -> crate::common::Reg<regs::step_status_1, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x24usize) as _) }
+        }
+        #[doc = "motor 2 status."]
+        #[inline(always)]
+        pub const fn step_status_2(
+            self,
+        ) -> crate::common::Reg<regs::step_status_2, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x28usize) as _) }
+        }
+        #[doc = "motor 3 status."]
+        #[inline(always)]
+        pub const fn step_status_3(
+            self,
+        ) -> crate::common::Reg<regs::step_status_3, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x2cusize) as _) }
+        }
+        #[doc = "motor 4 status."]
+        #[inline(always)]
+        pub const fn step_status_4(
+            self,
+        ) -> crate::common::Reg<regs::step_status_4, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x30usize) as _) }
+        }
+        #[doc = "motor 5 status."]
+        #[inline(always)]
+        pub const fn step_status_5(
+            self,
+        ) -> crate::common::Reg<regs::step_status_5, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x34usize) as _) }
+        }
+        #[doc = "motor 6 status."]
+        #[inline(always)]
+        pub const fn step_status_6(
+            self,
+        ) -> crate::common::Reg<regs::step_status_6, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x38usize) as _) }
+        }
+        #[doc = "motor 7 status."]
+        #[inline(always)]
+        pub const fn step_status_7(
+            self,
+        ) -> crate::common::Reg<regs::step_status_7, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x3cusize) as _) }
+        }
+        #[doc = "motor 0 current absolute position, in steps (signed, two's complement)."]
+        #[inline(always)]
+        pub const fn step_pos_0(self) -> crate::common::Reg<regs::step_pos_0, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x40usize) as _) }
+        }
+        #[doc = "motor 1 current absolute position, in steps (signed, two's complement)."]
+        #[inline(always)]
+        pub const fn step_pos_1(self) -> crate::common::Reg<regs::step_pos_1, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x44usize) as _) }
+        }
+        #[doc = "motor 2 current absolute position, in steps (signed, two's complement)."]
+        #[inline(always)]
+        pub const fn step_pos_2(self) -> crate::common::Reg<regs::step_pos_2, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x48usize) as _) }
+        }
+        #[doc = "motor 3 current absolute position, in steps (signed, two's complement)."]
+        #[inline(always)]
+        pub const fn step_pos_3(self) -> crate::common::Reg<regs::step_pos_3, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x4cusize) as _) }
+        }
+        #[doc = "motor 4 current absolute position, in steps (signed, two's complement)."]
+        #[inline(always)]
+        pub const fn step_pos_4(self) -> crate::common::Reg<regs::step_pos_4, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x50usize) as _) }
+        }
+        #[doc = "motor 5 current absolute position, in steps (signed, two's complement)."]
+        #[inline(always)]
+        pub const fn step_pos_5(self) -> crate::common::Reg<regs::step_pos_5, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x54usize) as _) }
+        }
+        #[doc = "motor 6 current absolute position, in steps (signed, two's complement)."]
+        #[inline(always)]
+        pub const fn step_pos_6(self) -> crate::common::Reg<regs::step_pos_6, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x58usize) as _) }
+        }
+        #[doc = "motor 7 current absolute position, in steps (signed, two's complement)."]
+        #[inline(always)]
+        pub const fn step_pos_7(self) -> crate::common::Reg<regs::step_pos_7, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x5cusize) as _) }
+        }
+    }
+    pub mod regs {
+        #[doc = "start/stop control - WRITE: start/stop strobes per motor (bank 0 = motors 0-3, bank 1 = motors 4-7); READ: per-motor moving status."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_ctrl(pub u32);
+        impl step_ctrl {
+            #[doc = "per-motor moving status (bit N = motor N is moving) - read-only, ignored on write."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn moving(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "per-motor moving status (bit N = motor N is moving) - read-only, ignored on write."]
+            #[inline(always)]
+            pub const fn set_moving(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "start strobe, bit N = motor N (bank 0, motors 0-3) - write-only, always reads as 0."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn start_bank0(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "start strobe, bit N = motor N (bank 0, motors 0-3) - write-only, always reads as 0."]
+            #[inline(always)]
+            pub const fn set_start_bank0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 8usize)) | (((val as u32) & 0x0f) << 8usize);
+            }
+            #[doc = "stop strobe, bit N = motor N (bank 0, motors 0-3) - write-only, always reads as 0."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn stop_bank0(&self) -> u8 {
+                let val = (self.0 >> 12usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "stop strobe, bit N = motor N (bank 0, motors 0-3) - write-only, always reads as 0."]
+            #[inline(always)]
+            pub const fn set_stop_bank0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 12usize)) | (((val as u32) & 0x0f) << 12usize);
+            }
+            #[doc = "start strobe, bit N = motor (N+4) (bank 1, motors 4-7) - write-only, always reads as 0."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn start_bank1(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "start strobe, bit N = motor (N+4) (bank 1, motors 4-7) - write-only, always reads as 0."]
+            #[inline(always)]
+            pub const fn set_start_bank1(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 16usize)) | (((val as u32) & 0x0f) << 16usize);
+            }
+            #[doc = "stop strobe, bit N = motor (N+4) (bank 1, motors 4-7) - write-only, always reads as 0."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn stop_bank1(&self) -> u8 {
+                let val = (self.0 >> 20usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "stop strobe, bit N = motor (N+4) (bank 1, motors 4-7) - write-only, always reads as 0."]
+            #[inline(always)]
+            pub const fn set_stop_bank1(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 20usize)) | (((val as u32) & 0x0f) << 20usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0xff;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 24usize)) | (((val as u32) & 0xff) << 24usize);
+            }
+        }
+        impl Default for step_ctrl {
+            #[inline(always)]
+            fn default() -> step_ctrl {
+                step_ctrl(0)
+            }
+        }
+        impl core::fmt::Debug for step_ctrl {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_ctrl")
+                    .field("moving", &self.moving())
+                    .field("start_bank0", &self.start_bank0())
+                    .field("stop_bank0", &self.stop_bank0())
+                    .field("start_bank1", &self.start_bank1())
+                    .field("stop_bank1", &self.stop_bank1())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_ctrl {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "step_ctrl {{ moving: {=u8:?}, start_bank0: {=u8:?}, stop_bank0: {=u8:?}, start_bank1: {=u8:?}, stop_bank1: {=u8:?}, reserved: {=u8:?} }}" , self . moving () , self . start_bank0 () , self . stop_bank0 () , self . start_bank1 () , self . stop_bank1 () , self . reserved ())
+            }
+        }
+        #[doc = "per-motor step pulse width preset (tick count - 1). Combined with that motor's bank prescaler in step_pls_prescaler: pulse width = (prescaler+1) * (preset+1) sys_clk cycles."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_pls_config(pub u32);
+        impl step_pls_config {
+            #[doc = "motor 0 pulse-width preset (tick count - 1)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn preset0(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "motor 0 pulse-width preset (tick count - 1)."]
+            #[inline(always)]
+            pub const fn set_preset0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 0usize)) | (((val as u32) & 0x0f) << 0usize);
+            }
+            #[doc = "motor 1 pulse-width preset (tick count - 1)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn preset1(&self) -> u8 {
+                let val = (self.0 >> 4usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "motor 1 pulse-width preset (tick count - 1)."]
+            #[inline(always)]
+            pub const fn set_preset1(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 4usize)) | (((val as u32) & 0x0f) << 4usize);
+            }
+            #[doc = "motor 2 pulse-width preset (tick count - 1)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn preset2(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "motor 2 pulse-width preset (tick count - 1)."]
+            #[inline(always)]
+            pub const fn set_preset2(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 8usize)) | (((val as u32) & 0x0f) << 8usize);
+            }
+            #[doc = "motor 3 pulse-width preset (tick count - 1)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn preset3(&self) -> u8 {
+                let val = (self.0 >> 12usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "motor 3 pulse-width preset (tick count - 1)."]
+            #[inline(always)]
+            pub const fn set_preset3(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 12usize)) | (((val as u32) & 0x0f) << 12usize);
+            }
+            #[doc = "motor 4 pulse-width preset (tick count - 1)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn preset4(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "motor 4 pulse-width preset (tick count - 1)."]
+            #[inline(always)]
+            pub const fn set_preset4(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 16usize)) | (((val as u32) & 0x0f) << 16usize);
+            }
+            #[doc = "motor 5 pulse-width preset (tick count - 1)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn preset5(&self) -> u8 {
+                let val = (self.0 >> 20usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "motor 5 pulse-width preset (tick count - 1)."]
+            #[inline(always)]
+            pub const fn set_preset5(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 20usize)) | (((val as u32) & 0x0f) << 20usize);
+            }
+            #[doc = "motor 6 pulse-width preset (tick count - 1)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn preset6(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "motor 6 pulse-width preset (tick count - 1)."]
+            #[inline(always)]
+            pub const fn set_preset6(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 24usize)) | (((val as u32) & 0x0f) << 24usize);
+            }
+            #[doc = "motor 7 pulse-width preset (tick count - 1)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn preset7(&self) -> u8 {
+                let val = (self.0 >> 28usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "motor 7 pulse-width preset (tick count - 1)."]
+            #[inline(always)]
+            pub const fn set_preset7(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 28usize)) | (((val as u32) & 0x0f) << 28usize);
+            }
+        }
+        impl Default for step_pls_config {
+            #[inline(always)]
+            fn default() -> step_pls_config {
+                step_pls_config(0)
+            }
+        }
+        impl core::fmt::Debug for step_pls_config {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_pls_config")
+                    .field("preset0", &self.preset0())
+                    .field("preset1", &self.preset1())
+                    .field("preset2", &self.preset2())
+                    .field("preset3", &self.preset3())
+                    .field("preset4", &self.preset4())
+                    .field("preset5", &self.preset5())
+                    .field("preset6", &self.preset6())
+                    .field("preset7", &self.preset7())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_pls_config {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "step_pls_config {{ preset0: {=u8:?}, preset1: {=u8:?}, preset2: {=u8:?}, preset3: {=u8:?}, preset4: {=u8:?}, preset5: {=u8:?}, preset6: {=u8:?}, preset7: {=u8:?} }}" , self . preset0 () , self . preset1 () , self . preset2 () , self . preset3 () , self . preset4 () , self . preset5 () , self . preset6 () , self . preset7 ())
+            }
+        }
+        #[doc = "per-bank step pulse width prescaler (sys_clk cycles per tick - 1). Bank 0 = motors 0-3 (low 16-bit half, bits\\[5:0\\]), bank 1 = motors 4-7 (high 16-bit half, bits\\[21:16\\]) - split this way so either field can widen, or other per-bank config bits can be added, without touching the other bank's half."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_pls_prescaler(pub u32);
+        impl step_pls_prescaler {
+            #[doc = "bank 0 (motors 0-3) prescaler (sys_clk cycles per tick - 1), low 16-bit half."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn prescaler0(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0x3f;
+                val as u8
+            }
+            #[doc = "bank 0 (motors 0-3) prescaler (sys_clk cycles per tick - 1), low 16-bit half."]
+            #[inline(always)]
+            pub const fn set_prescaler0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x3f << 0usize)) | (((val as u32) & 0x3f) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value (rest of bank 0's 16-bit half)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u16 {
+                let val = (self.0 >> 6usize) & 0x03ff;
+                val as u16
+            }
+            #[doc = "reserved, keep at reset value (rest of bank 0's 16-bit half)."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u16) {
+                self.0 = (self.0 & !(0x03ff << 6usize)) | (((val as u32) & 0x03ff) << 6usize);
+            }
+            #[doc = "bank 1 (motors 4-7) prescaler (sys_clk cycles per tick - 1), high 16-bit half."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn prescaler1(&self) -> u8 {
+                let val = (self.0 >> 16usize) & 0x3f;
+                val as u8
+            }
+            #[doc = "bank 1 (motors 4-7) prescaler (sys_clk cycles per tick - 1), high 16-bit half."]
+            #[inline(always)]
+            pub const fn set_prescaler1(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x3f << 16usize)) | (((val as u32) & 0x3f) << 16usize);
+            }
+            #[doc = "reserved, keep at reset value (rest of bank 1's 16-bit half)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u16 {
+                let val = (self.0 >> 22usize) & 0x03ff;
+                val as u16
+            }
+            #[doc = "reserved, keep at reset value (rest of bank 1's 16-bit half)."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u16) {
+                self.0 = (self.0 & !(0x03ff << 22usize)) | (((val as u32) & 0x03ff) << 22usize);
+            }
+        }
+        impl Default for step_pls_prescaler {
+            #[inline(always)]
+            fn default() -> step_pls_prescaler {
+                step_pls_prescaler(0)
+            }
+        }
+        impl core::fmt::Debug for step_pls_prescaler {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_pls_prescaler")
+                    .field("prescaler0", &self.prescaler0())
+                    .field("reserved0", &self.reserved0())
+                    .field("prescaler1", &self.prescaler1())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_pls_prescaler {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "step_pls_prescaler {{ prescaler0: {=u8:?}, reserved0: {=u16:?}, prescaler1: {=u8:?}, reserved1: {=u16:?} }}" , self . prescaler0 () , self . reserved0 () , self . prescaler1 () , self . reserved1 ())
+            }
+        }
+        #[doc = "motor 0 current absolute position, in steps (signed, two's complement)."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_pos_0(pub u32);
+        impl step_pos_0 {
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn position(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0xffff_ffff;
+                val as u32
+            }
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[inline(always)]
+            pub const fn set_position(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0xffff_ffff << 0usize)) | (((val as u32) & 0xffff_ffff) << 0usize);
+            }
+        }
+        impl Default for step_pos_0 {
+            #[inline(always)]
+            fn default() -> step_pos_0 {
+                step_pos_0(0)
+            }
+        }
+        impl core::fmt::Debug for step_pos_0 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_pos_0")
+                    .field("position", &self.position())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_pos_0 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(f, "step_pos_0 {{ position: {=u32:?} }}", self.position())
+            }
+        }
+        #[doc = "motor 1 current absolute position, in steps (signed, two's complement)."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_pos_1(pub u32);
+        impl step_pos_1 {
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn position(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0xffff_ffff;
+                val as u32
+            }
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[inline(always)]
+            pub const fn set_position(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0xffff_ffff << 0usize)) | (((val as u32) & 0xffff_ffff) << 0usize);
+            }
+        }
+        impl Default for step_pos_1 {
+            #[inline(always)]
+            fn default() -> step_pos_1 {
+                step_pos_1(0)
+            }
+        }
+        impl core::fmt::Debug for step_pos_1 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_pos_1")
+                    .field("position", &self.position())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_pos_1 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(f, "step_pos_1 {{ position: {=u32:?} }}", self.position())
+            }
+        }
+        #[doc = "motor 2 current absolute position, in steps (signed, two's complement)."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_pos_2(pub u32);
+        impl step_pos_2 {
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn position(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0xffff_ffff;
+                val as u32
+            }
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[inline(always)]
+            pub const fn set_position(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0xffff_ffff << 0usize)) | (((val as u32) & 0xffff_ffff) << 0usize);
+            }
+        }
+        impl Default for step_pos_2 {
+            #[inline(always)]
+            fn default() -> step_pos_2 {
+                step_pos_2(0)
+            }
+        }
+        impl core::fmt::Debug for step_pos_2 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_pos_2")
+                    .field("position", &self.position())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_pos_2 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(f, "step_pos_2 {{ position: {=u32:?} }}", self.position())
+            }
+        }
+        #[doc = "motor 3 current absolute position, in steps (signed, two's complement)."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_pos_3(pub u32);
+        impl step_pos_3 {
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn position(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0xffff_ffff;
+                val as u32
+            }
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[inline(always)]
+            pub const fn set_position(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0xffff_ffff << 0usize)) | (((val as u32) & 0xffff_ffff) << 0usize);
+            }
+        }
+        impl Default for step_pos_3 {
+            #[inline(always)]
+            fn default() -> step_pos_3 {
+                step_pos_3(0)
+            }
+        }
+        impl core::fmt::Debug for step_pos_3 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_pos_3")
+                    .field("position", &self.position())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_pos_3 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(f, "step_pos_3 {{ position: {=u32:?} }}", self.position())
+            }
+        }
+        #[doc = "motor 4 current absolute position, in steps (signed, two's complement)."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_pos_4(pub u32);
+        impl step_pos_4 {
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn position(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0xffff_ffff;
+                val as u32
+            }
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[inline(always)]
+            pub const fn set_position(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0xffff_ffff << 0usize)) | (((val as u32) & 0xffff_ffff) << 0usize);
+            }
+        }
+        impl Default for step_pos_4 {
+            #[inline(always)]
+            fn default() -> step_pos_4 {
+                step_pos_4(0)
+            }
+        }
+        impl core::fmt::Debug for step_pos_4 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_pos_4")
+                    .field("position", &self.position())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_pos_4 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(f, "step_pos_4 {{ position: {=u32:?} }}", self.position())
+            }
+        }
+        #[doc = "motor 5 current absolute position, in steps (signed, two's complement)."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_pos_5(pub u32);
+        impl step_pos_5 {
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn position(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0xffff_ffff;
+                val as u32
+            }
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[inline(always)]
+            pub const fn set_position(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0xffff_ffff << 0usize)) | (((val as u32) & 0xffff_ffff) << 0usize);
+            }
+        }
+        impl Default for step_pos_5 {
+            #[inline(always)]
+            fn default() -> step_pos_5 {
+                step_pos_5(0)
+            }
+        }
+        impl core::fmt::Debug for step_pos_5 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_pos_5")
+                    .field("position", &self.position())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_pos_5 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(f, "step_pos_5 {{ position: {=u32:?} }}", self.position())
+            }
+        }
+        #[doc = "motor 6 current absolute position, in steps (signed, two's complement)."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_pos_6(pub u32);
+        impl step_pos_6 {
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn position(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0xffff_ffff;
+                val as u32
+            }
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[inline(always)]
+            pub const fn set_position(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0xffff_ffff << 0usize)) | (((val as u32) & 0xffff_ffff) << 0usize);
+            }
+        }
+        impl Default for step_pos_6 {
+            #[inline(always)]
+            fn default() -> step_pos_6 {
+                step_pos_6(0)
+            }
+        }
+        impl core::fmt::Debug for step_pos_6 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_pos_6")
+                    .field("position", &self.position())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_pos_6 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(f, "step_pos_6 {{ position: {=u32:?} }}", self.position())
+            }
+        }
+        #[doc = "motor 7 current absolute position, in steps (signed, two's complement)."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_pos_7(pub u32);
+        impl step_pos_7 {
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn position(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0xffff_ffff;
+                val as u32
+            }
+            #[doc = "current absolute position (signed, two's complement)."]
+            #[inline(always)]
+            pub const fn set_position(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0xffff_ffff << 0usize)) | (((val as u32) & 0xffff_ffff) << 0usize);
+            }
+        }
+        impl Default for step_pos_7 {
+            #[inline(always)]
+            fn default() -> step_pos_7 {
+                step_pos_7(0)
+            }
+        }
+        impl core::fmt::Debug for step_pos_7 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_pos_7")
+                    .field("position", &self.position())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_pos_7 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(f, "step_pos_7 {{ position: {=u32:?} }}", self.position())
+            }
+        }
+        #[doc = "segment table CTST word - command/direction/step-count for the segment addressed by step_tx_config's motor_instance and the current streaming pointer (advances on step_seg_spdm access, not this one)."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_seg_ctst(pub u32);
+        impl step_seg_ctst {
+            #[doc = "number of steps in this segment."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn n_steps(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "number of steps in this segment."]
+            #[inline(always)]
+            pub const fn set_n_steps(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 0usize)) | (((val as u32) & 0x00ff_ffff) << 0usize);
+            }
+            #[doc = "segment command."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn cmd(&self) -> super::vals::cmd {
+                let val = (self.0 >> 24usize) & 0x03;
+                super::vals::cmd::from_bits(val as u8)
+            }
+            #[doc = "segment command."]
+            #[inline(always)]
+            pub const fn set_cmd(&mut self, val: super::vals::cmd) {
+                self.0 =
+                    (self.0 & !(0x03 << 24usize)) | (((val.to_bits() as u32) & 0x03) << 24usize);
+            }
+            #[doc = "step direction for this segment."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn dir(&self) -> super::vals::dir {
+                let val = (self.0 >> 26usize) & 0x01;
+                super::vals::dir::from_bits(val as u8)
+            }
+            #[doc = "step direction for this segment."]
+            #[inline(always)]
+            pub const fn set_dir(&mut self, val: super::vals::dir) {
+                self.0 =
+                    (self.0 & !(0x01 << 26usize)) | (((val.to_bits() as u32) & 0x01) << 26usize);
+            }
+            #[doc = "whether this segment's period ramps up or down progresses."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn ramp(&self) -> super::vals::ramp {
+                let val = (self.0 >> 27usize) & 0x01;
+                super::vals::ramp::from_bits(val as u8)
+            }
+            #[doc = "whether this segment's period ramps up or down progresses."]
+            #[inline(always)]
+            pub const fn set_ramp(&mut self, val: super::vals::ramp) {
+                self.0 =
+                    (self.0 & !(0x01 << 27usize)) | (((val.to_bits() as u32) & 0x01) << 27usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u8 {
+                let val = (self.0 >> 28usize) & 0x0f;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x0f << 28usize)) | (((val as u32) & 0x0f) << 28usize);
+            }
+        }
+        impl Default for step_seg_ctst {
+            #[inline(always)]
+            fn default() -> step_seg_ctst {
+                step_seg_ctst(0)
+            }
+        }
+        impl core::fmt::Debug for step_seg_ctst {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_seg_ctst")
+                    .field("n_steps", &self.n_steps())
+                    .field("cmd", &self.cmd())
+                    .field("dir", &self.dir())
+                    .field("ramp", &self.ramp())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_seg_ctst {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "step_seg_ctst {{ n_steps: {=u32:?}, cmd: {:?}, dir: {:?}, ramp: {:?}, reserved: {=u8:?} }}" , self . n_steps () , self . cmd () , self . dir () , self . ramp () , self . reserved ())
+            }
+        }
+        #[doc = "segment table SPDM word - start period/delta magnitude for the segment addressed by step_tx_config's motor_instance and the current streaming pointer (advances the streaming pointer on access - write or read)."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_seg_spdm(pub u32);
+        impl step_seg_spdm {
+            #[doc = "per-step period change magnitude, in stepper ticks."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn delta_magnitude(&self) -> u16 {
+                let val = (self.0 >> 0usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "per-step period change magnitude, in stepper ticks."]
+            #[inline(always)]
+            pub const fn set_delta_magnitude(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 0usize)) | (((val as u32) & 0xffff) << 0usize);
+            }
+            #[doc = "starting period for this segment, in stepper ticks."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn start_period(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "starting period for this segment, in stepper ticks."]
+            #[inline(always)]
+            pub const fn set_start_period(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for step_seg_spdm {
+            #[inline(always)]
+            fn default() -> step_seg_spdm {
+                step_seg_spdm(0)
+            }
+        }
+        impl core::fmt::Debug for step_seg_spdm {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_seg_spdm")
+                    .field("delta_magnitude", &self.delta_magnitude())
+                    .field("start_period", &self.start_period())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_seg_spdm {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "step_seg_spdm {{ delta_magnitude: {=u16:?}, start_period: {=u16:?} }}",
+                    self.delta_magnitude(),
+                    self.start_period()
+                )
+            }
+        }
+        #[doc = "motor 0 status."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_status_0(pub u32);
+        impl step_status_0 {
+            #[doc = "1 = motor is currently moving."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn moving(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = motor is currently moving."]
+            #[inline(always)]
+            pub const fn set_moving(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "reserved."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 1usize) & 0x7fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x7fff_ffff << 1usize)) | (((val as u32) & 0x7fff_ffff) << 1usize);
+            }
+        }
+        impl Default for step_status_0 {
+            #[inline(always)]
+            fn default() -> step_status_0 {
+                step_status_0(0)
+            }
+        }
+        impl core::fmt::Debug for step_status_0 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_status_0")
+                    .field("moving", &self.moving())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_status_0 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "step_status_0 {{ moving: {=bool:?}, reserved: {=u32:?} }}",
+                    self.moving(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "motor 1 status."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_status_1(pub u32);
+        impl step_status_1 {
+            #[doc = "1 = motor is currently moving."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn moving(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = motor is currently moving."]
+            #[inline(always)]
+            pub const fn set_moving(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "reserved."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 1usize) & 0x7fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x7fff_ffff << 1usize)) | (((val as u32) & 0x7fff_ffff) << 1usize);
+            }
+        }
+        impl Default for step_status_1 {
+            #[inline(always)]
+            fn default() -> step_status_1 {
+                step_status_1(0)
+            }
+        }
+        impl core::fmt::Debug for step_status_1 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_status_1")
+                    .field("moving", &self.moving())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_status_1 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "step_status_1 {{ moving: {=bool:?}, reserved: {=u32:?} }}",
+                    self.moving(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "motor 2 status."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_status_2(pub u32);
+        impl step_status_2 {
+            #[doc = "1 = motor is currently moving."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn moving(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = motor is currently moving."]
+            #[inline(always)]
+            pub const fn set_moving(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "reserved."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 1usize) & 0x7fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x7fff_ffff << 1usize)) | (((val as u32) & 0x7fff_ffff) << 1usize);
+            }
+        }
+        impl Default for step_status_2 {
+            #[inline(always)]
+            fn default() -> step_status_2 {
+                step_status_2(0)
+            }
+        }
+        impl core::fmt::Debug for step_status_2 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_status_2")
+                    .field("moving", &self.moving())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_status_2 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "step_status_2 {{ moving: {=bool:?}, reserved: {=u32:?} }}",
+                    self.moving(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "motor 3 status."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_status_3(pub u32);
+        impl step_status_3 {
+            #[doc = "1 = motor is currently moving."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn moving(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = motor is currently moving."]
+            #[inline(always)]
+            pub const fn set_moving(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "reserved."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 1usize) & 0x7fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x7fff_ffff << 1usize)) | (((val as u32) & 0x7fff_ffff) << 1usize);
+            }
+        }
+        impl Default for step_status_3 {
+            #[inline(always)]
+            fn default() -> step_status_3 {
+                step_status_3(0)
+            }
+        }
+        impl core::fmt::Debug for step_status_3 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_status_3")
+                    .field("moving", &self.moving())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_status_3 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "step_status_3 {{ moving: {=bool:?}, reserved: {=u32:?} }}",
+                    self.moving(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "motor 4 status."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_status_4(pub u32);
+        impl step_status_4 {
+            #[doc = "1 = motor is currently moving."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn moving(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = motor is currently moving."]
+            #[inline(always)]
+            pub const fn set_moving(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "reserved."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 1usize) & 0x7fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x7fff_ffff << 1usize)) | (((val as u32) & 0x7fff_ffff) << 1usize);
+            }
+        }
+        impl Default for step_status_4 {
+            #[inline(always)]
+            fn default() -> step_status_4 {
+                step_status_4(0)
+            }
+        }
+        impl core::fmt::Debug for step_status_4 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_status_4")
+                    .field("moving", &self.moving())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_status_4 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "step_status_4 {{ moving: {=bool:?}, reserved: {=u32:?} }}",
+                    self.moving(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "motor 5 status."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_status_5(pub u32);
+        impl step_status_5 {
+            #[doc = "1 = motor is currently moving."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn moving(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = motor is currently moving."]
+            #[inline(always)]
+            pub const fn set_moving(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "reserved."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 1usize) & 0x7fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x7fff_ffff << 1usize)) | (((val as u32) & 0x7fff_ffff) << 1usize);
+            }
+        }
+        impl Default for step_status_5 {
+            #[inline(always)]
+            fn default() -> step_status_5 {
+                step_status_5(0)
+            }
+        }
+        impl core::fmt::Debug for step_status_5 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_status_5")
+                    .field("moving", &self.moving())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_status_5 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "step_status_5 {{ moving: {=bool:?}, reserved: {=u32:?} }}",
+                    self.moving(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "motor 6 status."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_status_6(pub u32);
+        impl step_status_6 {
+            #[doc = "1 = motor is currently moving."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn moving(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = motor is currently moving."]
+            #[inline(always)]
+            pub const fn set_moving(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "reserved."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 1usize) & 0x7fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x7fff_ffff << 1usize)) | (((val as u32) & 0x7fff_ffff) << 1usize);
+            }
+        }
+        impl Default for step_status_6 {
+            #[inline(always)]
+            fn default() -> step_status_6 {
+                step_status_6(0)
+            }
+        }
+        impl core::fmt::Debug for step_status_6 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_status_6")
+                    .field("moving", &self.moving())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_status_6 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "step_status_6 {{ moving: {=bool:?}, reserved: {=u32:?} }}",
+                    self.moving(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "motor 7 status."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_status_7(pub u32);
+        impl step_status_7 {
+            #[doc = "1 = motor is currently moving."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn moving(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = motor is currently moving."]
+            #[inline(always)]
+            pub const fn set_moving(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "reserved."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 1usize) & 0x7fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x7fff_ffff << 1usize)) | (((val as u32) & 0x7fff_ffff) << 1usize);
+            }
+        }
+        impl Default for step_status_7 {
+            #[inline(always)]
+            fn default() -> step_status_7 {
+                step_status_7(0)
+            }
+        }
+        impl core::fmt::Debug for step_status_7 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_status_7")
+                    .field("moving", &self.moving())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_status_7 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "step_status_7 {{ moving: {=bool:?}, reserved: {=u32:?} }}",
+                    self.moving(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "segment table streaming configuration - selects which motor subsequent step_seg_ctst/step_seg_spdm writes and reads target, and rewinds both the write and read pointers to segment 0."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct step_tx_config(pub u32);
+        impl step_tx_config {
+            #[doc = "number of segments about to be streamed (informational - clamped internally to the segment table's actual capacity)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn num_points(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "number of segments about to be streamed (informational - clamped internally to the segment table's actual capacity)."]
+            #[inline(always)]
+            pub const fn set_num_points(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "which motor (0-7) subsequent step_seg_ctst/step_seg_spdm accesses target."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn motor_instance(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0x07;
+                val as u8
+            }
+            #[doc = "which motor (0-7) subsequent step_seg_ctst/step_seg_spdm accesses target."]
+            #[inline(always)]
+            pub const fn set_motor_instance(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x07 << 8usize)) | (((val as u32) & 0x07) << 8usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 11usize) & 0x001f_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 = (self.0 & !(0x001f_ffff << 11usize))
+                    | (((val as u32) & 0x001f_ffff) << 11usize);
+            }
+        }
+        impl Default for step_tx_config {
+            #[inline(always)]
+            fn default() -> step_tx_config {
+                step_tx_config(0)
+            }
+        }
+        impl core::fmt::Debug for step_tx_config {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("step_tx_config")
+                    .field("num_points", &self.num_points())
+                    .field("motor_instance", &self.motor_instance())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for step_tx_config {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "step_tx_config {{ num_points: {=u8:?}, motor_instance: {=u8:?}, reserved: {=u32:?} }}" , self . num_points () , self . motor_instance () , self . reserved ())
+            }
+        }
+    }
+    pub mod vals {
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum cmd {
+            #[doc = "reserved, not a valid command."]
+            RESERVED = 0x0,
+            #[doc = "move this segment then seamlessly continue into the next segment."]
+            MOVE = 0x01,
+            #[doc = "move this segment then halt, requiring a fresh start strobe."]
+            MOVE_HALT = 0x02,
+            #[doc = "move this segment then halt, requiring a fresh start strobe (reserved alias of MOVE_HALT)."]
+            MOVE_HALT_WAIT = 0x03,
+        }
+        impl cmd {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> cmd {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for cmd {
+            #[inline(always)]
+            fn from(val: u8) -> cmd {
+                cmd::from_bits(val)
+            }
+        }
+        impl From<cmd> for u8 {
+            #[inline(always)]
+            fn from(val: cmd) -> u8 {
+                cmd::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum dir {
+            #[doc = "forward/increasing position."]
+            NORMAL = 0x0,
+            #[doc = "reverse/decreasing position."]
+            REVERSE = 0x01,
+        }
+        impl dir {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> dir {
+                unsafe { core::mem::transmute(val & 0x01) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for dir {
+            #[inline(always)]
+            fn from(val: u8) -> dir {
+                dir::from_bits(val)
+            }
+        }
+        impl From<dir> for u8 {
+            #[inline(always)]
+            fn from(val: dir) -> u8 {
+                dir::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum ramp {
+            #[doc = "period decreases each step (accelerating)."]
+            UP = 0x0,
+            #[doc = "period increases each step (decelerating)."]
+            DOWN = 0x01,
+        }
+        impl ramp {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> ramp {
+                unsafe { core::mem::transmute(val & 0x01) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for ramp {
+            #[inline(always)]
+            fn from(val: u8) -> ramp {
+                ramp::from_bits(val)
+            }
+        }
+        impl From<ramp> for u8 {
+            #[inline(always)]
+            fn from(val: ramp) -> u8 {
+                ramp::to_bits(val)
             }
         }
     }

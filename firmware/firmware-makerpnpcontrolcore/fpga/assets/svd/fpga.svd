@@ -572,6 +572,12 @@
 
     <!-- ws2812_1 block (0x0900 - 0x09ff) - same as ws2812_0, but with different base address-->
 
+    <peripheral derivedFrom="ws2812_0">
+      <name>ws2812_1</name>
+      <description>ws2812 RGB LED block (second instance)</description>
+      <baseAddress>0x90000900</baseAddress>
+    </peripheral>
+
     <!-- encoders block (0x0c00 - 0x0cff) -->
     <peripheral>
       <name>encoders</name>
@@ -892,6 +898,690 @@
               <description>reserved, ignored</description>
               <bitOffset>16</bitOffset>
               <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+      </registers>
+    </peripheral>
+
+    <!-- steppers block (0x0d00 - 0x0dff) -->
+    <peripheral>
+      <name>steppers</name>
+      <description>8-channel stepper motor step/dir pulse generator (2 banks of 4)</description>
+      <baseAddress>0x90000d00</baseAddress>
+      <addressBlock>
+        <offset>0x0</offset>
+        <size>0x80</size>
+        <usage>registers</usage>
+      </addressBlock>
+
+      <registers>
+
+        <register>
+          <name>step_ctrl</name>
+          <description>start/stop control - WRITE: start/stop strobes per motor (bank 0 = motors 0-3, bank 1 = motors 4-7); READ: per-motor moving status</description>
+          <addressOffset>0x0000</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>moving</name>
+              <description>per-motor moving status (bit N = motor N is moving) - read-only, ignored on write</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+              <access>read-only</access>
+            </field>
+
+            <field>
+              <name>start_bank0</name>
+              <description>start strobe, bit N = motor N (bank 0, motors 0-3) - write-only, always reads as 0</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>4</bitWidth>
+              <access>write-only</access>
+            </field>
+
+            <field>
+              <name>stop_bank0</name>
+              <description>stop strobe, bit N = motor N (bank 0, motors 0-3) - write-only, always reads as 0</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>4</bitWidth>
+              <access>write-only</access>
+            </field>
+
+            <field>
+              <name>start_bank1</name>
+              <description>start strobe, bit N = motor (N+4) (bank 1, motors 4-7) - write-only, always reads as 0</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>4</bitWidth>
+              <access>write-only</access>
+            </field>
+
+            <field>
+              <name>stop_bank1</name>
+              <description>stop strobe, bit N = motor (N+4) (bank 1, motors 4-7) - write-only, always reads as 0</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>4</bitWidth>
+              <access>write-only</access>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_tx_config</name>
+          <description>segment table streaming configuration - selects which motor subsequent step_seg_ctst/step_seg_spdm writes and reads target, and rewinds both the write and read pointers to segment 0</description>
+          <addressOffset>0x0004</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>num_points</name>
+              <description>number of segments about to be streamed (informational - clamped internally to the segment table's actual capacity)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>motor_instance</name>
+              <description>which motor (0-7) subsequent step_seg_ctst/step_seg_spdm accesses target</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>21</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_pls_config</name>
+          <description>per-motor step pulse width preset (tick count - 1). Combined with that motor's bank prescaler in step_pls_prescaler: pulse width = (prescaler+1) * (preset+1) sys_clk cycles</description>
+          <addressOffset>0x0008</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>preset0</name>
+              <description>motor 0 pulse-width preset (tick count - 1)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+
+            <field>
+              <name>preset1</name>
+              <description>motor 1 pulse-width preset (tick count - 1)</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+
+            <field>
+              <name>preset2</name>
+              <description>motor 2 pulse-width preset (tick count - 1)</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+
+            <field>
+              <name>preset3</name>
+              <description>motor 3 pulse-width preset (tick count - 1)</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+
+            <field>
+              <name>preset4</name>
+              <description>motor 4 pulse-width preset (tick count - 1)</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+
+            <field>
+              <name>preset5</name>
+              <description>motor 5 pulse-width preset (tick count - 1)</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+
+            <field>
+              <name>preset6</name>
+              <description>motor 6 pulse-width preset (tick count - 1)</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+
+            <field>
+              <name>preset7</name>
+              <description>motor 7 pulse-width preset (tick count - 1)</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_pls_prescaler</name>
+          <description>per-bank step pulse width prescaler (sys_clk cycles per tick - 1). Bank 0 = motors 0-3 (low 16-bit half, bits[5:0]), bank 1 = motors 4-7 (high 16-bit half, bits[21:16]) - split this way so either field can widen, or other per-bank config bits can be added, without touching the other bank's half</description>
+          <addressOffset>0x000c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>prescaler0</name>
+              <description>bank 0 (motors 0-3) prescaler (sys_clk cycles per tick - 1), low 16-bit half</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value (rest of bank 0's 16-bit half)</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>10</bitWidth>
+            </field>
+
+            <field>
+              <name>prescaler1</name>
+              <description>bank 1 (motors 4-7) prescaler (sys_clk cycles per tick - 1), high 16-bit half</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value (rest of bank 1's 16-bit half)</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>10</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_seg_ctst</name>
+          <description>segment table CTST word - command/direction/step-count for the segment addressed by step_tx_config's motor_instance and the current streaming pointer (advances on step_seg_spdm access, not this one)</description>
+          <addressOffset>0x0010</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>n_steps</name>
+              <description>number of steps in this segment</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+            <field>
+              <name>cmd</name>
+              <description>segment command</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>RESERVED</name>
+                  <description>reserved, not a valid command</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>MOVE</name>
+                  <description>move this segment then seamlessly continue into the next segment</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>MOVE_HALT</name>
+                  <description>move this segment then halt, requiring a fresh start strobe</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>MOVE_HALT_WAIT</name>
+                  <description>move this segment then halt, requiring a fresh start strobe (reserved alias of MOVE_HALT)</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>dir</name>
+              <description>step direction for this segment</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>NORMAL</name>
+                  <description>forward/increasing position</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>REVERSE</name>
+                  <description>reverse/decreasing position</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>ramp</name>
+              <description>whether this segment's period ramps up or down progresses</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>UP</name>
+                  <description>period decreases each step (accelerating)</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>DOWN</name>
+                  <description>period increases each step (decelerating)</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_seg_spdm</name>
+          <description>segment table SPDM word - start period/delta magnitude for the segment addressed by step_tx_config's motor_instance and the current streaming pointer (advances the streaming pointer on access - write or read)</description>
+          <addressOffset>0x0014</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>delta_magnitude</name>
+              <description>per-step period change magnitude, in stepper ticks</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+            <field>
+              <name>start_period</name>
+              <description>starting period for this segment, in stepper ticks</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_status_0</name>
+          <description>motor 0 status</description>
+          <addressOffset>0x0020</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>moving</name>
+              <description>1 = motor is currently moving</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_status_1</name>
+          <description>motor 1 status</description>
+          <addressOffset>0x0024</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>moving</name>
+              <description>1 = motor is currently moving</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_status_2</name>
+          <description>motor 2 status</description>
+          <addressOffset>0x0028</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>moving</name>
+              <description>1 = motor is currently moving</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_status_3</name>
+          <description>motor 3 status</description>
+          <addressOffset>0x002c</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>moving</name>
+              <description>1 = motor is currently moving</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_status_4</name>
+          <description>motor 4 status</description>
+          <addressOffset>0x0030</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>moving</name>
+              <description>1 = motor is currently moving</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_status_5</name>
+          <description>motor 5 status</description>
+          <addressOffset>0x0034</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>moving</name>
+              <description>1 = motor is currently moving</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_status_6</name>
+          <description>motor 6 status</description>
+          <addressOffset>0x0038</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>moving</name>
+              <description>1 = motor is currently moving</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_status_7</name>
+          <description>motor 7 status</description>
+          <addressOffset>0x003c</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>moving</name>
+              <description>1 = motor is currently moving</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_pos_0</name>
+          <description>motor 0 current absolute position, in steps (signed, two's complement)</description>
+          <addressOffset>0x0040</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>position</name>
+              <description>current absolute position (signed, two's complement)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_pos_1</name>
+          <description>motor 1 current absolute position, in steps (signed, two's complement)</description>
+          <addressOffset>0x0044</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>position</name>
+              <description>current absolute position (signed, two's complement)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_pos_2</name>
+          <description>motor 2 current absolute position, in steps (signed, two's complement)</description>
+          <addressOffset>0x0048</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>position</name>
+              <description>current absolute position (signed, two's complement)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_pos_3</name>
+          <description>motor 3 current absolute position, in steps (signed, two's complement)</description>
+          <addressOffset>0x004c</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>position</name>
+              <description>current absolute position (signed, two's complement)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_pos_4</name>
+          <description>motor 4 current absolute position, in steps (signed, two's complement)</description>
+          <addressOffset>0x0050</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>position</name>
+              <description>current absolute position (signed, two's complement)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_pos_5</name>
+          <description>motor 5 current absolute position, in steps (signed, two's complement)</description>
+          <addressOffset>0x0054</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>position</name>
+              <description>current absolute position (signed, two's complement)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_pos_6</name>
+          <description>motor 6 current absolute position, in steps (signed, two's complement)</description>
+          <addressOffset>0x0058</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>position</name>
+              <description>current absolute position (signed, two's complement)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+
+        <register>
+          <name>step_pos_7</name>
+          <description>motor 7 current absolute position, in steps (signed, two's complement)</description>
+          <addressOffset>0x005c</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>position</name>
+              <description>current absolute position (signed, two's complement)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
             </field>
           </fields>
         </register>
