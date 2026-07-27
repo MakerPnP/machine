@@ -549,6 +549,11 @@ pub mod steppers {
         }
 
         pub fn send_sequence(&self, motor: u8, segments: &[Segment; 1]) {
+
+            // TODO fail gracefully if the sequence is too long or empty
+            assert!(segments.len() <= 127, "Current FPGA implementation only supports up to 127 segments per motor");
+            assert!(segments.len() > 0, "Current FPGA implementation requires at least one segment");
+
             self.instance.step_tx_config().write(|w| {
                 w.set_motor_instance(motor);
                 w.set_num_points(segments.len() as u8);
