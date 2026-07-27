@@ -2323,16 +2323,16 @@ pub mod steppers {
                 self.0 =
                     (self.0 & !(0x01 << 26usize)) | (((val.to_bits() as u32) & 0x01) << 26usize);
             }
-            #[doc = "whether this segment's period increases or decreases as it progresses."]
+            #[doc = "whether this segment's period ramps up or down progresses."]
             #[must_use]
             #[inline(always)]
-            pub const fn period_increasing(&self) -> super::vals::period_increasing {
+            pub const fn ramp(&self) -> super::vals::ramp {
                 let val = (self.0 >> 27usize) & 0x01;
-                super::vals::period_increasing::from_bits(val as u8)
+                super::vals::ramp::from_bits(val as u8)
             }
-            #[doc = "whether this segment's period increases or decreases as it progresses."]
+            #[doc = "whether this segment's period ramps up or down progresses."]
             #[inline(always)]
-            pub const fn set_period_increasing(&mut self, val: super::vals::period_increasing) {
+            pub const fn set_ramp(&mut self, val: super::vals::ramp) {
                 self.0 =
                     (self.0 & !(0x01 << 27usize)) | (((val.to_bits() as u32) & 0x01) << 27usize);
             }
@@ -2361,7 +2361,7 @@ pub mod steppers {
                     .field("n_steps", &self.n_steps())
                     .field("cmd", &self.cmd())
                     .field("dir", &self.dir())
-                    .field("period_increasing", &self.period_increasing())
+                    .field("ramp", &self.ramp())
                     .field("reserved", &self.reserved())
                     .finish()
             }
@@ -2369,7 +2369,7 @@ pub mod steppers {
         #[cfg(feature = "defmt")]
         impl defmt::Format for step_seg_ctst {
             fn format(&self, f: defmt::Formatter) {
-                defmt :: write ! (f , "step_seg_ctst {{ n_steps: {=u32:?}, cmd: {:?}, dir: {:?}, period_increasing: {:?}, reserved: {=u8:?} }}" , self . n_steps () , self . cmd () , self . dir () , self . period_increasing () , self . reserved ())
+                defmt :: write ! (f , "step_seg_ctst {{ n_steps: {=u32:?}, cmd: {:?}, dir: {:?}, ramp: {:?}, reserved: {=u8:?} }}" , self . n_steps () , self . cmd () , self . dir () , self . ramp () , self . reserved ())
             }
         }
         #[doc = "segment table SPDM word - start period/delta magnitude for the segment addressed by step_tx_config's motor_instance and the current streaming pointer (advances the streaming pointer on access - write or read)."]
@@ -3010,15 +3010,15 @@ pub mod steppers {
         #[repr(u8)]
         #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
         #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-        pub enum period_increasing {
+        pub enum ramp {
             #[doc = "period decreases each step (accelerating)."]
-            DECREASING = 0x0,
+            UP = 0x0,
             #[doc = "period increases each step (decelerating)."]
-            INCREASING = 0x01,
+            DOWN = 0x01,
         }
-        impl period_increasing {
+        impl ramp {
             #[inline(always)]
-            pub const fn from_bits(val: u8) -> period_increasing {
+            pub const fn from_bits(val: u8) -> ramp {
                 unsafe { core::mem::transmute(val & 0x01) }
             }
             #[inline(always)]
@@ -3026,16 +3026,16 @@ pub mod steppers {
                 unsafe { core::mem::transmute(self) }
             }
         }
-        impl From<u8> for period_increasing {
+        impl From<u8> for ramp {
             #[inline(always)]
-            fn from(val: u8) -> period_increasing {
-                period_increasing::from_bits(val)
+            fn from(val: u8) -> ramp {
+                ramp::from_bits(val)
             }
         }
-        impl From<period_increasing> for u8 {
+        impl From<ramp> for u8 {
             #[inline(always)]
-            fn from(val: period_increasing) -> u8 {
-                period_increasing::to_bits(val)
+            fn from(val: ramp) -> u8 {
+                ramp::to_bits(val)
             }
         }
     }
