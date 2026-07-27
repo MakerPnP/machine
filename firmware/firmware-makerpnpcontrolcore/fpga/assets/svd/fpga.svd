@@ -578,6 +578,247 @@
       <baseAddress>0x90000900</baseAddress>
     </peripheral>
 
+    <!-- loadcell0 block (0x0a00 - 0x0aff) -->
+    <peripheral>
+      <name>loadcell0</name>
+      <description>hx717 dual channel 24-bit load cell adc. all three registers share one 16-byte OctoSPI prefetch line, so reading any one of them causes reads of all of them; no register here has a read side effect</description>
+      <baseAddress>0x90000a00</baseAddress>
+      <addressBlock>
+        <offset>0x0</offset>
+        <size>0x40</size>
+        <usage>registers</usage>
+      </addressBlock>
+
+      <registers>
+
+        <register>
+          <name>lc_ctrl</name>
+          <description>load cell control register</description>
+          <addressOffset>0x0000</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>run conversions back to back (1 = on)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>pd</name>
+              <description>request power-down. honoured only once the conversion in flight completes, so the channel and gain setup is saved. clear to wake; the device resumes with the setup it had before sleeping</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>rate</name>
+              <description>output data rate, driven onto the S1 and S0 pins. changing this while enabled takes effect on whichever conversion the device happens to be in</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>RATE_10HZ</name>
+                  <description>10 sps, 18.2 noise-free bits</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>RATE_20HZ</name>
+                  <description>20 sps, 17.7 noise-free bits</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>RATE_80HZ</name>
+                  <description>80 sps, 16.7 noise-free bits</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>RATE_320HZ</name>
+                  <description>320 sps, 15.8 noise-free bits</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>mode</name>
+              <description>input channel and pga gain for the NEXT conversion. selected by the number of PD_SCK pulses the peripheral issues, so it applies one conversion after it is written. allow 4 conversions of settling after any change before trusting a sample</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>A128</name>
+                  <description>channel A, gain 128, full scale +/-20mV at VREF 5V (25 pulses)</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>B64</name>
+                  <description>channel B, gain 64, full scale +/-40mV at VREF 5V (26 pulses)</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>A64</name>
+                  <description>channel A, gain 64, full scale +/-40mV at VREF 5V (27 pulses)</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>B8</name>
+                  <description>channel B, gain 8, full scale +/-320mV at VREF 5V (28 pulses)</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>pdmode</name>
+              <description>power-down depth, applied when the pd bit is honoured</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>2</bitWidth>
+
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>ADC</name>
+                  <description>adc only, under 360uA. keeps the pulse count at the mode selection so channel and gain survive the sleep</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>ADC_REG</name>
+                  <description>adc and analog regulator, under 280uA. clocks 29 pulses, past the selection window, so the mode field is not applied by this conversion</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>ALL</name>
+                  <description>everything, under 1uA. clocks 30 pulses, past the selection window, so the mode field is not applied by this conversion</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>RESERVED</name>
+                  <description>unused encoding, behaves as ADC</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>single</name>
+              <description>write 1 to take exactly one sample without setting enable. self-clearing, always reads back 0</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>23</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>lc_status</name>
+          <description>load cell status register</description>
+          <addressOffset>0x0004</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enabled</name>
+              <description>mirrors lc_ctrl.enable</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>ready</name>
+              <description>a conversion has completed since the last write to lc_ctrl, so lc_value is valid for the current configuration. cleared by writing lc_ctrl, never by a read. use the lc_value sequence number, not this bit, to detect each new sample</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>busy</name>
+              <description>a conversion cycle is in progress. covers the wait for data as well as the pulse train, so in continuous mode this is high almost all the time and is not a useful poll target</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>pd</name>
+              <description>the device is being held in power-down</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>timeout</name>
+              <description>DOUT did not go low within the watchdog interval, so no device is responding. sticky; cleared by any write to lc_ctrl</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>27</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>lc_value</name>
+          <description>most recent conversion result plus its sequence number. reading has no side effects; a single 32-bit read gets value and sequence together so they cannot skew</description>
+          <addressOffset>0x0008</addressOffset>
+          <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>raw 24-bit result in two's complement, exactly as shifted off the wire. 0x00800000 is negative full scale and 0x007FFFFF positive full scale; both are also the saturation codes when the input is out of range. the generated accessor masks to 24 bits, so sign extend from bit 23 rather than from bit 31: let sample = ((r.value() as i32) &lt;&lt; 8) &gt;&gt; 8; taking the raw register word instead needs ((r.0 &lt;&lt; 8) as i32) &gt;&gt; 8, which drops the sequence byte in the same step. omitting the shift pair yields a value that is never negative</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+            <field>
+              <name>seq</name>
+              <description>sample sequence number, incremented once per completed conversion. compare r.seq() against the last value seen using wrapping_sub, since it wraps every 256 conversions: 0.8s at 320sps, 3.2s at 80sps, 12.8s at 20sps, 25.6s at 10sps. a difference of 0 means no new conversion has completed and the value is a repeat of the one already seen; 1 is the expected case; more than 1 means that many samples were produced and never read. polling slower than the conversion period therefore reports gaps, and polling faster reports repeats - both are visible here and in neither case is lc_status.ready able to tell them apart</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+      </registers>
+    </peripheral>
+
     <!-- encoders block (0x0c00 - 0x0cff) -->
     <peripheral>
       <name>encoders</name>
