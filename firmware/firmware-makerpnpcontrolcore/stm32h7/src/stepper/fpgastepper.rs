@@ -6,7 +6,6 @@ use crate::fpga::steppers::FpgaStepperBank;
 pub struct FpgaStepper {
     stepper_bank: FpgaStepperBank,
     motor_index: u8,
-    current_position: i32,
     pulse_width: u32,
     pulse_delay: u32,
     next_direction: StepperDirection,
@@ -19,7 +18,6 @@ impl FpgaStepper {
             motor_index,
             pulse_width,
             pulse_delay,
-            current_position: 0,
             next_direction: StepperDirection::Normal,
         }
     }

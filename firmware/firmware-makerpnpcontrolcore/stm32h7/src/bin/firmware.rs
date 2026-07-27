@@ -380,7 +380,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     // Detection circuits
     //
     let base_present = fpga.base_present();
-    if (!base_present) {
+    if !base_present {
         // enable the buzzer output, however, if the base board is not present, the buzzer will not
         // be heard. if the base board is badly connected the user will hear the buzzer tone and
         // be able to identify and resolve the issue.
@@ -534,8 +534,8 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         let p1_sck = p.PD3;
         let p1_mosi = p.PB15;
         let p1_miso = p.PB14;
-        let mut p1_nss_1 = Output::new(p.PB12, Level::High, Speed::Low);
-        let mut p1_nss_2 = Output::new(p.PG3, Level::High, Speed::Low);
+        let p1_nss_1 = Output::new(p.PB12, Level::High, Speed::Low);
+        let _p1_nss_2 = Output::new(p.PG3, Level::High, Speed::Low);
         // enable
         // Via PA8 to FPGA IOR_140_GBIN3, FPGA needs to route internally to the WAKE_1 output.
         // enable is ACTIVE_LOW.
@@ -587,7 +587,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
     if true {
         info!("Initializing Fpga Stepper");
-        let mut fpga_stepper = FpgaStepper::new(
+        let fpga_stepper = FpgaStepper::new(
             fpga_stepper_bank_0,
             0,
             1000,
@@ -937,7 +937,7 @@ mod rcc_setup {
 pub fn dump_mem_u8_be(mem: &[u8]) {
     for row in (0..mem.len()).step_by(0x10 * 4) {
         let mut row_values: [u32; 0x10] = [0x00000000; 0x10];
-        for col in (0..0x10) {
+        for col in 0..0x10 {
             let offset: usize = row + (col * 4);
             if offset < mem.len() {
                 row_values[col] =
