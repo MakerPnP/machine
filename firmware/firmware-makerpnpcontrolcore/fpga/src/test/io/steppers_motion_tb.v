@@ -578,7 +578,7 @@ module steppers_motion_tb;
             // 2) Load 3 point trajectory segments (CTST steps field is a
             //    relative step count for that segment, not an absolute
             //    coordinate)
-            bus_write(REG_STEP_SEG_CTST,    {5'd0, DIR_NORMAL, CMD_MOVE_HALT_WAIT, 24'd10});
+            bus_write(REG_STEP_SEG_CTST,    {4'd0, PERIOD_DECREASING, DIR_NORMAL, CMD_MOVE_HALT_WAIT, 24'd10});
             bus_write(REG_STEP_SEG_SPDM,    {16'd1, 16'd1});
             #200;
 
