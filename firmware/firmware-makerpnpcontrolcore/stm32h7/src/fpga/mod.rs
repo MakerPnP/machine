@@ -74,7 +74,7 @@ impl<I: Instance> FpgaCore<I> {
         let value = fpga_pac::IO.io_in_1().read();
 
         let buttons = (value.user0() as u8) | ((value.user1() as u8) << 1);
-        defmt::debug!("FPGA value: 0x{:08x}, buttons: 0b{:02b}", value.0, buttons);
+        defmt::trace!("FPGA value: 0x{:08x}, buttons: 0b{:02b}", value.0, buttons);
 
         buttons
     }
@@ -89,7 +89,7 @@ impl<I: Instance> FpgaCore<I> {
         let value = fpga_pac::IO.io_in_1().read();
 
         let iak = (value.iak1() as u8) | ((value.iak2() as u8) << 1);
-        defmt::debug!("FPGA value: 0x{:08x}, iak: 0b{:02b}", value.0, iak);
+        defmt::trace!("FPGA value: 0x{:08x}, iak: 0b{:02b}", value.0, iak);
 
         iak
     }
@@ -102,7 +102,7 @@ impl<I: Instance> FpgaCore<I> {
         let value = fpga_pac::IO.io_in_2().read();
 
         let din = value.din();
-        defmt::debug!("FPGA value: 0x{:08x}, din: 0b{:08b}", value.0, din);
+        defmt::trace!("FPGA value: 0x{:08x}, din: 0b{:08b}", value.0, din);
 
         din
     }
@@ -451,7 +451,7 @@ impl<I: Instance> FpgaCore<I> {
         let value = fpga_pac::IO.io_in_1().read();
 
         let present = value.base_present();
-        defmt::debug!("FPGA value: 0x{:08x}, base_present: 0b{:01b}", value.0, present);
+        defmt::info!("FPGA value: 0x{:08x}, base_present: 0b{:01b}", value.0, present);
 
         present
     }
@@ -465,7 +465,7 @@ impl<I: Instance> FpgaCore<I> {
 
         let present = value.port_present() & 0b1111;
 
-        defmt::debug!("FPGA value: 0x{:08x}, port_present: 0b{:04b}", value.0, present);
+        defmt::info!("FPGA value: 0x{:08x}, port_present: 0b{:04b}", value.0, present);
 
         present
     }
