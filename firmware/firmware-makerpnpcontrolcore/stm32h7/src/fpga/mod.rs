@@ -506,7 +506,7 @@ impl FpgaVersion {
 }
 
 pub mod steppers {
-    use fpga_pac::steppers::vals::{dir, period_increasing};
+    use fpga_pac::steppers::vals::{dir, ramp};
     use ioboard_main::stepper::StepperDirection;
     use crate::stepper::fpgastepper::{RampMode, Segment};
 
@@ -564,9 +564,9 @@ pub mod steppers {
 
                 // TODO extract these match blocks into 'into' impls.
 
-                let period_increasing = match segment.ramp_mode {
-                    RampMode::Up => period_increasing::DECREASING,
-                    RampMode::Down => period_increasing::INCREASING,
+                let ramp = match segment.ramp_mode {
+                    RampMode::Up => ramp::UP,
+                    RampMode::Down => ramp::DOWN,
                 };
 
                 let direction = match segment.direction {
@@ -578,7 +578,7 @@ pub mod steppers {
                     w.set_cmd(segment.command.into());
                     w.set_n_steps(segment.steps);
                     w.set_dir(direction);
-                    w.set_period_increasing(period_increasing);
+                    w.set_ramp(ramp);
                     defmt::debug!("CTST: {:08x}", w.0);
                 });
                 self.instance.step_seg_spdm().write(|w|{
