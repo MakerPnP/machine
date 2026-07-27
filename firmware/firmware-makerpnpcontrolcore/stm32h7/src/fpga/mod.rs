@@ -537,14 +537,14 @@ pub mod steppers {
             // TODO select the right motor, hardcoded to motor 0 for now
             self.instance.step_pls_config().modify(|w| {
                 w.set_preset0(preset);
-                defmt::debug!("PLS_CONFIG: {:08x}", w.0);
+                defmt::trace!("PLS_CONFIG: {:08x}", w.0);
             });
 
             // TODO fix silently overriding the prescaler for other motors on the same bank
             // TODO select the right bank, hardcoded to bank 0 for now
             self.instance.step_pls_prescaler().modify(|w| {
                 w.set_prescaler0(prescaler);
-                defmt::debug!("PLS_PRESCALER: {:08x}", w.0);
+                defmt::trace!("PLS_PRESCALER: {:08x}", w.0);
             });
         }
 
@@ -557,7 +557,7 @@ pub mod steppers {
             self.instance.step_tx_config().write(|w| {
                 w.set_motor_instance(motor);
                 w.set_num_points(segments.len() as u8);
-                defmt::debug!("TX_CONFIG: {:08x}", w.0);
+                defmt::trace!("TX_CONFIG: {:08x}", w.0);
             });
 
             for segment in segments {
@@ -579,12 +579,12 @@ pub mod steppers {
                     w.set_n_steps(segment.steps);
                     w.set_dir(direction);
                     w.set_ramp(ramp);
-                    defmt::debug!("CTST: {:08x}", w.0);
+                    defmt::trace!("CTST: {:08x}", w.0);
                 });
                 self.instance.step_seg_spdm().write(|w|{
                     w.set_start_period(segment.start_period);
                     w.set_delta_magnitude(segment.delta_magnitude);
-                    defmt::debug!("SPDM: {:08x}", w.0);
+                    defmt::trace!("SPDM: {:08x}", w.0);
                 });
             }
         }
@@ -593,12 +593,12 @@ pub mod steppers {
             if self.index == 0 {
                 self.instance.step_ctrl().write(|w| {
                     w.set_start_bank0(1 << motor);
-                    defmt::debug!("CTRL: {:08x}", w.0);
+                    defmt::trace!("CTRL: {:08x}", w.0);
                 })
             } else {
                 self.instance.step_ctrl().write(|w| {
                     w.set_start_bank1(1 << motor);
-                    defmt::debug!("CTRL: {:08x}", w.0);
+                    defmt::trace!("CTRL: {:08x}", w.0);
                 })
             }
         }
