@@ -816,7 +816,7 @@ module int_core_top_tb;
             // separate unit/domain from the pulse-width cycles above) ----
             // Kept deliberately small - total simulated ticks (not step
             // count) is what drives simulation time, and the effective
-            // clk_100 rate observed in this simulation makes even a
+            // sys_clk rate observed in this simulation makes even a
             // modest per-direction tick count take a long time to
             // simulate. This is still small enough (28 ticks/direction)
             // to comfortably clear the configured 1us pulse width

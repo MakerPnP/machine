@@ -55,7 +55,7 @@ module core_top (
     input  wire [2:0] ENCODER_Z
 );
 
-    wire clk_100;
+    wire sys_clk;
     wire locked;
     wire reset;
 
@@ -133,7 +133,7 @@ module core_top (
     assign global_motor_en = !emergency_stop_r;
 
 
-    always @(posedge clk_100) begin
+    always @(posedge sys_clk) begin
         if (reset) begin
             emergency_stop_r = 1'b1;
         end else begin
@@ -151,7 +151,7 @@ module core_top (
 
     // once the PLL is locked, release reset after a short delay
     // to allow subsystems to process the reset signal while a clock is present
-    always @(posedge clk_100 or negedge locked) begin
+    always @(posedge sys_clk or negedge locked) begin
         if (!locked) begin
             reset_cnt <= 0;
             reset_r   <= 1;
@@ -170,13 +170,13 @@ module core_top (
     // ----------------------
     pll u_pll (
         .clock_in(TCXO),
-        .clock_out(clk_100),
+        .clock_out(sys_clk),
         .locked(locked)
     );
 
     la la_inst (
         .reset(reset),
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
         .la_io(LA_IO),
         .la_src(la_src),
         .la_in(la_in)
@@ -187,7 +187,7 @@ module core_top (
     // ----------------------
     leds led_inst (
         .reset(reset),
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
 
         .bus_stb(led_stb),
         .bus_we(led_we),
@@ -206,7 +206,7 @@ module core_top (
     // ----------------------
     buzzer buzzer_inst (
         .reset(reset),
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
 
         .bus_stb(buzzer_stb),
         .bus_we(buzzer_we),
@@ -224,7 +224,7 @@ module core_top (
     // ----------------------
     io io_inst (
         .reset(reset),
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
 
         .bus_stb(io_stb),
         .bus_we(io_we),
@@ -249,7 +249,7 @@ module core_top (
     // ----------------------
     encoders encoder_inst (
         .reset(reset),
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
 
         .bus_stb(encoder_stb),
         .bus_we(encoder_we),
@@ -272,7 +272,7 @@ module core_top (
     // WS2812 - on-board LEDs
     // ----------------------
     ws2812 ws2812_0_inst (
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
         .reset(reset),
 
         .bus_stb(ws0_stb),
@@ -289,7 +289,7 @@ module core_top (
     // WS2812 - Up-camera / Head / Work LEDs
     // ----------------------
     ws2812 ws2812_1_inst (
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
         .reset(reset),
 
         .bus_stb(ws1_stb),
@@ -309,13 +309,13 @@ module core_top (
     wire stepper_clk;
 
     stepper_clk stepper_clk_inst (
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
         .reset(reset),
         .stepper_clk(stepper_clk)
     );
 
     steppers steppers_inst (
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
         .reset(reset),
 
         .stepper_clk(stepper_clk),
@@ -338,7 +338,7 @@ module core_top (
     // ----------------------
     memory memory_map_inst (
         .reset(reset),
-        .clk_a(clk_100),
+        .clk_a(sys_clk),
         .we_a(mem_we),
         .stb_a(mem_stb),
         .addr_a(mem_addr),
@@ -400,7 +400,7 @@ module core_top (
     // Connect QUADSPI1 interface engine to Memory Port A
     // ----------------------
     quadspi qspi_inst (
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
         .sck(QUADSPI1_CLK),
         .cs_n(QUADSPI1_NCS),
         .io(QUADSPI1_IO),
@@ -417,13 +417,13 @@ module core_top (
     // ----------------------
 //    blink u_blink (
 //        .reset(reset),
-//        .clk(clk_100),
+//        .clk(sys_clk),
 //        .led(FPGA_ACT)
 //    );
 
     wake u_wake (
         .reset(reset),
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
         .nwake_in(NWAKE_IN),
         .nwake_1(NWAKE_1),
         .nwake_2(NWAKE_2),
@@ -433,7 +433,7 @@ module core_top (
 
     timer_mux u_timer_mux (
         .reset(reset),
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
         .mux_sel1(MUX_SEL1),
         .mux_sel2(MUX_SEL2),
         .mux_sel3(MUX_SEL3),
@@ -442,7 +442,7 @@ module core_top (
 
     clock_out u_clock_out (
         .reset(reset),
-        .sys_clk(clk_100),
+        .sys_clk(sys_clk),
         .clock_out1(FPGA_CLK_1),
         .clock_out2(FPGA_CLK_2),
         .clock_out3(FPGA_CLK_3),
