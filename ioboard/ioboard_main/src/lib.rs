@@ -62,7 +62,7 @@ pub async fn run<STEPPER: Stepper>(mut stepper: STEPPER) {
     let steps_per_unit = motor_steps as f64 / 360.0;
 
     loop {
-        if false {
+        if true {
             for i in 0..2 {
                 info!("Run simple loop {}", i);
                 stepper.enable().unwrap();
@@ -79,19 +79,21 @@ pub async fn run<STEPPER: Stepper>(mut stepper: STEPPER) {
             }
         }
 
-        for i in 0..1 {
-            info!("Run trajectory {}", i);
-            stepper.enable().unwrap();
-            Timer::after(Duration::from_millis(100)).await;
-            if run_trajectory_loop(&mut stepper, trajectory_units, steps_per_unit)
-                .await
-                .is_err()
-            {
-                break;
+        if true {
+            for i in 0..2 {
+                info!("Run trajectory {}", i);
+                stepper.enable().unwrap();
+                Timer::after(Duration::from_millis(100)).await;
+                if run_trajectory_loop(&mut stepper, trajectory_units, steps_per_unit)
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+                stepper.disable().unwrap();
+                info!("Stopped trajectory {}", i);
+                Timer::after(Duration::from_millis(1000)).await;
             }
-            stepper.disable().unwrap();
-            info!("Stopped trajectory {}", i);
-            Timer::after(Duration::from_millis(5000)).await;
         }
     }
 }
