@@ -27,6 +27,11 @@ module core_top (
     output wire BCDE_EN,
     output wire XYZF_EN,
 
+    output wire LC1_S0,
+    output wire LC1_S1,
+    output wire LC1_PD_SCK,
+    input wire  LC1_DOUT,
+
     (* PULLUP = 1 *)
     input NWAKE_IN,
     output NWAKE_1,
@@ -117,6 +122,13 @@ module core_top (
     wire        steppers_we;
     wire        steppers_stb;
     wire        steppers_ack;
+
+    wire [7:0]  lc0_addr;
+    wire [31:0] lc0_din;
+    wire [31:0] lc0_dout;
+    wire        lc0_we;
+    wire        lc0_stb;
+    wire        lc0_ack;
 
     wire [15:0] led_debug;
     wire [15:0] buzzer_debug;
@@ -388,12 +400,39 @@ module core_top (
         .steppers_dout(steppers_dout),
         .steppers_ack(steppers_ack),
 
+        .lc0_stb(lc0_stb),
+        .lc0_we(lc0_we),
+        .lc0_addr(lc0_addr),
+        .lc0_din(lc0_din),
+        .lc0_dout(lc0_dout),
+        .lc0_ack(lc0_ack),
+
         .buzzer_stb(buzzer_stb),
         .buzzer_we(buzzer_we),
         .buzzer_addr(buzzer_addr),
         .buzzer_din(buzzer_din),
         .buzzer_dout(buzzer_dout),
         .buzzer_ack(buzzer_ack)
+    );
+
+    // ----------------------
+    // IO
+    // ----------------------
+    loadcell lc0_inst (
+        .reset(reset),
+        .sys_clk(sys_clk),
+
+        .bus_stb(lc0_stb),
+        .bus_we(lc0_we),
+        .bus_addr(lc0_addr),
+        .bus_din(lc0_din),
+        .bus_dout(lc0_dout),
+        .bus_ack(lc0_ack),
+
+        .dout(LC1_DOUT),
+        .s0(LC1_S0),
+        .s1(LC1_S1),
+        .pd_sck(LC1_PD_SCK)
     );
 
     // ----------------------

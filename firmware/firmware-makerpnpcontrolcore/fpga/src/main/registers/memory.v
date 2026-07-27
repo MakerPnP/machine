@@ -24,6 +24,14 @@ module memory (
     input  wire [31:0] io_dout,
     input  wire        io_ack,
 
+    // Bus Interface to Loadcell Module
+    output reg         lc0_stb,
+    output wire        lc0_we,
+    output wire [7:0]  lc0_addr,
+    output wire [31:0] lc0_din,
+    input  wire [31:0] lc0_dout,
+    input  wire        lc0_ack,
+
     // Bus Interface to Buzzer Module
     output reg         buzzer_stb,
     output wire        buzzer_we,
@@ -79,6 +87,7 @@ module memory (
     localparam [7:0] TARGET_SYSTEM0     = SYSTEM0_BASE >> PERIPHERAL_BITS;
     localparam [7:0] TARGET_LED         = LED_BASE >> PERIPHERAL_BITS;
     localparam [7:0] TARGET_IO          = IO_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_LC0         = LC0_BASE >> PERIPHERAL_BITS;
     localparam [7:0] TARGET_BUZZER      = BUZZER_BASE >> PERIPHERAL_BITS;
     localparam [7:0] TARGET_ENCODER     = ENCODER_BASE >> PERIPHERAL_BITS;
     localparam [7:0] TARGET_WS0         = WS0_BASE >> PERIPHERAL_BITS;
@@ -87,9 +96,9 @@ module memory (
     localparam [7:0] TARGET_SYSTEM1     = SYSTEM1_BASE >> PERIPHERAL_BITS;
 
     // Static Control Registers
-    reg        io_we_r, led_we_r, buzzer_we_r, encoder_we_r, ws0_we_r, ws1_we_r, steppers_we_r;
-    reg [8:0]  io_addr_r, led_addr_r, buzzer_addr_r, encoder_addr_r, ws0_addr_r, ws1_addr_r, steppers_addr_r;
-    reg [31:0] io_din_r, led_din_r, buzzer_din_r, encoder_din_r, ws0_din_r, ws1_din_r, steppers_din_r;
+    reg        io_we_r, lc0_we_r, led_we_r, buzzer_we_r, encoder_we_r, ws0_we_r, ws1_we_r, steppers_we_r;
+    reg [8:0]  io_addr_r, lc0_addr_r, led_addr_r, buzzer_addr_r, encoder_addr_r, ws0_addr_r, ws1_addr_r, steppers_addr_r;
+    reg [31:0] io_din_r, lc0_din_r, led_din_r, buzzer_din_r, encoder_din_r, ws0_din_r, ws1_din_r, steppers_din_r;
 
     // Pipeline tracking elements
     reg        req_stb_r;
@@ -107,6 +116,7 @@ module memory (
     // Drive structural wires cleanly
     assign led_we        = led_we_r;        assign led_addr      = led_addr_r;      assign led_din       = led_din_r;
     assign io_we         = io_we_r;         assign io_addr       = io_addr_r;       assign io_din        = io_din_r;
+    assign lc0_we        = lc0_we_r;        assign lc0_addr      = lc0_addr_r;      assign lc0_din       = lc0_din_r;
     assign buzzer_we     = buzzer_we_r;     assign buzzer_addr   = buzzer_addr_r;   assign buzzer_din    = buzzer_din_r;
     assign encoder_we    = encoder_we_r;    assign encoder_addr  = encoder_addr_r;  assign encoder_din   = encoder_din_r;
     assign ws0_we        = ws0_we_r;        assign ws0_addr      = ws0_addr_r;      assign ws0_din       = ws0_din_r;
@@ -123,7 +133,7 @@ module memory (
     reg unmapped_stb = 0;
     reg unmapped_ack = 0;
 
-    wire active_ack = led_ack | io_ack | buzzer_ack | encoder_ack | ws0_ack | ws1_ack | system0_ack | system1_ack | unmapped_ack | steppers_ack;
+    wire active_ack = led_ack | io_ack | lc0_ack | buzzer_ack | encoder_ack | ws0_ack | ws1_ack | system0_ack | system1_ack | unmapped_ack | steppers_ack;
 
     // These evaluate completely independently of bus_busy or ack_a logic loops
     wire system0_select   = (req_target_r == TARGET_SYSTEM0);
@@ -132,6 +142,7 @@ module memory (
     wire ws1_select       = (req_target_r == TARGET_WS1);
     wire led_select       = (req_target_r == TARGET_LED);
     wire io_select        = (req_target_r == TARGET_IO);
+    wire lc0_select       = (req_target_r == TARGET_LC0);
     wire buzzer_select    = (req_target_r == TARGET_BUZZER);
     wire encoder_select   = (req_target_r == TARGET_ENCODER);
     wire steppers_select  = (req_target_r == TARGET_STEPPERS);
@@ -142,6 +153,7 @@ module memory (
         ws0_select |
         ws1_select |
         io_select |
+        lc0_select |
         led_select |
         buzzer_select |
         steppers_select |
@@ -166,6 +178,7 @@ module memory (
 
             led_stb <= 1'b0;
             io_stb <= 1'b0;
+            lc0_stb <= 1'b0;
             buzzer_stb <= 1'b0;
             encoder_stb <= 1'b0;
             ws0_stb <= 1'b0;
@@ -177,6 +190,7 @@ module memory (
 
             led_we_r <= 1'b0;
             io_we_r <= 1'b0;
+            lc0_we_r <= 1'b0;
             buzzer_we_r <= 1'b0;
             encoder_we_r <= 1'b0;
             ws0_we_r <= 1'b0;
@@ -198,6 +212,7 @@ module memory (
                     case (rsp_target_r)
                         TARGET_LED:      dout_a <= led_dout;
                         TARGET_IO:       dout_a <= io_dout;
+                        TARGET_LC0:      dout_a <= lc0_dout;
                         TARGET_BUZZER:   dout_a <= buzzer_dout;
                         TARGET_ENCODER:  dout_a <= encoder_dout;
                         TARGET_WS0:      dout_a <= ws0_dout;
@@ -247,6 +262,7 @@ module memory (
             if (bus_busy && active_ack) begin
                 led_stb <= 1'b0;
                 io_stb <= 1'b0;
+                lc0_stb <= 1'b0;
                 buzzer_stb <= 1'b0;
                 encoder_stb <= 1'b0;
                 ws0_stb <= 1'b0;
@@ -282,6 +298,12 @@ module memory (
                     io_din_r   <= req_din_r;
                     io_we_r    <= req_we_r;
                     io_stb     <= 1'b1;
+                end
+                if (lc0_select) begin
+                    lc0_addr_r  <= req_addr_r;
+                    lc0_din_r   <= req_din_r;
+                    lc0_we_r    <= req_we_r;
+                    lc0_stb     <= 1'b1;
                 end
                 if (buzzer_select) begin
                     buzzer_addr_r <= req_addr_r;

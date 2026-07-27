@@ -5,6 +5,7 @@ localparam BUZZER_BASE      = 16'h0300;
 localparam IO_BASE          = 16'h0400;
 localparam WS0_BASE         = 16'h0800;
 localparam WS1_BASE         = 16'h0900;
+localparam LC0_BASE         = 16'h0a00;
 localparam ENCODER_BASE     = 16'h0c00;
 localparam STEPPERS_BASE    = 16'h0d00;
 
