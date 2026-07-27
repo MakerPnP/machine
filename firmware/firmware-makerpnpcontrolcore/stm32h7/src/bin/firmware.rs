@@ -46,6 +46,7 @@ use firmware_makerpnpcontrolcore::fpga::FpgaCore;
 use firmware_makerpnpcontrolcore::fpga::ws2812::ColorOrdering;
 use firmware_makerpnpcontrolcore::rgb::rainbow_wave;
 use firmware_makerpnpcontrolcore::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
+use firmware_makerpnpcontrolcore::stepper::fpgastepper::FpgaStepper;
 use firmware_makerpnpcontrolcore::stepper::tmc5160::Tmc5160Stepper;
 #[cfg(feature = "tracepin")]
 use firmware_makerpnpcontrolcore::trace::TracePinsService;
@@ -209,8 +210,8 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         wrap_size: WrapSize::None,
         // TODO increase this speed as much as possible
         // clock_prescaler: 5, // 133.33Mhz / (5+1) = 22.22Mhz
-        clock_prescaler: 13, // 133.33Mhz / (13+1) = 9.5Mhz
-        // clock_prescaler: 132, // 133.33Mhz / (132+1) = 1.0Mhz
+        // clock_prescaler: 13, // 133.33Mhz / (13+1) = 9.5Mhz
+        clock_prescaler: 132, // 133.33Mhz / (132+1) = 1.0Mhz
         // clock_prescaler: 254, // 133.33Mhz / (254+1) = 0.522Mhz
         sample_shifting: true,
         delay_hold_quarter_cycle: false,
@@ -445,6 +446,9 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
     let fpga_adc_mux = fpga.adc_mux();
 
+    let fpga_stepper_bank_0 = fpga.stepper_bank(0);
+    let fpga_stepper_bank_1 = fpga.stepper_bank(1);
+
     lp_spawner.spawn(unwrap!(fpga_task(fpga)));
 
     let adc1 = Adc::new(p.ADC1);
@@ -523,43 +527,77 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     // Launch network task
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
 
-    info!("Initializing Stepper");
+    if false {
+        info!("Initializing Port Stepper");
 
-    // Setup spi i/o
-    let p1_sck = p.PD3;
-    let p1_mosi = p.PB15;
-    let p1_miso = p.PB14;
-    let mut p1_nss_1 = Output::new(p.PB12, Level::High, Speed::Low);
-    let mut p1_nss_2 = Output::new(p.PG3, Level::High, Speed::Low);
-    // enable
-    // Via PA8 to FPGA IOR_140_GBIN3, FPGA needs to route internally to the WAKE_1 output.
-    // enable is ACTIVE_LOW.
-    let p1_wake = Output::new(p.PA8, Level::High, Speed::Low);
+        // Setup spi i/o
+        let p1_sck = p.PD3;
+        let p1_mosi = p.PB15;
+        let p1_miso = p.PB14;
+        let mut p1_nss_1 = Output::new(p.PB12, Level::High, Speed::Low);
+        let mut p1_nss_2 = Output::new(p.PG3, Level::High, Speed::Low);
+        // enable
+        // Via PA8 to FPGA IOR_140_GBIN3, FPGA needs to route internally to the WAKE_1 output.
+        // enable is ACTIVE_LOW.
+        let p1_wake = Output::new(p.PA8, Level::High, Speed::Low);
 
-    let mut spi_config = spi::Config::default();
-    spi_config.frequency = mhz(1);
+        let mut spi_config = spi::Config::default();
+        spi_config.frequency = mhz(1);
 
-    let spi = spi::Spi::new_blocking(p.SPI2, p1_sck, p1_mosi, p1_miso, spi_config);
+        let spi = spi::Spi::new_blocking(p.SPI2, p1_sck, p1_mosi, p1_miso, spi_config);
 
-    let mut stepper = Tmc5160Stepper::new(
-        spi,
-        p1_nss_1,
-        p1_wake,
-        Delay,
-        // step
-        // TIM1_CH1 = P1_T16_CH1 -> STEP_A_I (isolated) -> P1 MOTOR1
-        Output::new(p.PE9, Level::Low, Speed::Low),
-        // direction
-        // TIM1_CH2 = P1_T16_CH2 -> DIR_A_I (isolated) -> P1 MOTOR1
-        Output::new(p.PE11, Level::Low, Speed::Low),
-        1000,
-        1000,
-    );
-    stepper.initialize_io().unwrap();
+        let mut port_stepper = Tmc5160Stepper::new(
+            spi,
+            p1_nss_1,
+            p1_wake,
+            Delay,
+            // step
+            // TIM1_CH1 = P1_T16_CH1 -> STEP_A_I (isolated) -> P1 MOTOR1
+            Output::new(p.PE9, Level::Low, Speed::Low),
+            // direction
+            // TIM1_CH2 = P1_T16_CH2 -> DIR_A_I (isolated) -> P1 MOTOR1
+            Output::new(p.PE11, Level::Low, Speed::Low),
+            1000,
+            1000,
+        );
+        port_stepper.initialize_io().unwrap();
+        hp_spawner.spawn(unwrap!(port_stepper_task(StepperRunner::new(port_stepper))));
+    }
+
+    if false {
+        info!("Initializing Bitbash Stepper");
+        let mut bitbash_stepper = GpioBitbashStepper::new(
+            // enable
+            // TIM8_ETR
+            Output::new(p.PG12, Level::High, Speed::Low),
+            // step
+            // TIM8_CH1 = P3_T16_CH1
+            Output::new(p.PE14, Level::Low, Speed::Low),
+            // direction
+            // TIM8_CH2 = P3_T16_CH2
+            Output::new(p.PE15, Level::Low, Speed::Low),
+            StepperEnableMode::ActiveHigh,
+            1000,
+            1000,
+        );
+        bitbash_stepper.initialize_io().unwrap();
+
+        hp_spawner.spawn(unwrap!(bitbash_stepper_task(StepperRunner::new(bitbash_stepper))));
+    }
+
+    if true {
+        info!("Initializing Fpga Stepper");
+        let mut fpga_stepper = FpgaStepper::new(
+            fpga_stepper_bank_0,
+            0,
+            1000,
+            1000,
+        );
+
+        hp_spawner.spawn(unwrap!(fpga_stepper_task(StepperRunner::new(fpga_stepper))));
+    }
 
     info!("Initialisation complete");
-
-    hp_spawner.spawn(unwrap!(stepper_task(StepperRunner::new(stepper))));
 
     info!("running");
 
@@ -751,11 +789,24 @@ async fn embassy_net_task(mut runner: embassy_net::Runner<'static, Device>) -> !
     runner.run().await
 }
 
-type StepperInstance = Tmc5160Stepper<Spi<'static, Blocking, Master>, Output<'static>, Output<'static>, Delay, Output<'static>, Output<'static>>;
+type PortStepperInstance = Tmc5160Stepper<Spi<'static, Blocking, Master>, Output<'static>, Output<'static>, Delay, Output<'static>, Output<'static>>;
 #[embassy_executor::task]
-async fn stepper_task(runner: StepperRunner<StepperInstance>) {
+async fn port_stepper_task(runner: StepperRunner<PortStepperInstance>) {
     runner.run().await
 }
+
+type BitBashStepperInstance = GpioBitbashStepper<Output<'static>, Output<'static>, Output<'static>>;
+#[embassy_executor::task]
+async fn bitbash_stepper_task(runner: StepperRunner<BitBashStepperInstance>) {
+    runner.run().await
+}
+
+type FpgaStepperInstance = FpgaStepper;
+#[embassy_executor::task]
+async fn fpga_stepper_task(runner: StepperRunner<FpgaStepperInstance>) {
+    runner.run().await
+}
+
 
 struct StepperRunner<STEPPER: Stepper> {
     stepper: STEPPER,
