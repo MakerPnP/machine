@@ -82,10 +82,12 @@ module int_core_top_tb;
     //
     // Stepper step/dir pins
     //
-    reg [3:0] XYZF_STEP_PINS;
-    reg [3:0] XYZF_DIR_PINS;
-    reg [3:0] BCDE_STEP_PINS;
-    reg [3:0] BCDE_DIR_PINS;
+    reg [3:0] XYZF_STEP;
+    reg [3:0] XYZF_DIR;
+    reg       XYZF_EN;
+    reg [3:0] BCDE_STEP;
+    reg [3:0] BCDE_DIR;
+    reg       BCDE_EN;
 
     core_top uut (
         .TCXO(TCXO),
@@ -110,10 +112,12 @@ module int_core_top_tb;
         .ENCODER_Z(ENCODER_Z),
         .RGB_PORTS(RGB_PORTS),
         .RGB_UP_CAM(RGB_UP_CAM),
-        .XYZF_STEP_PINS(XYZF_STEP_PINS),
-        .XYZF_DIR_PINS(XYZF_DIR_PINS),
-        .BCDE_STEP_PINS(BCDE_STEP_PINS),
-        .BCDE_DIR_PINS(BCDE_DIR_PINS)
+        .XYZF_STEP(XYZF_STEP),
+        .XYZF_DIR(XYZF_DIR),
+        .XYZF_EN(XYZF_EN),
+        .BCDE_STEP(BCDE_STEP),
+        .BCDE_DIR(BCDE_DIR),
+        .BCDE_EN(PCBE_EN)
     );
 
     // Clock generator helper - Starts from 1, pulls low, then drives high

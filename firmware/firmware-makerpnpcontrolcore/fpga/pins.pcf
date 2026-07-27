@@ -122,26 +122,26 @@ set_io RGB_PORTS M11
 set_io RGB_UP_CAM D3
 
 ### ZYZF steppers
-set_io XYZF_STEP_PINS[0] M4
-set_io XYZF_DIR_PINS[0] M5
-set_io XYZF_STEP_PINS[1] M6
-set_io XYZF_DIR_PINS[1] M7
-set_io XYZF_STEP_PINS[2] J4
-set_io XYZF_DIR_PINS[2] K3
-set_io XYZF_STEP_PINS[3] L3
-set_io XYZF_DIR_PINS[3] M3
+set_io XYZF_STEP[0] M4
+set_io XYZF_DIR[0] M5
+set_io XYZF_STEP[1] M6
+set_io XYZF_DIR[1] M7
+set_io XYZF_STEP[2] J4
+set_io XYZF_DIR[2] K3
+set_io XYZF_STEP[3] L3
+set_io XYZF_DIR[3] M3
 
 
 ### BCDE steppers
-set_io BCDE_STEP_PINS[0] G3
-set_io BCDE_DIR_PINS[0] G4
-set_io BCDE_STEP_PINS[1] H2
-set_io BCDE_DIR_PINS[1] J3
-set_io BCDE_STEP_PINS[2] H4
-set_io BCDE_DIR_PINS[2] H3
-set_io BCDE_STEP_PINS[3] E3
-set_io BCDE_DIR_PINS[3] E4
+set_io BCDE_STEP[0] G3
+set_io BCDE_DIR[0] G4
+set_io BCDE_STEP[1] H2
+set_io BCDE_DIR[1] J3
+set_io BCDE_STEP[2] H4
+set_io BCDE_DIR[2] H3
+set_io BCDE_STEP[3] E3
+set_io BCDE_DIR[3] E4
 
-### XYZF_BCDE_EN pins
-set_io XYZF_BCDE_EN[0] R2
-set_io XYZF_BCDE_EN[1] T1
+### BCDE_XYZF_EN pins
+set_io BCDE_EN R2
+set_io XYZF_EN T1

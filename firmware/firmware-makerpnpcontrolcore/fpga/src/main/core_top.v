@@ -18,13 +18,14 @@ module core_top (
 
     output wire [15:0] LA_IO,
 
-    output wire [3:0] XYZF_STEP_PINS,
-    output wire [3:0] XYZF_DIR_PINS,
+    output wire [3:0] XYZF_STEP,
+    output wire [3:0] XYZF_DIR,
 
-    output wire [3:0] BCDE_STEP_PINS,
-    output wire [3:0] BCDE_DIR_PINS,
+    output wire [3:0] BCDE_STEP,
+    output wire [3:0] BCDE_DIR,
 
-    output wire [1:0] XYZF_BCDE_EN,
+    output wire BCDE_EN,
+    output wire XYZF_EN,
 
     (* PULLUP = 1 *)
     input NWAKE_IN,
@@ -326,9 +327,9 @@ module core_top (
         .bus_dout(steppers_dout),
         .bus_ack(steppers_ack),
 
-        .step_pins({XYZF_STEP_PINS, BCDE_STEP_PINS}),
-        .dir_pins({XYZF_DIR_PINS, BCDE_DIR_PINS}),
-        .bank_enable_pins(XYZF_BCDE_EN),
+        .step_pins({BCDE_STEP, XYZF_STEP}),
+        .dir_pins({BCDE_DIR, XYZF_DIR}),
+        .bank_enable_pins({BCDE_EN, XYZF_EN}),
         .global_motor_en(global_motor_en)
     );
 
