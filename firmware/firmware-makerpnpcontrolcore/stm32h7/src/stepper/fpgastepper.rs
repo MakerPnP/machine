@@ -28,6 +28,7 @@ impl FpgaStepper {
 impl Stepper for FpgaStepper {
     fn set_pulse_width_us(&mut self, pulse_width: u32) {
         self.pulse_width = pulse_width;
+        self.stepper_bank.set_pulse_width(self.motor_index, self.pulse_width as u16);
     }
 
     fn set_pulse_delay_us(&mut self, pulse_delay: u32) {

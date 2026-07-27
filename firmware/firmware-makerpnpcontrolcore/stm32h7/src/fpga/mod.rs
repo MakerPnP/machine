@@ -587,11 +587,13 @@ pub mod steppers {
         pub fn start_motor(&self, motor: u8) {
             if self.index == 0 {
                 self.instance.step_ctrl().write(|w| {
-                    w.set_start_bank0(motor)
+                    w.set_start_bank0(1 << motor);
+                    defmt::debug!("CTRL: {:08x}", w.0);
                 })
             } else {
                 self.instance.step_ctrl().write(|w| {
-                    w.set_start_bank1(motor)
+                    w.set_start_bank1(1 << motor);
+                    defmt::debug!("CTRL: {:08x}", w.0);
                 })
             }
         }
