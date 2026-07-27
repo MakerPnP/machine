@@ -1033,6 +1033,7 @@ module steppers_motion_tb;
                     #(max_expected_cycles * 20 * 2);
 
                     for (m = 0; m < 8; m = m + 1) begin
+                    $display("[VERIFY] Motor %0d pulse width measured as: %0dns, prescaler_val: %0d", m, pulse_width_cycles[m] * NS_PER_SYS_CYCLE, prescaler_val);
                         `ASSERT_EQ(pulse_width_valid[m], 1'b1, "%0d",
                                    $sformatf("[PULSE WIDTH] prescaler=%0d half=%0d: Motor %0d never produced a measurable step pulse",
                                              prescaler_val, half, m));
