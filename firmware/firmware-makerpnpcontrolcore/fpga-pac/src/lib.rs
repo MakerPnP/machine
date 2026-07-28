@@ -17,6 +17,9 @@ pub const WS2812_0: ws2812_0::ws2812_0 =
 #[doc = "ws2812 RGB LED block (second instance)"]
 pub const WS2812_1: ws2812_0::ws2812_0 =
     unsafe { ws2812_0::ws2812_0::from_ptr(0x9000_0900usize as _) };
+#[doc = "hx717 dual channel 24-bit load cell adc. all three registers share one 16-byte OctoSPI prefetch line, so reading any one of them causes reads of all of them; no register here has a read side effect"]
+pub const LOADCELL0: loadcell0::loadcell0 =
+    unsafe { loadcell0::loadcell0::from_ptr(0x9000_0a00usize as _) };
 #[doc = "encoders control block"]
 pub const ENCODERS: encoders::encoders =
     unsafe { encoders::encoders::from_ptr(0x9000_0c00usize as _) };
@@ -1510,6 +1513,424 @@ pub mod led {
                     self.mcu_led(),
                     self.reserved()
                 )
+            }
+        }
+    }
+}
+pub mod loadcell0 {
+    #[doc = "hx717 dual channel 24-bit load cell adc. all three registers share one 16-byte OctoSPI prefetch line, so reading any one of them causes reads of all of them; no register here has a read side effect."]
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    pub struct loadcell0 {
+        ptr: *mut u8,
+    }
+    unsafe impl Send for loadcell0 {}
+    unsafe impl Sync for loadcell0 {}
+    impl loadcell0 {
+        #[inline(always)]
+        pub const unsafe fn from_ptr(ptr: *mut ()) -> Self {
+            Self { ptr: ptr as _ }
+        }
+        #[inline(always)]
+        pub const fn as_ptr(&self) -> *mut () {
+            self.ptr as _
+        }
+        #[doc = "load cell control register."]
+        #[inline(always)]
+        pub const fn lc_ctrl(self) -> crate::common::Reg<regs::lc_ctrl, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x0usize) as _) }
+        }
+        #[doc = "load cell status register."]
+        #[inline(always)]
+        pub const fn lc_status(self) -> crate::common::Reg<regs::lc_status, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x04usize) as _) }
+        }
+        #[doc = "most recent conversion result plus its sequence number. reading has no side effects; a single 32-bit read gets value and sequence together so they cannot skew."]
+        #[inline(always)]
+        pub const fn lc_value(self) -> crate::common::Reg<regs::lc_value, crate::common::R> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x08usize) as _) }
+        }
+    }
+    pub mod regs {
+        #[doc = "load cell control register."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct lc_ctrl(pub u32);
+        impl lc_ctrl {
+            #[doc = "run conversions back to back (1 = on)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "run conversions back to back (1 = on)."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "request power-down. honoured only once the conversion in flight completes, so the channel and gain setup is saved. clear to wake; the device resumes with the setup it had before sleeping."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn pd(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "request power-down. honoured only once the conversion in flight completes, so the channel and gain setup is saved. clear to wake; the device resumes with the setup it had before sleeping."]
+            #[inline(always)]
+            pub const fn set_pd(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "output data rate, driven onto the S1 and S0 pins. changing this while enabled takes effect on whichever conversion the device happens to be in."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn rate(&self) -> super::vals::rate {
+                let val = (self.0 >> 2usize) & 0x03;
+                super::vals::rate::from_bits(val as u8)
+            }
+            #[doc = "output data rate, driven onto the S1 and S0 pins. changing this while enabled takes effect on whichever conversion the device happens to be in."]
+            #[inline(always)]
+            pub const fn set_rate(&mut self, val: super::vals::rate) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val.to_bits() as u32) & 0x03) << 2usize);
+            }
+            #[doc = "input channel and pga gain for the NEXT conversion. selected by the number of PD_SCK pulses the peripheral issues, so it applies one conversion after it is written. allow 4 conversions of settling after any change before trusting a sample."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn mode(&self) -> super::vals::mode {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::mode::from_bits(val as u8)
+            }
+            #[doc = "input channel and pga gain for the NEXT conversion. selected by the number of PD_SCK pulses the peripheral issues, so it applies one conversion after it is written. allow 4 conversions of settling after any change before trusting a sample."]
+            #[inline(always)]
+            pub const fn set_mode(&mut self, val: super::vals::mode) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "power-down depth, applied when the pd bit is honoured."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn pdmode(&self) -> super::vals::pdmode {
+                let val = (self.0 >> 6usize) & 0x03;
+                super::vals::pdmode::from_bits(val as u8)
+            }
+            #[doc = "power-down depth, applied when the pd bit is honoured."]
+            #[inline(always)]
+            pub const fn set_pdmode(&mut self, val: super::vals::pdmode) {
+                self.0 = (self.0 & !(0x03 << 6usize)) | (((val.to_bits() as u32) & 0x03) << 6usize);
+            }
+            #[doc = "write 1 to take exactly one sample without setting enable. self-clearing, always reads back 0."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn single(&self) -> bool {
+                let val = (self.0 >> 8usize) & 0x01;
+                val != 0
+            }
+            #[doc = "write 1 to take exactly one sample without setting enable. self-clearing, always reads back 0."]
+            #[inline(always)]
+            pub const fn set_single(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 8usize)) | (((val as u32) & 0x01) << 8usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 9usize) & 0x007f_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x007f_ffff << 9usize)) | (((val as u32) & 0x007f_ffff) << 9usize);
+            }
+        }
+        impl Default for lc_ctrl {
+            #[inline(always)]
+            fn default() -> lc_ctrl {
+                lc_ctrl(0)
+            }
+        }
+        impl core::fmt::Debug for lc_ctrl {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("lc_ctrl")
+                    .field("enable", &self.enable())
+                    .field("pd", &self.pd())
+                    .field("rate", &self.rate())
+                    .field("mode", &self.mode())
+                    .field("pdmode", &self.pdmode())
+                    .field("single", &self.single())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for lc_ctrl {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "lc_ctrl {{ enable: {=bool:?}, pd: {=bool:?}, rate: {:?}, mode: {:?}, pdmode: {:?}, single: {=bool:?}, reserved: {=u32:?} }}" , self . enable () , self . pd () , self . rate () , self . mode () , self . pdmode () , self . single () , self . reserved ())
+            }
+        }
+        #[doc = "load cell status register."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct lc_status(pub u32);
+        impl lc_status {
+            #[doc = "mirrors lc_ctrl.enable."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enabled(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "mirrors lc_ctrl.enable."]
+            #[inline(always)]
+            pub const fn set_enabled(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "a conversion has completed since the last write to lc_ctrl, so lc_value is valid for the current configuration. cleared by writing lc_ctrl, never by a read. use the lc_value sequence number, not this bit, to detect each new sample."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn ready(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "a conversion has completed since the last write to lc_ctrl, so lc_value is valid for the current configuration. cleared by writing lc_ctrl, never by a read. use the lc_value sequence number, not this bit, to detect each new sample."]
+            #[inline(always)]
+            pub const fn set_ready(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "a conversion cycle is in progress. covers the wait for data as well as the pulse train, so in continuous mode this is high almost all the time and is not a useful poll target."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn busy(&self) -> bool {
+                let val = (self.0 >> 2usize) & 0x01;
+                val != 0
+            }
+            #[doc = "a conversion cycle is in progress. covers the wait for data as well as the pulse train, so in continuous mode this is high almost all the time and is not a useful poll target."]
+            #[inline(always)]
+            pub const fn set_busy(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 2usize)) | (((val as u32) & 0x01) << 2usize);
+            }
+            #[doc = "the device is being held in power-down."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn pd(&self) -> bool {
+                let val = (self.0 >> 3usize) & 0x01;
+                val != 0
+            }
+            #[doc = "the device is being held in power-down."]
+            #[inline(always)]
+            pub const fn set_pd(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 3usize)) | (((val as u32) & 0x01) << 3usize);
+            }
+            #[doc = "DOUT did not go low within the watchdog interval, so no device is responding. sticky; cleared by any write to lc_ctrl."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timeout(&self) -> bool {
+                let val = (self.0 >> 4usize) & 0x01;
+                val != 0
+            }
+            #[doc = "DOUT did not go low within the watchdog interval, so no device is responding. sticky; cleared by any write to lc_ctrl."]
+            #[inline(always)]
+            pub const fn set_timeout(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 4usize)) | (((val as u32) & 0x01) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 5usize) & 0x07ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x07ff_ffff << 5usize)) | (((val as u32) & 0x07ff_ffff) << 5usize);
+            }
+        }
+        impl Default for lc_status {
+            #[inline(always)]
+            fn default() -> lc_status {
+                lc_status(0)
+            }
+        }
+        impl core::fmt::Debug for lc_status {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("lc_status")
+                    .field("enabled", &self.enabled())
+                    .field("ready", &self.ready())
+                    .field("busy", &self.busy())
+                    .field("pd", &self.pd())
+                    .field("timeout", &self.timeout())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for lc_status {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "lc_status {{ enabled: {=bool:?}, ready: {=bool:?}, busy: {=bool:?}, pd: {=bool:?}, timeout: {=bool:?}, reserved: {=u32:?} }}" , self . enabled () , self . ready () , self . busy () , self . pd () , self . timeout () , self . reserved ())
+            }
+        }
+        #[doc = "most recent conversion result plus its sequence number. reading has no side effects; a single 32-bit read gets value and sequence together so they cannot skew."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct lc_value(pub u32);
+        impl lc_value {
+            #[doc = "raw 24-bit result in two's complement, exactly as shifted off the wire. 0x00800000 is negative full scale and 0x007FFFFF positive full scale; both are also the saturation codes when the input is out of range. the generated accessor masks to 24 bits, so sign extend from bit 23 rather than from bit 31: let sample = ((r.value() as i32) << 8) >> 8; taking the raw register word instead needs ((r.0 << 8) as i32) >> 8, which drops the sequence byte in the same step. omitting the shift pair yields a value that is never negative."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u32 {
+                let val = (self.0 >> 0usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "raw 24-bit result in two's complement, exactly as shifted off the wire. 0x00800000 is negative full scale and 0x007FFFFF positive full scale; both are also the saturation codes when the input is out of range. the generated accessor masks to 24 bits, so sign extend from bit 23 rather than from bit 31: let sample = ((r.value() as i32) << 8) >> 8; taking the raw register word instead needs ((r.0 << 8) as i32) >> 8, which drops the sequence byte in the same step. omitting the shift pair yields a value that is never negative."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 0usize)) | (((val as u32) & 0x00ff_ffff) << 0usize);
+            }
+            #[doc = "sample sequence number, incremented once per completed conversion. compare r.seq() against the last value seen using wrapping_sub, since it wraps every 256 conversions: 0.8s at 320sps, 3.2s at 80sps, 12.8s at 20sps, 25.6s at 10sps. a difference of 0 means no new conversion has completed and the value is a repeat of the one already seen; 1 is the expected case; more than 1 means that many samples were produced and never read. polling slower than the conversion period therefore reports gaps, and polling faster reports repeats - both are visible here and in neither case is lc_status.ready able to tell them apart."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn seq(&self) -> u8 {
+                let val = (self.0 >> 24usize) & 0xff;
+                val as u8
+            }
+            #[doc = "sample sequence number, incremented once per completed conversion. compare r.seq() against the last value seen using wrapping_sub, since it wraps every 256 conversions: 0.8s at 320sps, 3.2s at 80sps, 12.8s at 20sps, 25.6s at 10sps. a difference of 0 means no new conversion has completed and the value is a repeat of the one already seen; 1 is the expected case; more than 1 means that many samples were produced and never read. polling slower than the conversion period therefore reports gaps, and polling faster reports repeats - both are visible here and in neither case is lc_status.ready able to tell them apart."]
+            #[inline(always)]
+            pub const fn set_seq(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 24usize)) | (((val as u32) & 0xff) << 24usize);
+            }
+        }
+        impl Default for lc_value {
+            #[inline(always)]
+            fn default() -> lc_value {
+                lc_value(0)
+            }
+        }
+        impl core::fmt::Debug for lc_value {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("lc_value")
+                    .field("value", &self.value())
+                    .field("seq", &self.seq())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for lc_value {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "lc_value {{ value: {=u32:?}, seq: {=u8:?} }}",
+                    self.value(),
+                    self.seq()
+                )
+            }
+        }
+    }
+    pub mod vals {
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum mode {
+            #[doc = "channel A, gain 128, full scale +/-20mV at VREF 5V (25 pulses)."]
+            A128 = 0x0,
+            #[doc = "channel B, gain 64, full scale +/-40mV at VREF 5V (26 pulses)."]
+            B64 = 0x01,
+            #[doc = "channel A, gain 64, full scale +/-40mV at VREF 5V (27 pulses)."]
+            A64 = 0x02,
+            #[doc = "channel B, gain 8, full scale +/-320mV at VREF 5V (28 pulses)."]
+            B8 = 0x03,
+        }
+        impl mode {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> mode {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for mode {
+            #[inline(always)]
+            fn from(val: u8) -> mode {
+                mode::from_bits(val)
+            }
+        }
+        impl From<mode> for u8 {
+            #[inline(always)]
+            fn from(val: mode) -> u8 {
+                mode::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pdmode {
+            #[doc = "adc only, under 360uA. keeps the pulse count at the mode selection so channel and gain survive the sleep."]
+            ADC = 0x0,
+            #[doc = "adc and analog regulator, under 280uA. clocks 29 pulses, past the selection window, so the mode field is not applied by this conversion."]
+            ADC_REG = 0x01,
+            #[doc = "everything, under 1uA. clocks 30 pulses, past the selection window, so the mode field is not applied by this conversion."]
+            ALL = 0x02,
+            #[doc = "unused encoding, behaves as ADC."]
+            RESERVED = 0x03,
+        }
+        impl pdmode {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pdmode {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pdmode {
+            #[inline(always)]
+            fn from(val: u8) -> pdmode {
+                pdmode::from_bits(val)
+            }
+        }
+        impl From<pdmode> for u8 {
+            #[inline(always)]
+            fn from(val: pdmode) -> u8 {
+                pdmode::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum rate {
+            #[doc = "10 sps, 18.2 noise-free bits."]
+            RATE_10HZ = 0x0,
+            #[doc = "20 sps, 17.7 noise-free bits."]
+            RATE_20HZ = 0x01,
+            #[doc = "80 sps, 16.7 noise-free bits."]
+            RATE_80HZ = 0x02,
+            #[doc = "320 sps, 15.8 noise-free bits."]
+            RATE_320HZ = 0x03,
+        }
+        impl rate {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> rate {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for rate {
+            #[inline(always)]
+            fn from(val: u8) -> rate {
+                rate::from_bits(val)
+            }
+        }
+        impl From<rate> for u8 {
+            #[inline(always)]
+            fn from(val: rate) -> u8 {
+                rate::to_bits(val)
             }
         }
     }
