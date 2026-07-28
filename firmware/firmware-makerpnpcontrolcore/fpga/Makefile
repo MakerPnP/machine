@@ -50,7 +50,7 @@ EXTRA_SRCS_leds :=
 
 # Special / integration TBs
 EXTRA_SRCS_int_leds_mem := $(SRC_MAIN)/io/leds.v $(SRC_MAIN)/registers/memory.v
-EXTRA_SRCS_int_core_top := $(VERILOGS)
+EXTRA_SRCS_int_core_top := $(VERILOGS) $(SRC_TEST)/io/hx717_sim.v
 
 # Find RTL file matching module name
 define FIND_RTL

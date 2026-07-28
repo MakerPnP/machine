@@ -9,6 +9,8 @@ module int_core_top_tb;
     `include "src/main/io/leds_regs.svh"
     `include "src/main/io/buzzer_regs.svh"
     `include "src/main/io/encoders_regs.svh"
+    `include "src/main/io/loadcell_regs.svh"
+    `include "src/main/io/loadcell_shared.svh"
     `include "src/main/io/steppers_regs.svh"
     `include "src/main/io/steppers_shared.svh"
     `include "src/main/registers/system0_regs.svh"
@@ -82,6 +84,30 @@ module int_core_top_tb;
     reg [2:0] ENCODER_Z = 3'd0;
 
     //
+    // HX717 load cell (Test 13)
+    //
+    // core_top names these pins LC1_* even though the instance inside it
+    // is lc0_inst and the register block is LC0_BASE - following the pin
+    // names here rather than renaming anything.
+    //
+    // lc_sample is the 24-bit code the simulated HX717 converts. It is
+    // given a value at declaration rather than in the initial block, so
+    // the free-running model has a defined result to latch from its very
+    // first conversion - long before Test 13 runs.
+    reg  [23:0] lc_sample = 24'hA5A55A;
+
+    wire        LC1_S0;
+    wire        LC1_S1;
+    wire        LC1_PD_SCK;
+    wire        LC1_DOUT;
+
+    wire [4:0]  lc_last_pulse_count;
+    wire        lc_chan_b;
+    wire [7:0]  lc_gain;
+    wire [31:0] lc_conv_count;
+    wire [31:0] lc_err_count;
+
+    //
     // Stepper step/dir pins
     //
     reg [3:0] XYZF_STEP;
@@ -119,8 +145,55 @@ module int_core_top_tb;
         .XYZF_EN(XYZF_EN),
         .BCDE_STEP(BCDE_STEP),
         .BCDE_DIR(BCDE_DIR),
-        .BCDE_EN(PCBE_EN)
+        .BCDE_EN(BCDE_EN),
+
+        .LC1_S0(LC1_S0),
+        .LC1_S1(LC1_S1),
+        .LC1_PD_SCK(LC1_PD_SCK),
+        .LC1_DOUT(LC1_DOUT)
     );
+
+    // Simulated HX717 on the load cell pins. This is the same model the
+    // loadcell unit testbench uses, instantiated rather than copied, so
+    // the integration test is checked against exactly the same reading
+    // of the datasheet - including its T1/T2/T3/T4 timing checks, which
+    // run here too and feed lc_err_count.
+    hx717_sim hx717 (
+        .s0              (LC1_S0),
+        .s1              (LC1_S1),
+        .pd_sck          (LC1_PD_SCK),
+        .dout            (LC1_DOUT),
+
+        .sample_value    (lc_sample),
+
+        .latched_value   (),
+        .conv_count      (lc_conv_count),
+        .last_pulse_count(lc_last_pulse_count),
+        .chan_b          (lc_chan_b),
+        .gain            (lc_gain),
+        .powered_down    (),
+        .pd_level        (),
+        .err_count       (lc_err_count)
+    );
+
+    // ----------------------------------------------------------------
+    // Load cell bus trace.
+    //
+    // Watches the decoder's lc0_* port rather than the QuadSPI pins, so
+    // it separates "the decoder never delivered the access" from "the
+    // peripheral answered and the answer was lost on the way back".
+    // Gated, because it would otherwise fire on every cycle of the
+    // second-long stepper test above.
+    // ----------------------------------------------------------------
+    reg lc_bus_trace = 1'b0;
+
+    always @(posedge uut.sys_clk) begin
+        if (lc_bus_trace && uut.lc0_stb) begin
+            $display("[LC BUS] %0t stb we=%0d addr=0x%02h din=0x%08h dout=0x%08h ack=%0d",
+                     $time, uut.lc0_we, uut.lc0_addr, uut.lc0_din,
+                     uut.lc0_dout, uut.lc0_ack);
+        end
+    end
 
     // Clock generator helper - Starts from 1, pulls low, then drives high
     task clock_tick;
@@ -368,6 +441,69 @@ module int_core_top_tb;
             end
             `ASSERT_EQ(ctrl_read[7:0], 8'h00, "0b%08b",
                        "[STEPPER TRAPEZOID] Motors did not all stop within the polling timeout");
+        end
+    endtask
+
+    // ----------------------------------------------------------------
+    // Load cell polling helpers.
+    //
+    // Two of them, because REG_LC_STATUS.READY answers a different
+    // question than it looks like it does. READY means "a conversion has
+    // completed since the last write to REG_LC_CTRL" and is cleared only
+    // by a CTRL write - never by a read, because all three load cell
+    // registers share one 16-byte OctoSPI prefetch line and a read side
+    // effect would fire whenever the host merely polled STATUS.
+    //
+    // So READY tells you the FIRST sample has arrived, but stays set
+    // afterwards and cannot distinguish the second sample from the
+    // first. That is what the sequence counter in REG_LC_VALUE[31:24] is
+    // for: it steps once per conversion, and it shares a word with the
+    // value so a single read gets a pair that cannot skew.
+    // ----------------------------------------------------------------
+
+    // Polls REG_LC_STATUS every 10us until READY, then reads the value.
+    task poll_loadcell_ready;
+        input  integer timeout_polls;
+        output [31:0]  value_word;
+        reg    [31:0]  status_word;
+        integer        tries;
+        begin
+            status_word = 32'h0000_0000;
+            tries       = 0;
+            while (!status_word[LC_STATUS_READY_BIT] && tries < timeout_polls) begin
+                qspi_bus_read(LC0_BASE + REG_LC_STATUS, status_word);
+                tries = tries + 1;
+                if (!status_word[LC_STATUS_READY_BIT]) #10000;
+            end
+            `ASSERT_EQ(status_word[LC_STATUS_READY_BIT], 1'b1, "%0d",
+                       "[LOADCELL] READY never asserted within the polling timeout");
+            qspi_bus_read(LC0_BASE + REG_LC_VALUE, value_word);
+        end
+    endtask
+
+    // Polls until the sequence counter moves on from prev_seq. STATUS is
+    // read on every iteration as well, both to keep the poll shape
+    // identical to the first sample's and to prove that reading STATUS
+    // repeatedly does not disturb anything.
+    task poll_loadcell_next;
+        input  integer timeout_polls;
+        input  [7:0]   prev_seq;
+        output [31:0]  value_word;
+        reg    [31:0]  status_word;
+        integer        tries;
+        begin
+            value_word = {prev_seq, 24'h000000};
+            tries      = 0;
+            while (value_word[31:24] === prev_seq && tries < timeout_polls) begin
+                qspi_bus_read(LC0_BASE + REG_LC_STATUS, status_word);
+                qspi_bus_read(LC0_BASE + REG_LC_VALUE,  value_word);
+                tries = tries + 1;
+                if (value_word[31:24] === prev_seq) #10000;
+            end
+            `ASSERT_EQ(status_word[LC_STATUS_READY_BIT], 1'b1, "%0d",
+                       "[LOADCELL] READY should still be set on the second sample");
+            `ASSERT_NE(value_word[31:24], prev_seq, "%0d",
+                       "[LOADCELL] sequence counter never advanced within the polling timeout");
         end
     endtask
 
@@ -965,8 +1101,107 @@ module int_core_top_tb;
 
         #100;
 
+        // -------------------------------------------------------------
+        $display("--- Test 13: Load Cell Continuous Conversion at 320SPS ---");
+        // -------------------------------------------------------------
+        begin : LOADCELL_TEST
+            reg [LC_CTRL_W-1:0] lc_ctrl_expected;
+            reg [31:0]          lc_value_word;
+            reg [31:0]          lc_readback;
+            reg [1:0]           lc_rate_pins;
+            reg [7:0]           first_seq;
+            reg [7:0]           second_seq;
+
+            // ---- start continuous conversion ----------------------
+            // Channel A at gain 128, 320 SPS, no power-down, not a
+            // one-shot.
+            lc_bus_trace = 1'b1;
+
+            lc_ctrl_expected = lc_ctrl_word(1'b1,           // enable
+                                            1'b0,           // pd
+                                            LC_RATE_320HZ,
+                                            LC_MODE_A128,
+                                            LC_PD_ADC,
+                                            1'b0);          // single
+            qspi_bus_write(LC0_BASE + REG_LC_CTRL,
+                           {{(32 - LC_CTRL_W) {1'b0}}, lc_ctrl_expected});
+
+            qspi_bus_read(LC0_BASE + REG_LC_CTRL, lc_readback);
+            $display("[LOADCELL] CTRL readback: 0x%08h (expected 0x%08h)",
+                     lc_readback, {{(32 - LC_CTRL_W) {1'b0}}, lc_ctrl_expected});
+            `ASSERT_EQ(lc_readback[LC_CTRL_W-1:0], lc_ctrl_expected, "0x%03h",
+                       "[LOADCELL] CTRL readback mismatch");
+
+            // The rate has to reach the pins, not just the register -
+            // S1/S0 are what actually select the data rate on the part.
+            lc_rate_pins = {LC1_S1, LC1_S0};
+            `ASSERT_EQ(lc_rate_pins, LC_RATE_320HZ, "0b%02b",
+                       "[LOADCELL] S1/S0 not driven for 320SPS");
+
+            // ---- first sample -------------------------------------
+            poll_loadcell_ready(200, lc_value_word);
+            first_seq = lc_value_word[31:24];
+            $display("[LOADCELL] sample 1: value=0x%06h seq=%0d pulses=%0d",
+                     lc_value_word[23:0], first_seq, lc_last_pulse_count);
+
+            `ASSERT_EQ(lc_value_word[23:0], lc_sample, "0x%06h",
+                       "[LOADCELL] First sample value mismatch");
+            // Nothing may clock the part before ENABLE is written, so the
+            // very first conversion the peripheral ever performs carries
+            // sequence 1 - this also catches the peripheral running the
+            // interface while disabled.
+            `ASSERT_EQ(first_seq, 8'd1, "%0d",
+                       "[LOADCELL] First sample should carry sequence 1");
+            // 25 pulses IS the channel A / gain 128 command (Table 4),
+            // so this checks the analog front end is configured as asked
+            // rather than merely that some data came back.
+            `ASSERT_EQ(lc_last_pulse_count, 5'd25, "%0d",
+                       "[LOADCELL] Expected 25 PD_SCK pulses for CH A gain 128");
+            `ASSERT_EQ(lc_chan_b, 1'b0, "%0d",
+                       "[LOADCELL] Wrong input channel selected");
+            `ASSERT_EQ(lc_gain, 8'd128, "%0d",
+                       "[LOADCELL] Wrong PGA gain selected");
+
+            // Change the stimulus so the second sample is distinguishable
+            // from the first - otherwise a peripheral that never updated
+            // the value register would still pass. Safe to do here: the
+            // model latches its next result one full conversion period
+            // after the 25th pulse, far longer than the handful of
+            // QuadSPI transactions above take.
+            lc_sample = 24'h5A5AA5;
+
+            // ---- second sample ------------------------------------
+            poll_loadcell_next(200, first_seq, lc_value_word);
+            second_seq = lc_value_word[31:24];
+            $display("[LOADCELL] sample 2: value=0x%06h seq=%0d",
+                     lc_value_word[23:0], second_seq);
+
+            `ASSERT_EQ(lc_value_word[23:0], lc_sample, "0x%06h",
+                       "[LOADCELL] Second sample value mismatch");
+            // Exactly one, not merely different: a larger step would mean
+            // a conversion was produced and then lost, which is precisely
+            // what the sequence counter exists to make visible.
+            `ASSERT_EQ(second_seq - first_seq, 8'd1, "%0d",
+                       "[LOADCELL] Sequence must step by one per conversion");
+
+            // The model has been checking every PD_SCK edge against the
+            // datasheet's T1/T2/T3/T4 limits for the whole run, so a
+            // correct-looking value with a non-zero error count means the
+            // interface only happens to work.
+            `ASSERT_EQ(lc_err_count, 32'd0, "%0d",
+                       "[LOADCELL] HX717 protocol violations");
+
+            // Leave the peripheral idle.
+            qspi_bus_write(LC0_BASE + REG_LC_CTRL, 32'h0000_0000);
+
+            lc_bus_trace = 1'b0;
+        end
+
+        #100;
+
         report();
         $finish;
     end
 
 endmodule
+'
