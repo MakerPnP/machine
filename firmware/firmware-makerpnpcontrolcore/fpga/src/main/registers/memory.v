@@ -1,3 +1,75 @@
+// ====================================================================
+// memory.v - QuadSPI register map decoder
+//
+// Routes the single 16-bit-addressed bus from quadspi.v to one of the
+// peripheral blocks below. Blocks are 1 << PERIPHERAL_BITS = 256 bytes
+// (64 words) each; map.svh assigns the bases.
+//
+// --------------------------------------------------------------------
+// INVARIANT: NO REGISTER BEHIND THIS DECODER MAY HAVE A READ SIDE
+// EFFECT
+// --------------------------------------------------------------------
+// The reads a peripheral sees are not the reads firmware asked for.
+// Two independent prefetch mechanisms sit between the MCU and the
+// register, and neither is distinguishable at the peripheral:
+//
+//   1. quadspi.v prefetches. In STATE_DATA_R at phase_counter == 4 -
+//      halfway through shifting out the current word - it increments
+//      mem_addr and asserts mem_stb for the NEXT word, before it can
+//      know whether the master will keep clocking. If the master
+//      stops, the fetched word is parked in next_buf and never leaves
+//      the chip, but the peripheral has already been addressed and has
+//      already acked. Every burst reads exactly one word past its last
+//      clocked word.
+//
+//   2. The STM32H735 OctoSPI prefetches. In memory-mapped mode it
+//      fills a 16-byte FIFO line aligned to 16 bytes, so reading any
+//      register causes reads of all four words in that line. A read
+//      side effect on the fourth word fires when firmware merely polls
+//      the first.
+//
+// The consequence worth stating plainly: quadspi.v's prefetch does not
+// stop at block boundaries. A burst ending at 0x__FC speculatively
+// reads the next block's 0x__00 - the FIRST REGISTER OF THE NEXT
+// PERIPHERAL - and a burst ending at 0xFFFC wraps to 0x0000. A side
+// effect in one peripheral can therefore be triggered by a burst that
+// never intentionally addressed it.
+//
+// The prefetch cannot simply be removed. quadspi.v's read path has no
+// back-pressure anywhere: out_buf drives the pins on every falling
+// edge and is reloaded from next_buf at phase 7, with no wait state
+// available to stall the master. The prefetch IS the data path for
+// every word after the first (the first is covered by the separate
+// mem_stb in STATE_DUMMY, which is what the dummy phase buys time
+// for). Gating it at block boundaries would leave next_buf_valid low
+// there, so the first word of every block would clock out as
+// 0x00000000 and single-transaction reads of the whole map would
+// break.
+//
+// So if a peripheral needs to answer "has this changed since I last
+// looked?", do NOT clear a flag on read. Publish a sequence counter
+// that increments when the data changes and let the host compare it
+// against the last value it saw - ideally in the same 32-bit word as
+// the data, so a single read gets a pair that cannot skew.
+// loadcell.v does this in REG_LC_VALUE[31:24]. Anything that genuinely
+// must be cleared should be cleared by a WRITE, which neither prefetch
+// can issue.
+//
+// --------------------------------------------------------------------
+// ADDING A PERIPHERAL - every one of these, or it fails silently
+// --------------------------------------------------------------------
+//   1. Port declarations: <n>_stb (reg), <n>_we/<n>_addr/<n>_din
+//      (wire, out), <n>_dout/<n>_ack (wire, in)
+//   2. Holding regs <n>_we_r/<n>_addr_r/<n>_din_r, and the assigns
+//      that drive the output wires from them
+//   3. TARGET_<n> localparam, from its base in map.svh
+//   4. <n>_select wire, AND add it to the unmapped_select OR list
+//   5. Reset defaults for <n>_stb and <n>_we_r
+//   6. Request dispatch: latch <n>_addr_r/<n>_din_r/<n>_we_r, raise
+//      <n>_stb; and clear <n>_stb again in the response path
+//   7. <n>_ack ADDED TO active_ack
+//   8. TARGET_<n> in the dout_a mux, reading <n>_dout
+// ====================================================================
 module memory (
     input              reset,
     input  wire        clk_a,
