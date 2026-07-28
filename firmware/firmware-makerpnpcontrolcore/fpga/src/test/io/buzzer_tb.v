@@ -6,7 +6,7 @@ module buzzer_tb;
 
     // Testbench signals
     reg RESET;
-    reg TCXO = 0;
+    reg SYS_CLK = 0;
 
     `include "src/test/bus_io.svh"
 
@@ -19,7 +19,7 @@ module buzzer_tb;
     // Instantiate the DUT (DUT = Device Under Test)
     buzzer dut (
         .reset(RESET),
-        .sys_clk(TCXO),
+        .sys_clk(SYS_CLK),
 
         .bus_stb(stb),
         .bus_we(we),
@@ -33,8 +33,7 @@ module buzzer_tb;
         .debug(debug)
     );
 
-    // Clock generation: 100 MHz simulated clock (10ns period)
-    always #5 TCXO = ~TCXO;
+    always #10 SYS_CLK = ~SYS_CLK; // (10 * 2) = 20ns period -> 50 MHz
 
     // Simulation control
     initial begin

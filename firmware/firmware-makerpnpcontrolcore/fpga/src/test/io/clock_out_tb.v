@@ -6,7 +6,7 @@ module clock_out_tb;
 
     // Testbench signals
     reg RESET;
-    reg TCXO = 0;
+    reg SYS_CLK = 0;
 
     wire FPGA_CLK_1;
     wire FPGA_CLK_2;
@@ -15,7 +15,7 @@ module clock_out_tb;
 
     // Instantiate the DUT (DUT = Device Under Test)
     clock_out dut (
-        .sys_clk(TCXO),
+        .sys_clk(SYS_CLK),
         .reset(RESET),
         .clock_out1(FPGA_CLK_1),
         .clock_out2(FPGA_CLK_2),
@@ -23,8 +23,7 @@ module clock_out_tb;
         .clock_out4(FPGA_CLK_4)
     );
 
-    // Clock generation: 100 MHz simulated clock (10ns period)
-    always #5 TCXO = ~TCXO;
+    always #10 SYS_CLK = ~SYS_CLK; // (10 * 2) = 20ns period -> 50 MHz
 
     // Simulation control
     initial begin
@@ -33,16 +32,17 @@ module clock_out_tb;
 
         // reset pulse
         RESET = 1;
-        #10;
+        #20;
         `ASSERT_EQ(FPGA_CLK_1, 1'd1);
         `ASSERT_EQ(FPGA_CLK_2, 1'd1);
         `ASSERT_EQ(FPGA_CLK_3, 1'd1);
         `ASSERT_EQ(FPGA_CLK_4, 1'd1);
 
-        #10;
+        #20;
         RESET = 0;
 
-        #20;
+        #40;
+
         `ASSERT_EQ(FPGA_CLK_1, 1'd0);
         `ASSERT_EQ(FPGA_CLK_2, 1'd0);
         `ASSERT_EQ(FPGA_CLK_3, 1'd0);

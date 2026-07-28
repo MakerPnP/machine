@@ -9,7 +9,7 @@ module int_leds_mem_tb;
 
     // Testbench signals
     reg RESET;
-    reg TCXO = 0;
+    reg SYS_CLK = 0;
 
     `include "src/test/bus_io.svh"
 
@@ -34,7 +34,7 @@ module int_leds_mem_tb;
 
     leds dut (
         .reset(RESET),
-        .sys_clk(TCXO),
+        .sys_clk(SYS_CLK),
 
         .bus_stb(led_stb),
         .bus_we(led_we),
@@ -51,7 +51,7 @@ module int_leds_mem_tb;
 
     memory memory_map_inst (
         .reset(RESET),
-        .clk_a(TCXO),
+        .clk_a(SYS_CLK),
         .stb_a(mem_stb),
         .we_a(mem_we),
         .addr_a(mem_addr),
@@ -68,26 +68,26 @@ module int_leds_mem_tb;
     );
 
     // Clock generation: 100 MHz simulated clock (10ns period)
-    always #5 TCXO = ~TCXO;
+    always #5 SYS_CLK = ~SYS_CLK;
 
 
     task memory_write;
         input [15:0] address;
         input [31:0] data;
         begin
-            @(negedge TCXO);
+            @(negedge SYS_CLK);
             mem_addr = address;
             mem_din  = data;
             mem_we   = 1'b1;
             mem_stb   = 1'b1;
 
-            @(negedge TCXO);
+            @(negedge SYS_CLK);
             mem_we   = 1'b0;
             mem_stb   = 1'b0;
 
             // memory.v accepts the request, emits the downstream write strobe,
             // then leds.v consumes its internal strobe and updates outputs.
-            repeat (8) @(posedge TCXO);
+            repeat (8) @(posedge SYS_CLK);
         end
     endtask
 
@@ -103,9 +103,9 @@ module int_leds_mem_tb;
 
         // reset pulse
         RESET = 1;
-        repeat (4) @(posedge TCXO);
+        repeat (4) @(posedge SYS_CLK);
         RESET = 0;
-        repeat (4) @(posedge TCXO);
+        repeat (4) @(posedge SYS_CLK);
 
         memory_write(LED_BASE + REG_LED_CTRL, 32'd0);
 

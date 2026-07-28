@@ -6,7 +6,7 @@ module io_tb;
 
     // Testbench signals
     reg RESET;
-    reg TCXO = 0;
+    reg SYS_CLK = 0;
     reg [1:0] BTN;
     reg [7:0] DIN;
     reg [1:0] IAK;
@@ -28,7 +28,7 @@ module io_tb;
     // Instantiate the DUT (DUT = Device Under Test)
     io dut (
         .reset(RESET),
-        .sys_clk(TCXO),
+        .sys_clk(SYS_CLK),
 
         .bus_stb(stb),
         .bus_we(we),
@@ -48,8 +48,7 @@ module io_tb;
         .debug(debug)
     );
 
-    // Clock generation: 100 MHz simulated clock (10ns period)
-    always #5 TCXO = ~TCXO;
+    always #10 SYS_CLK = ~SYS_CLK; // (10 * 2) = 20ns period -> 50 MHz
 
     task dump_io_in_1;
         input [31:0] value;
@@ -71,7 +70,7 @@ module io_tb;
     task strobe;
         begin
             // allow for io settling before strobing
-            #20;
+            #40;
 
             stb = 1'b1;
             $display("waiting for ack");
@@ -81,7 +80,7 @@ module io_tb;
             wait(ack == 1'b0);
 
             // allow for strobe to be cleared
-            #10;
+            #20;
         end
     endtask
 
@@ -104,10 +103,10 @@ module io_tb;
 
         // reset pulse
         RESET = 1;
-        #20;
+        #40;
         RESET = 0;
 
-        #50;
+        #100;
 
         addr = 6'h04;
         strobe();

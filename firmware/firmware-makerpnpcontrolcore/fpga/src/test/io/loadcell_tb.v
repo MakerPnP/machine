@@ -20,12 +20,12 @@
 module loadcell_tb;
 
     // ------------------------------------------------------------------
-    // Clock and reset. sys_clk is the 50 MHz TCXO.
+    // Clock and reset.
     // ------------------------------------------------------------------
-    reg TCXO  = 1'b0;
+    reg SYS_CLK  = 1'b0;
     reg RESET = 1'b0;
 
-    always #10 TCXO = ~TCXO;    // 20ns period -> 50 MHz
+    always #10 SYS_CLK = ~SYS_CLK; // (10 * 2) = 20ns period -> 50 MHz
 
     // Bus master signals + bus_write/bus_read/sys_reset tasks. Note this
     // declares `dout` as the bus read-data register, which is why the
@@ -56,7 +56,7 @@ module loadcell_tb;
 
     loadcell dut (
         .reset   (RESET),
-        .sys_clk (TCXO),
+        .sys_clk (SYS_CLK),
 
         .bus_stb (stb),
         .bus_we  (we),

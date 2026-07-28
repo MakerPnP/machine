@@ -8,7 +8,7 @@ reg        ack;
 task sys_reset;
     begin
         $display("Resetting...");
-        @(negedge TCXO); // Ensure we are away from the rising edge
+        @(negedge SYS_CLK); // Ensure we are away from the rising edge
         // reset pulse (1 clock cycles minimum)
         RESET = 1;
         #20;
@@ -34,7 +34,7 @@ task bus_write(input [7:0] w_addr, input [31:0] w_data);
 `ifdef SIM_BUS_VERBOSE
         $display("[BUS_WRITE] address: %04h, value: %08h", w_addr, w_data);
 `endif
-        @(posedge TCXO);
+        @(posedge SYS_CLK);
         addr <= w_addr;
         din  <= w_data;
         we   <= 1'b1;
@@ -42,28 +42,28 @@ task bus_write(input [7:0] w_addr, input [31:0] w_data);
 
         // Wait until the slave asserts acknowledgement
         while (!ack) begin
-            @(posedge TCXO);
+            @(posedge SYS_CLK);
         end
 
         // Deassert strobe now that the transaction is acknowledged
         stb  <= 1'b0;
         we   <= 1'b0;
         while (ack) begin
-            @(posedge TCXO);
+            @(posedge SYS_CLK);
         end
     end
 endtask
 
 task bus_read(input [7:0] r_addr, output [31:0] r_data);
     begin
-        @(posedge TCXO);
+        @(posedge SYS_CLK);
         addr <= r_addr;
         we   <= 1'b0;
         stb  <= 1'b1; // Raise strobe
 
         // Wait until the slave asserts acknowledgement
         while (!ack) begin
-            @(posedge TCXO);
+            @(posedge SYS_CLK);
         end
 
         r_data = dout; // Capture the stable data
@@ -71,7 +71,7 @@ task bus_read(input [7:0] r_addr, output [31:0] r_data);
         // Deassert strobe now that the transaction is acknowledged
         stb  <= 1'b0;
         while (ack) begin
-            @(posedge TCXO);
+            @(posedge SYS_CLK);
         end
 `ifdef SIM_BUS_VERBOSE
         $display("[BUS_READ] address: %04h, value: %08h", r_addr, r_data);

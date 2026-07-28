@@ -5,7 +5,7 @@
 module ws2812_tb;
 
     reg RESET;
-    reg TCXO = 0;
+    reg SYS_CLK = 0;
 
     `include "src/test/bus_io.svh"
 
@@ -15,7 +15,7 @@ module ws2812_tb;
     reg [31:0] result;
 
     ws2812 dut (
-        .sys_clk(TCXO),
+        .sys_clk(SYS_CLK),
         .reset(RESET),
 
         .bus_stb(stb),
@@ -35,7 +35,7 @@ module ws2812_tb;
     integer decoded_leds;
     reg [23:0] led_data [0:255];
 
-    always #10 TCXO = ~TCXO; // 50 MHz
+    always #10 SYS_CLK = ~SYS_CLK; // (10 * 2) = 20ns period -> 50 MHz
 
     reg [7:0] test_index = 0;
 
@@ -248,7 +248,7 @@ module ws2812_tb;
             // ------------------------------------------------------------
             while (ws_out == 1'b0) begin
                 low_cycles = low_cycles + 1;
-                @(posedge TCXO);
+                @(posedge SYS_CLK);
 
                 if (low_cycles > max_cycles) begin
                     break;

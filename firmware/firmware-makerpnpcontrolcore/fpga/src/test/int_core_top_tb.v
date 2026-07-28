@@ -18,7 +18,7 @@ module int_core_top_tb;
 
     reg TCXO = 0;
     // Simulated clock generation
-    always #20 TCXO = ~TCXO;
+    always #10 TCXO = ~TCXO; // (10 * 2) = 20ns period -> 50 MHz
 
     //
     // QuadSPI 1
@@ -1204,4 +1204,3 @@ module int_core_top_tb;
     end
 
 endmodule
-'

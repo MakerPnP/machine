@@ -27,8 +27,8 @@ module pll(
         #100 locked = 1;
         $display("locked");
 
-        // generate 1x clock (adjust timing to match your testbench timescale)
-        forever #5 clock_out = ~clock_out;
+        // generate 1x clock (adjust timing to match testbench timescale)
+        forever #10 clock_out = ~clock_out; // (10 * 2) = 20ns period -> 50 MHz
     end
 endmodule
 `else

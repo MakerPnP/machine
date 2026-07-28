@@ -5,7 +5,7 @@
 module steppers_tb;
 
     reg RESET;
-    reg TCXO = 0;
+    reg SYS_CLK = 0;
 
     `include "src/test/bus_io.svh"
     `include "src/main/io/steppers_regs.svh"
@@ -20,7 +20,7 @@ module steppers_tb;
     reg [31:0] result;
 
     steppers dut (
-        .sys_clk(TCXO),
+        .sys_clk(SYS_CLK),
         .reset(RESET),
 
         .bus_stb(stb),
@@ -35,7 +35,7 @@ module steppers_tb;
         .global_motor_en(global_motor_en)
     );
 
-    always #10 TCXO = ~TCXO; // 50 MHz
+    always #10 SYS_CLK = ~SYS_CLK; // (10 * 2) = 20ns period -> 50 MHz
 
     reg [7:0] test_index = 0;
 

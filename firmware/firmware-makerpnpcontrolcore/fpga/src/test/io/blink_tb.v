@@ -5,7 +5,7 @@
 module blink_tb;
 
     // Testbench signals
-    reg TCXO = 0;
+    reg SYS_CLK = 0;
     wire FPGA_ACT;
     reg RESET = 1;
 
@@ -13,13 +13,12 @@ module blink_tb;
     blink #(
         .SPEED(10)   // small number for fast simulation
     ) dut (
-        .clk(TCXO),
+        .clk(SYS_CLK),
         .reset(RESET),
         .led(FPGA_ACT)
     );
 
-    // Clock generation: 100 MHz simulated clock (10ns period)
-    always #5 TCXO = ~TCXO;
+    always #10 SYS_CLK = ~SYS_CLK; // (10 * 2) = 20ns period -> 50 MHz
 
     // Simulation control
     initial begin

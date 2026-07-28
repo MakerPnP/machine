@@ -6,7 +6,7 @@ module encoders_tb;
 
     // Testbench signals
     reg RESET;
-    reg TCXO = 0;
+    reg SYS_CLK = 0;
 
     `include "src/test/bus_io.svh"
 
@@ -26,7 +26,7 @@ module encoders_tb;
     // Instantiate the DUT (DUT = Device Under Test)
     encoders dut (
         .reset(RESET),
-        .sys_clk(TCXO),
+        .sys_clk(SYS_CLK),
 
         .bus_stb(stb),
         .bus_we(we),
@@ -45,8 +45,7 @@ module encoders_tb;
         .debug(debug)
     );
 
-    // Clock generation: 100 MHz simulated clock (10ns period)
-    always #5 TCXO = ~TCXO;
+    always #10 SYS_CLK = ~SYS_CLK; // (10 * 2) = 20ns period -> 50 MHz
 
     // 2 bits so it wraps round when it overflows
     reg [1:0] transition_index = 0;
@@ -62,14 +61,14 @@ module encoders_tb;
     task transition_forwards;
     begin
         transition_index += 1;
-        ENC_ABZ[0][2:1] = transition_values[transition_index]; #20;
+        ENC_ABZ[0][2:1] = transition_values[transition_index]; #40;
     end
     endtask
 
     task transition_backwards;
     begin
         transition_index -= 1;
-        ENC_ABZ[0][2:1] = transition_values[transition_index]; #20;
+        ENC_ABZ[0][2:1] = transition_values[transition_index]; #40;
     end
     endtask
 
@@ -88,7 +87,7 @@ module encoders_tb;
     task pulse_index;
     begin
         ENC_ABZ[0][0] = 1;  // Z high
-        #20;
+        #40;
         ENC_ABZ[0][0] = 0;  // Z low
     end
     endtask
@@ -147,14 +146,14 @@ module encoders_tb;
         // ----------------------------------------
 
         pulse_index();
-        #20;
+        #40;
 
         bus_read(6'h20, result);
         $display("ENC value z pulse: %0d", result);
         `ASSERT_EQ(result, 32'd0, "%0d", "ENC index reset failed");
 
         transition_forwards();
-        #20;
+        #40;
 
         // Read encoder value
         bus_read(6'h20, result);
@@ -164,14 +163,14 @@ module encoders_tb;
         `ASSERT_EQ(result, 32'd1, "%0d", "Count after z pulse + 1 forward step incorrect");
 
         pulse_index();
-        #20;
+        #40;
 
         bus_read(6'h20, result);
         $display("ENC value z pulse: %0d", result);
         `ASSERT_EQ(result, 32'd0, "%0d", "ENC index reset failed");
 
         transition_backwards();
-        #20;
+        #40;
 
         // Read encoder value (wraps around)
         bus_read(6'h20, result);

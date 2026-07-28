@@ -5,7 +5,7 @@
 module steppers_motion_tb;
 
     reg RESET;
-    reg TCXO = 0;
+    reg SYS_CLK = 0;
     `include "src/test/bus_io.svh"
     `include "src/main/io/steppers_regs.svh"
     `include "src/main/io/steppers_shared.svh"
@@ -20,13 +20,13 @@ module steppers_motion_tb;
     reg stepper_clk;
 
     stepper_clk stepper_clk_inst (
-        .sys_clk(TCXO),
+        .sys_clk(SYS_CLK),
         .reset(RESET),
         .stepper_clk(stepper_clk)
     );
 
     steppers dut (
-        .sys_clk(TCXO),
+        .sys_clk(SYS_CLK),
         .reset(RESET),
 
         .stepper_clk(stepper_clk),
@@ -61,7 +61,7 @@ module steppers_motion_tb;
     localparam TICKS_TO_SYS_CYCLES = SYS_CLK_FREQ_HZ / BASE_STEP_FREQ_HZ;
 
     // 50 MHz Master Clock Generation
-    always #HALF_SYS_PERIOD_NS TCXO = ~TCXO;
+    always #HALF_SYS_PERIOD_NS SYS_CLK = ~SYS_CLK;
 
     // Capture Storage Array Architecture
     reg [31:0] capture_duration[2048];

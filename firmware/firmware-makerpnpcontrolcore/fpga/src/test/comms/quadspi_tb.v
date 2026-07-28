@@ -5,9 +5,8 @@
 module quadspi_tb;
 
     reg RESET;
-    reg TCXO = 0;
-    // Clock generation: 100 MHz simulated clock (10ns period)
-    always #5 TCXO = ~TCXO;
+    reg SYS_CLK = 0;
+    always #10 SYS_CLK = ~SYS_CLK; // (10 * 2) = 20ns period -> 50 MHz
 
     // Testbench MCU Emulation Wires
     reg clk = 0;
@@ -30,7 +29,7 @@ module quadspi_tb;
 
 
     quadspi qspi_uut (
-        .sys_clk(TCXO),
+        .sys_clk(SYS_CLK),
         .sck(clk),
         .cs_n(cs_n),
         .io(io),
@@ -193,7 +192,7 @@ module quadspi_tb;
         $display("--- Test 1: Sequential READ_U32_BE ---");
         // -------------------------------------------------------------
 
-        @(posedge TCXO);
+        @(posedge SYS_CLK);
 
         // TODO wait for mem_stb, then enable mem_ack in parallel with the test
         mem_ack = 1'b1;
@@ -255,7 +254,7 @@ module quadspi_tb;
         begin
             integer write_count = 0;
 
-            @(posedge TCXO);
+            @(posedge SYS_CLK);
 
             cs_n  = 0;
             io_en = 1;
@@ -294,7 +293,7 @@ module quadspi_tb;
             cs_n = 1;
 
             // Minimum sys_clk domain cycles to flush out the write
-            repeat (3) @(posedge TCXO);
+            repeat (3) @(posedge SYS_CLK);
 
             `ASSERT_EQ(mem_addr, 16'h123C, "0x%04h", "address mismatch");
 
@@ -308,7 +307,7 @@ module quadspi_tb;
         begin
             integer write_count = 0;
 
-            @(posedge TCXO);
+            @(posedge SYS_CLK);
 
             cs_n  = 0;
             io_en = 1;
@@ -346,7 +345,7 @@ module quadspi_tb;
 
             cs_n = 1;
 
-            repeat (3) @(posedge TCXO);
+            repeat (3) @(posedge SYS_CLK);
 
             `ASSERT_EQ(mem_addr, 16'h123C, "0x%04h", "address mismatch");
 
@@ -357,7 +356,7 @@ module quadspi_tb;
         $display("--- Test 5: Unknown command ignored ---");
         // -------------------------------------------------------------
 
-        @(posedge TCXO);
+        @(posedge SYS_CLK);
 
         cs_n  = 0;
         io_en = 1;
@@ -366,7 +365,7 @@ module quadspi_tb;
         send_long_word(32'hdead_beef);
         send_long_word(32'hcafe_babe);
 
-        repeat (3) @(posedge TCXO);
+        repeat (3) @(posedge SYS_CLK);
 
         `ASSERT_EQ(mem_we, 1'b0, "0x%01h", "unexpected write enable for unknown command");
 
@@ -387,7 +386,7 @@ module quadspi_tb;
                 16'h0008
             };
 
-            @(posedge TCXO);
+            @(posedge SYS_CLK);
 
             cs_n  = 0;
             io_en = 1;
