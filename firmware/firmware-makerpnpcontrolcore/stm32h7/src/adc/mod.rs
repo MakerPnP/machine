@@ -1,6 +1,6 @@
 use embassy_stm32::adc;
 use embassy_stm32::adc::{Adc, AdcChannel, BasicAdcRegs, BasicInstance};
-use crate::fpga::adc::FpgaAdcMux;
+use crate::fpga::adc::adc::FpgaAdcMux;
 
 pub struct Mux<'a, ADC, IN1, IN2>
 where

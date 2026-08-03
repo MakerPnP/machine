@@ -44,8 +44,8 @@ use firmware_makerpnpcontrolcore::adc;
 #[cfg(feature = "morse_startup")]
 use morse_core::MorseSymbol;
 use firmware_makerpnpcontrolcore::fpga::FpgaCore;
-use firmware_makerpnpcontrolcore::fpga::loadcell::FpgaLoadcell;
-use firmware_makerpnpcontrolcore::fpga::ws2812::ColorOrdering;
+use firmware_makerpnpcontrolcore::fpga::loadcell::loadcell::FpgaLoadcell;
+use firmware_makerpnpcontrolcore::fpga::ws2812::ws2812::ColorOrdering;
 use firmware_makerpnpcontrolcore::rgb::rainbow_wave;
 use firmware_makerpnpcontrolcore::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
 use firmware_makerpnpcontrolcore::stepper::fpgastepper::FpgaStepper;
@@ -449,7 +449,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     let fpga_adc_mux = fpga.adc_mux();
 
     let fpga_stepper_bank_0 = fpga.stepper_bank(0);
-    let fpga_stepper_bank_1 = fpga.stepper_bank(1);
+    let _fpga_stepper_bank_1 = fpga.stepper_bank(1);
 
     let loadcell = fpga.loadcell();
 

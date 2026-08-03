@@ -2,7 +2,7 @@ use byteorder::{BigEndian, ByteOrder};
 use embassy_stm32::mode::Blocking;
 use embassy_stm32::ospi::{
     AddressSize, Instance, Ospi, OspiWidth,
-    TransferConfig, 
+    TransferConfig,
 };
 use embassy_stm32::ospi::enums::DummyCycles;
 use defmt::*;
@@ -23,11 +23,16 @@ mod registers {
     pub const REG_BUZZER_CTRL: u16 = 0x00C0;
 }
 pub use registers::*;
-use crate::fpga::adc::FpgaAdcMux;
-use crate::fpga::loadcell::FpgaLoadcell;
-use crate::fpga::steppers::FpgaStepperBank;
-use crate::fpga::ws2812::Ws2812LedControllerBuilder;
+use crate::fpga::adc::adc::FpgaAdcMux;
+use crate::fpga::loadcell::loadcell::FpgaLoadcell;
+use crate::fpga::steppers::steppers::FpgaStepperBank;
+use crate::fpga::ws2812::ws2812::Ws2812LedControllerBuilder;
 use crate::stepper::fpgastepper::Command;
+
+pub mod loadcell;
+pub mod steppers;
+pub mod ws2812;
+pub mod adc;
 
 pub struct FpgaCore<I: Instance> {
     ospi: Ospi<'static, I, Blocking>,
@@ -510,186 +515,6 @@ impl FpgaVersion {
     }
 }
 
-pub mod loadcell {
-    use fpga_pac::loadcell0::vals::{mode, pdmode, rate};
-
-    #[derive(Debug, Copy, Clone)]
-    #[derive(defmt::Format)]
-    pub enum LoadCellError {
-        NotReady,
-        Timeout,
-        PoweredDown,
-    }
-
-    pub struct FpgaLoadcell {
-        instance: fpga_pac::loadcell0::loadcell0,
-        rate: rate
-    }
-
-    impl FpgaLoadcell {
-        pub fn new(instance: fpga_pac::loadcell0::loadcell0) -> Self {
-            Self {
-                instance,
-                rate: rate::RATE_10HZ,
-            }
-        }
-
-        pub fn set_rate(&mut self, rate: rate) {
-            self.rate = rate;
-        }
-
-        pub fn start_continuous(&self) {
-            self.instance.lc_ctrl().write(|w|{
-                w.set_rate(self.rate);
-                w.set_mode(mode::A128);
-                w.set_enable(true);
-                w.set_single(false);
-            });
-        }
-
-        pub fn start_single(&self) {
-            self.instance.lc_ctrl().write(|w|{
-                w.set_rate(self.rate);
-                w.set_mode(mode::A128);
-                w.set_enable(false);
-                w.set_single(true);
-            });
-        }
-
-        pub fn stop(&self) {
-            self.instance.lc_ctrl().write(|w|{
-                w.set_enable(false);
-                w.set_pd(true);
-                w.set_pdmode(pdmode::ALL);
-            });
-        }
-
-        pub fn read(&self) -> Result<(i32, u8), LoadCellError> {
-
-            let status = self.instance.lc_status().read();
-            if status.pd() == true {
-                return Err(LoadCellError::PoweredDown);
-            }
-
-            // timeout must be checked before checking the ready bit.
-            if status.timeout() == true {
-                return Err(LoadCellError::Timeout);
-            }
-
-            if status.ready() == false {
-                return Err(LoadCellError::NotReady);
-            }
-
-            let lc_value = self.instance.lc_value().read();
-            // bit shifting to keep the sign bit.
-            let value =  ((lc_value.value() as i32) << 8) >> 8;
-            let sequence = lc_value.seq();
-
-            Ok((value, sequence))
-        }
-    }
-}
-
-pub mod steppers {
-    use fpga_pac::steppers::vals::{dir, ramp};
-    use ioboard_main::stepper::StepperDirection;
-    use crate::stepper::fpgastepper::{RampMode, Segment};
-
-    pub struct FpgaStepperBank {
-        pub index: u8,
-        instance: fpga_pac::steppers::steppers,
-    }
-
-    impl FpgaStepperBank {
-        pub fn new(index: u8) -> Self {
-            Self {
-                index,
-                instance: fpga_pac::STEPPERS,
-            }
-        }
-
-        pub fn enable(&mut self) {
-            // currently a No-OP
-        }
-
-        pub fn set_pulse_width(&mut self, motor: u8, pulse_width: u16) {
-
-            // TODO math for calculating preset and prescaler from pulse width
-            // hard-coded to 1us for now (FPGA sys clock = 50Mhz, stepper clock = 100kHz).
-            let preset = 9;
-            let prescaler = 4;
-
-            // TODO select the right motor, hardcoded to motor 0 for now
-            self.instance.step_pls_config().modify(|w| {
-                w.set_preset0(preset);
-                defmt::trace!("PLS_CONFIG: {:08x}", w.0);
-            });
-
-            // TODO fix silently overriding the prescaler for other motors on the same bank
-            // TODO select the right bank, hardcoded to bank 0 for now
-            self.instance.step_pls_prescaler().modify(|w| {
-                w.set_prescaler0(prescaler);
-                defmt::trace!("PLS_PRESCALER: {:08x}", w.0);
-            });
-        }
-
-        pub fn send_sequence(&self, motor: u8, segments: &[Segment; 1]) {
-
-            // TODO fail gracefully if the sequence is too long or empty
-            assert!(segments.len() <= 127, "Current FPGA implementation only supports up to 127 segments per motor");
-            assert!(segments.len() > 0, "Current FPGA implementation requires at least one segment");
-
-            self.instance.step_tx_config().write(|w| {
-                w.set_motor_instance(motor);
-                w.set_num_points(segments.len() as u8);
-                defmt::trace!("TX_CONFIG: {:08x}", w.0);
-            });
-
-            for segment in segments {
-
-                // TODO extract these match blocks into 'into' impls.
-
-                let ramp = match segment.ramp_mode {
-                    RampMode::Up => ramp::UP,
-                    RampMode::Down => ramp::DOWN,
-                };
-
-                let direction = match segment.direction {
-                    StepperDirection::Normal => dir::NORMAL,
-                    StepperDirection::Reversed => dir::REVERSE,
-                };
-
-                self.instance.step_seg_ctst().write(|w| {
-                    w.set_cmd(segment.command.into());
-                    w.set_n_steps(segment.steps);
-                    w.set_dir(direction);
-                    w.set_ramp(ramp);
-                    defmt::trace!("CTST: {:08x}", w.0);
-                });
-                self.instance.step_seg_spdm().write(|w|{
-                    w.set_start_period(segment.start_period);
-                    w.set_delta_magnitude(segment.delta_magnitude);
-                    defmt::trace!("SPDM: {:08x}", w.0);
-                });
-            }
-        }
-
-        pub fn start_motor(&self, motor: u8) {
-            if self.index == 0 {
-                self.instance.step_ctrl().write(|w| {
-                    w.set_start_bank0(1 << motor);
-                    defmt::trace!("CTRL: {:08x}", w.0);
-                })
-            } else {
-                self.instance.step_ctrl().write(|w| {
-                    w.set_start_bank1(1 << motor);
-                    defmt::trace!("CTRL: {:08x}", w.0);
-                })
-            }
-        }
-    }
-}
-
 impl Into<cmd> for Command {
     fn into(self) -> cmd {
         match self {
@@ -700,109 +525,3 @@ impl Into<cmd> for Command {
     }
 }
 
-pub mod ws2812 {
-    pub struct Ws2812LedController {
-        instance: fpga_pac::ws2812_0::ws2812_0,
-    }
-
-    impl Ws2812LedController {
-        pub fn update_leds(&mut self, wrgb: &[u32]) {
-            for wrgb in wrgb.iter() {
-                self.instance.ws_data_0().write(|w| {
-                    w.0 = *wrgb;
-                });
-            }
-        }
-    }
-
-    impl Ws2812LedController {
-
-        /// use the builder to create a configured instance
-        fn new(instance: fpga_pac::ws2812_0::ws2812_0) -> Self {
-            Self {
-                instance
-            }
-        }
-    }
-
-    pub struct Ws2812LedControllerBuilder {
-        instance: usize,
-        led_count: u8,
-        color_ordering: ColorOrdering,
-    }
-
-    impl Ws2812LedControllerBuilder {
-        pub fn new(instance: usize) -> Self {
-            Self {
-                instance,
-                led_count: 0,
-                color_ordering: ColorOrdering::RGB,
-            }
-        }
-
-        pub fn with_led_count(mut self, led_count: u8) -> Self {
-            self.led_count = led_count;
-            self
-        }
-
-        pub fn with_mode(mut self, color_ordering: ColorOrdering) -> Self {
-            self.color_ordering = color_ordering;
-            self
-        }
-
-        pub fn enable(self) -> Ws2812LedController {
-            let instance = match self.instance {
-                0 => fpga_pac::WS2812_0,
-                1 => fpga_pac::WS2812_1,
-                _ => panic!("Invalid instance"),
-            };
-
-            instance.ws_ctrl().modify(|w| {
-                w.set_enabled(true);
-                w.set_mode(self.color_ordering.into());
-            });
-            instance.ws_tx_config().write(|w| {
-                w.set_leds_count(self.led_count);
-            });
-
-            Ws2812LedController::new(instance)
-        }
-    }
-
-    #[repr(u8)]
-    pub enum ColorOrdering {
-        RGB,
-        RGBW,
-        GRB,
-        GRBW,
-    }
-
-    impl Into<fpga_pac::ws2812_0::vals::mode> for ColorOrdering {
-        fn into(self) -> fpga_pac::ws2812_0::vals::mode {
-            match self {
-                ColorOrdering::RGB => fpga_pac::ws2812_0::vals::mode::RGB,
-                ColorOrdering::RGBW => fpga_pac::ws2812_0::vals::mode::RGBW,
-                ColorOrdering::GRB => fpga_pac::ws2812_0::vals::mode::GRB,
-                ColorOrdering::GRBW => fpga_pac::ws2812_0::vals::mode::GRBW,
-            }
-        }
-    }
-}
-
-pub mod adc {
-    pub struct FpgaAdcMux {}
-
-    impl FpgaAdcMux {
-        pub fn new() -> Self {
-            Self {}
-        }
-
-        pub fn select_port(&mut self, port: usize) {
-            assert!(port < 4);
-
-            fpga_pac::IO.io_out_1().modify(|w| {
-                w.set_adc_mux_sel(port as u8);
-            })
-        }
-    }
-}

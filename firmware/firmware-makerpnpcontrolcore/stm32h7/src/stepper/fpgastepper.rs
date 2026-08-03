@@ -1,6 +1,6 @@
 use embassy_time::{Duration, Instant, Timer};
 use ioboard_main::stepper::{Stepper, StepperDirection, StepperError};
-use crate::fpga::steppers::FpgaStepperBank;
+use crate::fpga::steppers::steppers::FpgaStepperBank;
 
 /// The FPGA stepper driver hardware implementation is not designed for single stepping, but can be made to...
 pub struct FpgaStepper {
