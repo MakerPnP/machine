@@ -620,8 +620,8 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 async fn loadcell_task(
     mut loadcell: FpgaLoadcell,
 ) -> ! {
-    let mut ticker = Ticker::every(Duration::from_millis(100));
-    loadcell.set_rate(rate::RATE_10HZ);
+    let mut ticker = Ticker::every(Duration::from_millis(50));
+    loadcell.set_rate(rate::RATE_20HZ);
 
     loadcell.start_continuous();
     loop {
