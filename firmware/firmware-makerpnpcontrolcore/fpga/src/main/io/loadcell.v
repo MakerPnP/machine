@@ -46,6 +46,19 @@
 // registered output data, which is also what lets the same counter
 // serve the T1 guard and the 80us power-down hold.
 //
+// WHEN DOUT IS SAMPLED
+// ---------------------------------------------------------------------
+// Each data bit is captured at the END OF ITS OWN HIGH PHASE, just
+// before that pulse's falling edge.
+//
+// Silicon presents the bit for pulse N shortly after pulse N's RISING
+// edge and holds it until the next rising edge, which is what T2 in the
+// timing table describes ("PD_SCK rising edge to DOUT data ready, max
+// 0.1us"). Capturing at the end of the high phase therefore gives the
+// widest margins available anywhere in the period: with 1us half
+// periods and a 3-FF synchronizer, the bit has had ~940ns to settle -
+// 9x the T2 maximum - and does not change for another ~1060ns.
+//
 // BUS READS HAVE NO SIDE EFFECTS
 // ---------------------------------------------------------------------
 // The MCU reaches this peripheral through the STM32H735 OctoSPI in
@@ -70,9 +83,9 @@
 //
 // which shifts the sequence byte out of the top and lets the arithmetic
 // shift do the sign extension, so no mask is needed. Sign-extending
-// here in hardware instead would mean the register no longer reports
-// what the chip actually said, which makes saturation (0x800000 /
-// 0x7FFFFF exactly) harder to detect.
+// here in hardware would mean the register no longer reports what the
+// chip actually said, which makes saturation (0x800000 / 0x7FFFFF
+// exactly) harder to detect.
 
 module loadcell (
     input  wire        reset,
@@ -98,7 +111,12 @@ module loadcell (
     // Counter widths
     // ------------------------------------------------------------------
     localparam US_CNT_W    = $clog2(LC_TIMEOUT_US + 1);
-    localparam PHASE_CNT_W = $clog2(LC_SCK_HALF_CYCLES + 1);
+    // phase_cnt serves both the PD_SCK half-period and the (longer) T1
+    // guard, so it must be sized for whichever is bigger. Sizing it from
+    // the half-period alone silently truncates the guard.
+    localparam PHASE_MAX   = (LC_T1_CYCLES > LC_SCK_HALF_CYCLES)
+                             ? LC_T1_CYCLES : LC_SCK_HALF_CYCLES;
+    localparam PHASE_CNT_W = $clog2(PHASE_MAX + 1);
 
     // Sized copies of the shared constants. The shared file states them
     // as plain integers so it stays readable; comparisons against
@@ -398,10 +416,10 @@ module loadcell (
                 end
 
                 // ------------------------------------------------------
-                // T1: DOUT falling edge to first PD_SCK rising edge,
-                // 0.1us minimum. The synchronizer has already spent 60ns
-                // of that; this adds 200ns more.
-                // ------------------------------------------------------
+                                // ------------------------------------------------------
+                // T1. Far longer than the 0.1us table minimum - see
+                // LC_T1_GUARD_US in loadcell_shared.svh for the setup
+                // time silicon actually requires.
                 ST_T1_GUARD: begin
                     pd_sck <= 1'b0;
                     if (phase_cnt >= T1_LAST) begin
@@ -435,6 +453,9 @@ module loadcell (
                     if (phase_cnt >= SCK_HALF_LAST) begin
                         phase_cnt <= {PHASE_CNT_W{1'b0}};
 
+                        // Capture this pulse's data bit just before
+                        // the falling edge - see the sampling note in
+                        // the header.
                         if (pulse_index <= DATA_PULSES) begin
                             loadcell_buffer <= {loadcell_buffer[22:0], dout_sync};
 
@@ -463,19 +484,14 @@ module loadcell (
                             end
                         end
 
-                        if (pulse_index == total_pulses) begin
-                            if (pd_armed) begin
-                                // Do NOT complete the low phase: the
-                                // power-down condition is PD_SCK staying
-                                // high after this pulse's rising edge.
-                                us_cnt <= {US_CNT_W{1'b0}};
-                                state  <= ST_PD_HOLD;
-                                `DBG_LOG(("[LC ] %0t power-down after %0d pulses, mode=%0d",
-                                          $time, pulse_index, pdmode_armed));
-                            end else begin
-                                pd_sck <= 1'b0;
-                                state  <= ST_SCK_LO;
-                            end
+                        if ((pulse_index == total_pulses) && pd_armed) begin
+                            // Do NOT complete the low phase: the
+                            // power-down condition is PD_SCK staying
+                            // high after this pulse's rising edge.
+                            us_cnt <= {US_CNT_W{1'b0}};
+                            state  <= ST_PD_HOLD;
+                            `DBG_LOG(("[LC ] %0t power-down after %0d pulses, mode=%0d",
+                                      $time, pulse_index, pdmode_armed));
                         end else begin
                             pd_sck <= 1'b0;
                             state  <= ST_SCK_LO;

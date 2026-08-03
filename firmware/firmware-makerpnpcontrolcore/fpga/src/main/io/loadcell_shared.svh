@@ -33,9 +33,21 @@ localparam LC_CLK_MHZ = 50;             // sys_clk cycles per microsecond
 localparam LC_SCK_HALF_US     = 1;
 localparam LC_SCK_HALF_CYCLES = LC_CLK_MHZ * LC_SCK_HALF_US;   // 50 cycles
 
-// Guard delay inserted between "DOUT observed low" and the first rising
-// edge, to satisfy T1 with margin on top of the input synchronizer.
-localparam LC_T1_CYCLES = LC_CLK_MHZ / 5;                      // 10 -> 200ns
+// Guard delay between "DOUT observed low" and the first rising edge.
+//
+// The timing table gives T1 a 0.1us minimum. Silicon needs considerably
+// more than that: clocked much before ~1us after DOUT falls, the part
+// has not yet placed the MSB on DOUT, and bit 23 of the conversion is
+// lost outright - DOUT holds the data-ready low level through pulse 1
+// and resumes on schedule at pulse 2, so the host reads back
+// (true & 0x7FFFFF): never negative, bits 22:0 intact.
+//
+// The datasheet's own reference C driver is the better guide here. It
+// waits "More than 1uS" after `while (DOUT==1);` before its first
+// clock, an order of magnitude beyond the table figure. 2us is used
+// below so that requirement is met with 2x margin.
+localparam LC_T1_GUARD_US = 2;
+localparam LC_T1_CYCLES   = LC_CLK_MHZ * LC_T1_GUARD_US;       // 100 -> 2us
 
 // Power-down entry: PD_SCK must stay high for longer than 80us. We hold
 // it for 100us so the requirement is met with margin over any clock
@@ -208,7 +220,16 @@ localparam LC_SIM_CONV_US_80HZ  = 1000;
 localparam LC_SIM_CONV_US_320HZ = 250;
 
 // Datasheet limits the model checks against.
-localparam LC_SIM_T1_MIN_NS   = 100;      // 0.1us
+localparam LC_SIM_T1_MIN_NS   = 100;      // 0.1us, the Table value
+
+// The setup time silicon requires between DOUT falling and the first
+// PD_SCK rising edge, as distinct from the 0.1us the timing table
+// claims. Clocked sooner than this, the part loses bit 23 of the
+// conversion (see the msb_lost handling in hx717_sim.v). The exact
+// threshold is not published; 1us is the figure implied by the
+// datasheet's reference driver, which waits "More than 1uS" after
+// `while (DOUT==1);` before clocking.
+localparam LC_SIM_T1_SETUP_NS = 1000;
 localparam LC_SIM_T3_MIN_NS   = 200;      // 0.2us
 localparam LC_SIM_T3_MAX_NS   = 50_000;   // 50us
 localparam LC_SIM_T4_MIN_NS   = 200;      // 0.2us

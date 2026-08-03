@@ -73,6 +73,19 @@
 // power-down entry - and that is what the testbench assertions cover.
 // It says nothing about accuracy or convergence.
 //
+// 0. T1 IS MODELLED AS SILICON BEHAVES, NOT AS THE TABLE READS. The
+//    timing table gives T1 (DOUT falling edge to first PD_SCK rising
+//    edge) a 0.1us minimum. That is not sufficient on real parts: clock
+//    much sooner than ~1us after DOUT falls and bit 23 of every
+//    conversion is lost, so the host reads (true & 0x7FFFFF) - never
+//    negative, bits 22:0 correct. The datasheet's own reference driver
+//    reflects this, waiting "More than 1uS" before its first clock.
+//    This model enforces LC_SIM_T1_SETUP_NS in addition to the table's
+//    0.1us and reproduces the failure exactly - DOUT holds the
+//    data-ready low level through pulse 1 and resumes on schedule at
+//    pulse 2 - rather than only counting an error. The exact threshold
+//    is not published; 1us is the figure the vendor's driver implies.
+//
 // 1. NO SETTLING TIME. The one with software consequences. The
 //    datasheet specifies 4/fo settling "from power up, reset, input
 //    channel change and gain change to valid stable output data" -
@@ -173,6 +186,11 @@ module hx717_sim (
     // genuinely been driven high at least once.
     reg        saw_rise;
 
+    // Set when the host starts clocking before the part has finished
+    // settling (T1 shorter than LC_SIM_T1_SETUP_NS). While set, the MSB
+    // never reaches DOUT - see the note in the header.
+    reg        msb_lost;
+
     real last_rise;
     real last_fall;
     real ready_time;
@@ -217,6 +235,7 @@ module hx717_sim (
         conv_count       = 32'd0;
         err_count        = 32'd0;
         saw_rise         = 1'b0;
+        msb_lost         = 1'b0;
         last_rise        = 0.0;
         last_fall        = 0.0;
         ready_time       = 0.0;
@@ -260,6 +279,7 @@ module hx717_sim (
             shifter       = sample_value;
             latched_value = sample_value;
             data_ready    = 1'b1;
+            msb_lost      = 1'b0;
             pulses        = 5'd0;
             dout          <= 1'b0;
             ready_time    = $realtime;
@@ -277,6 +297,16 @@ module hx717_sim (
             // T1: DOUT falling edge to first PD_SCK rising edge.
             if (data_ready && (($realtime - ready_time) < LC_SIM_T1_MIN_NS))
                 protocol_error("T1 violated (DOUT fall to first PD_SCK rise < 0.1us)");
+
+            // The part needs considerably longer than the table's 0.1us
+            // before it can put the MSB on DOUT. Clock too early and
+            // bit 23 is skipped outright - DOUT simply holds the
+            // data-ready low level through pulse 1, and pulse 2 presents
+            // bit 22 on schedule as if nothing happened.
+            if (data_ready && (($realtime - ready_time) < LC_SIM_T1_SETUP_NS)) begin
+                msb_lost = 1'b1;
+                protocol_error("T1 too short for the part to present the MSB - bit 23 will be lost");
+            end
         end else begin
             // T4: PD_SCK low time.
             if (($realtime - last_fall) < LC_SIM_T4_MIN_NS)
@@ -291,7 +321,18 @@ module hx717_sim (
             if (!data_ready)
                 protocol_error("data pulse issued while DOUT high (no result pending)");
             // Bit for pulse N is bit (24-N), MSB first, valid T2 later.
-            dout <= #(LC_SIM_T2_NS) shifter[P_DATA - pulses];
+            if ((pulses == 5'd1) && msb_lost) begin
+                // Bit 23 never appears. DOUT stays at the data-ready low
+                // level for this pulse; every later pulse is on schedule.
+                // The host captures {0, bit22..bit0} and reads back
+                // (true & 0x7FFFFF) - always non-negative, bits 22:0
+                // intact. Distinct from sampling on the wrong clock
+                // edge, which loses bit alignment and yields
+                // (true >> 1).
+                dout <= #(LC_SIM_T2_NS) 1'b0;
+            end else begin
+                dout <= #(LC_SIM_T2_NS) shifter[P_DATA - pulses];
+            end
         end else if (pulses == P_BASE) begin
             // 25th rising edge: DOUT returns high, this result is
             // consumed, and the next conversion begins. Restarting the
