@@ -32,6 +32,7 @@ use embassy_stm32::spi::Spi;
 use embassy_stm32::time::mhz;
 use embassy_time::{Delay, Duration, Ticker, Timer};
 use embedded_alloc::LlffHeap as Heap;
+use fpga_pac::loadcell0::vals::rate;
 use ioboard_main::stepper::Stepper;
 #[cfg(feature = "tracepin")]
 use ioboard_trace::tracepin;
@@ -43,6 +44,7 @@ use firmware_makerpnpcontrolcore::adc;
 #[cfg(feature = "morse_startup")]
 use morse_core::MorseSymbol;
 use firmware_makerpnpcontrolcore::fpga::FpgaCore;
+use firmware_makerpnpcontrolcore::fpga::loadcell::FpgaLoadcell;
 use firmware_makerpnpcontrolcore::fpga::ws2812::ColorOrdering;
 use firmware_makerpnpcontrolcore::rgb::rainbow_wave;
 use firmware_makerpnpcontrolcore::stepper::bitbash::{GpioBitbashStepper, StepperEnableMode};
@@ -449,6 +451,8 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     let fpga_stepper_bank_0 = fpga.stepper_bank(0);
     let fpga_stepper_bank_1 = fpga.stepper_bank(1);
 
+    let loadcell = fpga.loadcell();
+
     lp_spawner.spawn(unwrap!(fpga_task(fpga)));
 
     let adc1 = Adc::new(p.ADC1);
@@ -474,6 +478,10 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         p.PC0, // PC0 AIN5, ADC3_INP10, VAC_SENSE_1 (5V tolerant)
         p.PH2, // PH2 AIN6, ADC3_INP13, VAC_SENSE_2 (5V tolerant)
     )));
+
+    if true {
+        lp_spawner.spawn(unwrap!(loadcell_task(loadcell)));
+    }
 
     #[cfg(feature = "tracepin")]
     {
@@ -585,7 +593,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         hp_spawner.spawn(unwrap!(bitbash_stepper_task(StepperRunner::new(bitbash_stepper))));
     }
 
-    if true {
+    if false {
         info!("Initializing Fpga Stepper");
         let fpga_stepper = FpgaStepper::new(
             fpga_stepper_bank_0,
@@ -605,6 +613,28 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     loop {
         info!("Tick");
         ticker.next().await;
+    }
+}
+
+#[embassy_executor::task]
+async fn loadcell_task(
+    mut loadcell: FpgaLoadcell,
+) -> ! {
+    let mut ticker = Ticker::every(Duration::from_millis(100));
+    loadcell.set_rate(rate::RATE_10HZ);
+
+    loadcell.start_continuous();
+    loop {
+        // wait before reading to allow conversion to complete
+        ticker.next().await;
+        match loadcell.read() {
+            Ok((value, sequence)) => {
+                info!("Loadcell value: {}, sequence: {}", value, sequence);
+            }
+            Err(e) => {
+                error!("Loadcell read failed. error: {:?}", e);
+            }
+        }
     }
 }
 
