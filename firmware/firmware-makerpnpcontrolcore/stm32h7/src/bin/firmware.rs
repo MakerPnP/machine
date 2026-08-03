@@ -12,24 +12,27 @@ use core::ptr;
 
 use cortex_m_rt::entry;
 use defmt::*;
+use embassy_embedded_hal::SetConfig;
 use embassy_executor::SendSpawner;
 use embassy_executor::{Executor, InterruptExecutor, Spawner};
-use embassy_stm32::{spi, Peri, Peripherals};
+use embassy_stm32::{dma, i2c, spi, Peri, Peripherals};
 use embassy_stm32::eth::{PacketQueue, Sma };
 use embassy_stm32::eth::{Ethernet, GenericPhy};
 use embassy_stm32::gpio::{Level, Output, Speed, Input, Pull};
 use embassy_stm32::interrupt::{InterruptExt, Priority};
-use embassy_stm32::peripherals::{ETH, ETH_SMA, PA0_C, PA1_C, PC2_C, PC3_C, PC0, PH2, ADC3};
+use embassy_stm32::peripherals::{ETH, ETH_SMA, PA0_C, PA1_C, PC2_C, PC3_C, PC0, PH2, ADC3, PB8, PB9};
 use embassy_stm32::rng::Rng;
 use embassy_stm32::ospi::{
     ChipSelectHighTime, FIFOThresholdLevel, MemorySize, MemoryType, WrapSize,
 };
 use embassy_stm32::{bind_interrupts, eth, interrupt, peripherals, rng};
 use embassy_stm32::adc::{Adc, SampleTime};
-use embassy_stm32::mode::Blocking;
+use embassy_stm32::i2c::{Error, I2c};
+use embassy_stm32::mode::{Async, Blocking};
 use embassy_stm32::spi::mode::Master;
 use embassy_stm32::spi::Spi;
 use embassy_stm32::time::mhz;
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_time::{Delay, Duration, Ticker, Timer};
 use embedded_alloc::LlffHeap as Heap;
 use fpga_pac::loadcell0::vals::rate;
@@ -53,6 +56,11 @@ use firmware_makerpnpcontrolcore::stepper::tmc5160::Tmc5160Stepper;
 #[cfg(feature = "tracepin")]
 use firmware_makerpnpcontrolcore::trace::TracePinsService;
 
+use embassy_sync::mutex::Mutex;
+use embassy_sync::blocking_mutex::raw::{RawMutex, NoopRawMutex};
+use embedded_hal_async::i2c::I2c as AsyncI2c;
+use embedded_hal::i2c::{Error as I2cErrorTrait, ErrorKind, ErrorType, Operation, SevenBitAddress};
+
 //
 // Heap/Allocator configuration
 //
@@ -67,8 +75,17 @@ static HEAP: Heap = Heap::empty();
 bind_interrupts!(struct Irqs {
     ETH => eth::InterruptHandler;
     HASH_RNG => rng::InterruptHandler<peripherals::RNG>;
+    I2C2_EV => i2c::EventInterruptHandler<peripherals::I2C2>;
+    I2C2_ER => i2c::ErrorInterruptHandler<peripherals::I2C2>;
+    I2C3_EV => i2c::EventInterruptHandler<peripherals::I2C3>;
+    I2C3_ER => i2c::ErrorInterruptHandler<peripherals::I2C3>;
+    DMA1_STREAM4 => dma::InterruptHandler<peripherals::DMA1_CH4>;
+    DMA1_STREAM5 => dma::InterruptHandler<peripherals::DMA1_CH5>;
+    DMA1_STREAM6 => dma::InterruptHandler<peripherals::DMA1_CH6>;
+    DMA1_STREAM7 => dma::InterruptHandler<peripherals::DMA1_CH7>;
 });
 
+// I2C1 is unused, we will use it's spare interrupt.
 #[interrupt]
 unsafe fn I2C1_EV() {
     unsafe { EXECUTOR_HIGH.on_interrupt() }
@@ -76,6 +93,9 @@ unsafe fn I2C1_EV() {
 
 static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 static EXECUTOR_LOW: StaticCell<Executor> = StaticCell::new();
+
+static I2C2_BUS: StaticCell<Mutex<NoopRawMutex, I2c<'static, Async, i2c::Master>>> = StaticCell::new();
+static I2C3_BUS: StaticCell<Mutex<NoopRawMutex, I2c<'static, Async, i2c::Master>>> = StaticCell::new();
 
 #[entry]
 fn main() -> ! {
@@ -605,6 +625,32 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         hp_spawner.spawn(unwrap!(fpga_stepper_task(StepperRunner::new(fpga_stepper))));
     }
 
+    const BUS_SWITCH_ADDRESS_BASE: u8 = 0x70;
+
+    let i2c2 = I2c::new(p.I2C2, p.PH4, p.PH5, p.DMA1_CH4, p.DMA1_CH5, Irqs, Default::default());
+    let i2c2_bus =Mutex::new(i2c2);
+    let i2c2_bus = I2C2_BUS.init(i2c2_bus);
+
+    let i2c2_dev1 = I2cDevice::new(i2c2_bus);
+    let i2c2_bus_switch1 = BusSwitch::new(i2c2_bus, BUS_SWITCH_ADDRESS_BASE);
+
+    let i2c3 = I2c::new(p.I2C3, p.PH7, p.PH8, p.DMA1_CH6, p.DMA1_CH7, Irqs, Default::default());
+    let i2c3_bus = Mutex::new(i2c3);
+    let i2c3_bus = I2C3_BUS.init(i2c3_bus);
+
+    static I2C3_SWITCH1: StaticCell<BusSwitch<NoopRawMutex, I2c<'static, Async, i2c::Master>>> = StaticCell::new();
+
+    let i2c3_bus_switch1 = BusSwitch::new(i2c3_bus, BUS_SWITCH_ADDRESS_BASE);
+    let i2c3_bus_switch1 = I2C3_SWITCH1.init(i2c3_bus_switch1);
+    
+    let i2c3_switch_dev1 = i2c3_bus_switch1.add_device(0); // vacuum sensor
+    let i2c3_switch_dev2 = i2c3_bus_switch1.add_device(1); // blow sensor
+
+    // 65<P≤131 = K = 64
+    const K_100KPA: f32 = 64.0;
+    lp_spawner.spawn(unwrap!(pressure_task(i2c3_switch_dev1, "VAC", K_100KPA)));
+    lp_spawner.spawn(unwrap!(pressure_task(i2c3_switch_dev2, "BLOW", K_100KPA)));
+
     info!("Initialisation complete");
 
     info!("running");
@@ -613,6 +659,209 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     loop {
         info!("Tick");
         ticker.next().await;
+    }
+}
+
+type PRESSURE_DEVICE = BusSwitchedDevice<'static, NoopRawMutex, I2c<'static, Async, i2c::Master>>;
+
+#[embassy_executor::task(pool_size = 2)]
+async fn pressure_task(mut i2c_dev: PRESSURE_DEVICE, label: &'static str, k: f32) {
+    let mut ticker = Ticker::every(Duration::from_secs(1));
+    loop {
+        ticker.next().await;
+
+        let outbuf = [0x30, 0x0a];
+        if let Err(_e) = i2c_dev.write(0x6d, &outbuf).await {
+            error!("[{}] Failed to send command to sensor. Retrying.", label);
+            continue;
+        }
+
+        let mut ready = false;
+        let mut attempts = 0;
+        loop {
+            let mut inbuf = [0u8; 1];
+            let register_addr = [0x30; 1];
+            if let Ok(_) = i2c_dev.write_read(0x6d, &register_addr, &mut inbuf).await {
+                let sco = inbuf[0] & (1 << 3) != 0;
+                if !sco {
+                    ready = true;
+                    break;
+                }
+            } else {
+                error!("[{}] Failed to read register from sensor. Retrying ({} of 10).", label, attempts);
+                attempts += 1;
+                if attempts > 10 {
+                    break;
+                }
+            }
+            Timer::after(Duration::from_millis(20)).await;
+        }
+
+        if !ready {
+            continue;
+        }
+
+        let mut inbuf = [0u8; 5];
+        let outbuf = [0x06; 1];
+        match i2c_dev.write_read(0x6d, &outbuf, &mut inbuf).await {
+            Ok(_) => {
+                // inbuf[0]=DATA_MSB(0x06), inbuf[1]=DATA_CSB(0x07), inbuf[2]=DATA_LSB(0x08)
+                let praw: u32 = ((inbuf[0] as u32) << 16) | ((inbuf[1] as u32) << 8) | (inbuf[2] as u32);
+                let pressure_adc: i32 = ((praw << 8) as i32) >> 8; // sign-extend 24-bit -> i32
+                let pressure_pa: f32 = pressure_adc as f32 / k;
+
+                // inbuf[3]=TEMP_MSB(0x09), inbuf[4]=TEMP_LSB(0x0A)
+                let traw: u16 = ((inbuf[3] as u16) << 8) | (inbuf[4] as u16);
+                let temp_adc: i16 = traw as i16;
+                let temperature_c: f32 = temp_adc as f32 / 256.0;
+
+                info!("[{}] inbuf (pressure/temp): {:?}", label, inbuf);
+                info!("[{}] Pressure: {} Pa", label, pressure_pa);
+                info!("[{}] Temperature: {} C", label, temperature_c);
+            }
+            Err(_e) => {
+                error!("[{}] Failed to read register from sensor.", label);
+            }
+        }
+    }
+}
+
+use core::sync::atomic::{AtomicU8, Ordering};
+
+const NO_CHANNEL: u8 = 0xFF; // sentinel: valid channels are 0..=7 on an 8-way mux
+
+pub struct BusSwitch<'a, M: RawMutex, BUS> {
+    bus: &'a Mutex<M, BUS>,
+    address: u8,
+    last_channel: AtomicU8,
+}
+
+impl<'a, M: RawMutex, BUS> BusSwitch<'a, M, BUS>
+where
+    BUS: AsyncI2c,
+{
+    pub fn new(bus: &'a Mutex<M, BUS>, address: u8) -> Self {
+        Self { bus, address, last_channel: AtomicU8::new(NO_CHANNEL) }
+    }
+
+    /// Get a device handle bound to a specific channel on this switch.
+    /// Multiple devices can be created from the same `BusSwitch` and will
+    /// correctly coordinate which channel is currently selected.
+    pub fn add_device(&'a self, channel: u8) -> BusSwitchedDevice<'a, M, BUS> {
+        BusSwitchedDevice::new(self, channel)
+    }
+
+    async fn with_channel<F, R>(
+        &self,
+        channel: u8,
+        f: F,
+    ) -> Result<R, BusSwitchError<BUS::Error>>
+    where
+        F: AsyncFnOnce(&mut BUS) -> R,
+    {
+        let mut bus = self.bus.lock().await;
+
+        let should_switch = self.last_channel.load(Ordering::SeqCst) != channel;
+
+        if should_switch {
+            let mut out = [0u8; 1];
+            let mut verify = [0u8; 1];
+            out[0] = 1 << channel;
+
+            info!("Switching. Channel: {}", channel);
+
+            bus.write(self.address, &out).await.map_err(BusSwitchError::DeviceError)?;
+            bus.read(self.address, &mut verify).await.map_err(BusSwitchError::DeviceError)?;
+
+            if out[0] != verify[0] {
+                error!(
+                    "Bus switch verification failed. control: {:08b}, expected: {:08b}",
+                    verify[0],
+                    out[0]
+                );
+                return Err(BusSwitchError::UnableToSwitch)
+            }
+
+            debug!("Bus switch verified. control: {:08b}", verify[0]);
+            self.last_channel.store(channel, Ordering::SeqCst);
+        }
+
+        Ok(f(&mut bus).await)
+    }
+}
+
+#[derive(Debug)]
+pub enum BusSwitchError<E> {
+    UnableToSwitch,
+    DeviceError(E),
+}
+
+impl<E: I2cErrorTrait> I2cErrorTrait for BusSwitchError<E> {
+    fn kind(&self) -> ErrorKind {
+        match self {
+            BusSwitchError::UnableToSwitch => ErrorKind::Other,
+            BusSwitchError::DeviceError(e) => e.kind(),
+        }
+    }
+}
+
+pub struct BusSwitchedDevice<'a, M: RawMutex, BUS> {
+    switch: &'a BusSwitch<'a, M, BUS>,
+    channel: u8,
+}
+
+impl<'a, M: RawMutex, BUS> BusSwitchedDevice<'a, M, BUS> {
+    fn new(switch: &'a BusSwitch<'a, M, BUS>, channel: u8) -> Self {
+        Self { switch, channel }
+    }
+}
+
+impl<'a, M: RawMutex, BUS> ErrorType for BusSwitchedDevice<'a, M, BUS>
+where
+    BUS: AsyncI2c,
+{
+    type Error = BusSwitchError<BUS::Error>;
+}
+
+impl<'a, M: RawMutex, BUS> AsyncI2c for BusSwitchedDevice<'a, M, BUS>
+where
+    BUS: AsyncI2c,
+{
+    async fn read(&mut self, addr: u8, buf: &mut [u8]) -> Result<(), Self::Error> {
+        self.switch
+            .with_channel(self.channel, async |bus| bus.read(addr, buf).await)
+            .await?
+            .map_err(BusSwitchError::DeviceError)
+    }
+
+    async fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), Self::Error> {
+        self.switch
+            .with_channel(self.channel, async |bus| bus.write(addr, bytes).await)
+            .await?
+            .map_err(BusSwitchError::DeviceError)
+    }
+
+    async fn write_read(
+        &mut self,
+        addr: u8,
+        bytes: &[u8],
+        buf: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        self.switch
+            .with_channel(self.channel, async |bus| bus.write_read(addr, bytes, buf).await)
+            .await?
+            .map_err(BusSwitchError::DeviceError)
+    }
+
+    async fn transaction(
+        &mut self,
+        address: SevenBitAddress,
+        operations: &mut [Operation<'_>],
+    ) -> Result<(), Self::Error> {
+        self.switch
+            .with_channel(self.channel, async |bus| bus.transaction(address, operations).await)
+            .await?
+            .map_err(BusSwitchError::DeviceError)
     }
 }
 
