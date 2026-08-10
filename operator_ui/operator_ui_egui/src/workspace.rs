@@ -752,8 +752,7 @@ impl ViewportState {
                         true,
                         &mut dragged,
                         |ui, button_size| {
-                            ui.add_sized(button_size, egui::Button::new("?"))
-                                .clicked()
+                            app::show_panel_tools(&kind, ui, &mut ui_state, button_size)
                         },
                     );
                     ui.separator();
@@ -778,7 +777,7 @@ impl ViewportState {
                     _ => {}
                 }
 
-                if dump_position || window.inner.unwrap() {
+                if dump_position {
                     debug!(
                         "saving window rect. kind: {:?}, rect: {:?}",
                         toggle_state.kind, window.response.rect
@@ -889,7 +888,9 @@ impl egui_tiles::Behavior<AppPane> for TreeBehavior {
                 true,
                 false,
                 &mut dragged,
-                |_, _| (),
+                |ui, button_size| {
+                    app::show_panel_tools(&pane.kind, ui, &mut ui_state, button_size)
+                },
             );
             ui.separator();
         }
@@ -949,6 +950,8 @@ impl egui_tiles::Behavior<AppPane> for TreeBehavior {
         _tabs: &Tabs,
         _scroll_offset: &mut f32,
     ) {
+        let mut ui_state = self.ui_state.lock().unwrap();
+
         if let Some(tile_id) = _tabs.active {
             if let Some(Tile::Pane(app_pane)) = _tiles.get(tile_id) {
                 let mut dragged = false;
@@ -961,7 +964,9 @@ impl egui_tiles::Behavior<AppPane> for TreeBehavior {
                     true,
                     false,
                     &mut dragged,
-                    |_, _| (),
+                    |ui, button_size| {
+                        app::show_panel_tools(&app_pane.kind, ui, &mut ui_state, button_size)
+                    },
                 );
 
                 if dragged {

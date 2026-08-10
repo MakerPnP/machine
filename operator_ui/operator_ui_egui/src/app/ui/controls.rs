@@ -145,6 +145,10 @@ impl ControlsUi {
             });
     }
 
+    pub fn tools_ui(&mut self, ui: &mut Ui, button_size: Vec2) {
+        // no-op
+    }
+
     fn draw_jogxy_grid(ui: &mut Ui) {
         #[repr(usize)]
         enum JogDirection {

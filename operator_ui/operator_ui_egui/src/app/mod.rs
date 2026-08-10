@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use async_std::prelude::StreamExt;
 use eframe::Frame;
-use egui::{Context, Ui, Vec2, ViewportBuilder, ViewportClass, ViewportCommand, ViewportId};
+use egui::{Context, Ui, UiBuilder, Vec2, ViewportBuilder, ViewportClass, ViewportCommand, ViewportId};
 use egui_extras::install_image_loaders;
 use egui_i18n::tr;
 use egui_mobius::types::{Enqueue, ValueGuard};
@@ -511,4 +511,24 @@ pub(crate) fn show_panel_content(kind: &PaneKind, ui: &mut Ui, ui_state: &mut Ui
         PaneKind::Settings => ui_state.settings_ui.ui(ui),
         PaneKind::Status => ui_state.status_ui.ui(ui),
     }
+}
+
+pub(crate) fn show_panel_tools(kind: &PaneKind, ui: &mut Ui, ui_state: &mut UiState, button_size: Vec2) {
+
+    ui.scope_builder(UiBuilder::new().id(ui.id().with(kind)), |ui| {
+        match kind {
+            PaneKind::Camera {
+                id,
+            } => {
+                if let Some(camera_ui) = ui_state.camera_uis.get_mut(id) {
+                    camera_ui.tools_ui(ui, button_size);
+                }
+            }
+            PaneKind::Controls => ui_state.controls_ui.tools_ui(ui, button_size),
+            PaneKind::Diagnostics => ui_state.diagnostics_ui.tools_ui(ui, button_size),
+            PaneKind::Plot => ui_state.plot_ui.tools_ui(ui, button_size),
+            PaneKind::Settings => ui_state.settings_ui.tools_ui(ui, button_size),
+            PaneKind::Status => ui_state.status_ui.tools_ui(ui, button_size),
+        }
+     });
 }
