@@ -2,7 +2,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::mpsc::Sender;
 
 use eframe::emath::{NumExt, Pos2, Vec2};
-use eframe::epaint::ahash::HashMap;
 use eframe::epaint::{Color32, CornerRadius};
 use egui::{CollapsingHeader, Context, Frame, Id, Image, Rect, Sense, ThemePreference, Ui, ViewportId, WidgetText};
 use egui_i18n::tr;
@@ -352,7 +351,7 @@ impl ViewportState {
         let sender = self.command_sender.clone();
 
         if self.id == ViewportId::ROOT {
-            egui::Panel::top(ui_id.with("top_panel")).show_inside(ui, |ui| {
+            egui::Panel::top(ui_id.with("top_panel")).show(ui, |ui| {
                 egui::MenuBar::new().ui(ui, |ui| {
                     egui::Sides::new().show(
                         ui,
@@ -456,7 +455,7 @@ impl ViewportState {
             .max_size(200.0)
             .resizable(true)
             .frame(Frame::NONE.fill(side_panel_fill_color))
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 let left_panel_width = ui.available_size_before_wrap().x;
                 ui.vertical(|ui| {
                     let mut workspaces = self.workspaces.lock().unwrap();
@@ -600,7 +599,7 @@ impl ViewportState {
 
         let central_panel_response = egui::CentralPanel::default()
             .frame(Frame::NONE.fill(panel_fill_color))
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 //
                 // Tiles
                 //
@@ -1100,8 +1099,8 @@ fn show_panel_controls<T>(
 #[serde(default)]
 pub struct WorkspaceConfig {
     pub(crate) toggle_states: Vec<ToggleState>,
-    pub(crate) viewport_tree_configs: HashMap<ViewportId, ViewportTreeConfig>,
-    pub(crate) viewport_configs: HashMap<ViewportId, ViewportConfig>,
+    pub(crate) viewport_tree_configs: ahash::HashMap<ViewportId, ViewportTreeConfig>,
+    pub(crate) viewport_configs: ahash::HashMap<ViewportId, ViewportConfig>,
 }
 
 impl Default for WorkspaceConfig {

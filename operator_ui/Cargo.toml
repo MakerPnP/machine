@@ -25,15 +25,16 @@ puffin_http          = { version = "0.16.1" }
 egui-i18n            = { version = "0.2.0", features = ["fluent"] }
 
 # gui (egui)
-egui_mobius          = "0.4.0"
+egui_mobius          = "0.5.0"
 #egui_mobius          = { git = "https://github.com/makerpnp/egui_mobius", rev = "e62f97bfcf97a831bd67dd75ab5eab9585922765" }
 #egui_mobius          = { path = "../../../libraries/rust/egui/egui_mobius/crates/egui_mobius" }
-egui_tiles           = { version = "0.15.0"}
-egui_extras          = { version = "0.34.3", default-features = false }
-egui_plot            = { version = "0.35.0" }
-egui_vertical_stack  = { version = "0.2.0" }
-egui_tool_windows    = { version = "0.4.0" }
+egui_tiles           = { version = "0.16.0"}
+egui_extras          = { version = "0.35.0", default-features = false }
+egui_plot            = { version = "0.36.0" }
+egui_vertical_stack  = { version = "0.4.0" }
+egui_tool_windows    = { version = "0.5.0" }
 #egui_tool_windows    = { git = "https://github.com/makerpnp/egui_tool_windows", tag = "0.4.0" }
+ahash                = { version = "0.8.12" }
 
 # images
 image                = { version = "0.25", default-features = false }

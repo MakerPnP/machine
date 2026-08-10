@@ -7,6 +7,7 @@
     windows_subsystem = "windows"
 )]
 
+use eframe::egui_glow::HardwareAcceleration;
 use egui_i18n::tr;
 use i18n::I18nConfig;
 use operator_ui_egui::LOGO;
@@ -49,7 +50,7 @@ fn main() -> eframe::Result {
 
         // Fallback: force software renderer
         let mut sw_options = default_options.clone();
-        sw_options.hardware_acceleration = eframe::HardwareAcceleration::Off;
+        sw_options.glow_options.hardware_acceleration = HardwareAcceleration::Off;
 
         if let Err(e) = eframe::run_native(
             &app_name,
