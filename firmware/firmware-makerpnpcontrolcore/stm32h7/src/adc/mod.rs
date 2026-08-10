@@ -6,8 +6,8 @@ pub struct Mux<'a, ADC, IN1, IN2>
 where
     ADC: adc::Instance,
     <ADC as BasicInstance>::Regs: BasicAdcRegs,
-    IN1: AdcChannel<ADC>,
-    IN2: AdcChannel<ADC>,
+    IN1: AdcChannel<'a, ADC>,
+    IN2: AdcChannel<'a, ADC>,
 {
     fpga_adc_mux: FpgaAdcMux,
     adc: Adc<'a, ADC>,
@@ -16,7 +16,7 @@ where
     sample_time: <<ADC as BasicInstance>::Regs as BasicAdcRegs>::SampleTime,
 }
 
-impl<'a, ADC: adc::Instance + adc::BasicInstance, IN1: AdcChannel<ADC>, IN2: AdcChannel<ADC>> Mux<'a, ADC, IN1, IN2> {
+impl<'a, ADC: adc::Instance + adc::BasicInstance, IN1: AdcChannel<'a, ADC>, IN2: AdcChannel<'a, ADC>> Mux<'a, ADC, IN1, IN2> {
     pub fn new(
         fpga_adc_mux: FpgaAdcMux,
         adc: Adc<'a, ADC>,

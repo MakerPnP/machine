@@ -73,7 +73,7 @@ static HEAP: Heap = Heap::empty();
 //
 
 bind_interrupts!(struct Irqs {
-    ETH => eth::InterruptHandler;
+    ETH => eth::InterruptHandler<ETH>;
     HASH_RNG => rng::InterruptHandler<peripherals::RNG>;
     I2C2_EV => i2c::EventInterruptHandler<peripherals::I2C2>;
     I2C2_ER => i2c::ErrorInterruptHandler<peripherals::I2C2>;
