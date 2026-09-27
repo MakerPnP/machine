@@ -48,7 +48,7 @@ type Queue = kit::Queue<OUT_QUEUE_SIZE, AtomicCoord>;
 
 // FIXME should we *really* be using MAX_PACKET_SIZE here?
 /// Statically store our netstack
-static STACK: Stack = kit::new_target_stack(OUTQ.framed_producer(), UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX as u16);
+pub static STACK: Stack = kit::new_target_stack(OUTQ.framed_producer(), UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX as u16);
 /// Statically store our outgoing packet buffer
 static OUTQ: Queue = kit::Queue::new();
 static LOGSINK: LogSink<&'static Stack> = LogSink::new(&STACK);

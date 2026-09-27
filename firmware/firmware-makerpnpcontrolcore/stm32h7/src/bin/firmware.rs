@@ -1103,7 +1103,7 @@ impl<STEPPER: Stepper> StepperRunner<STEPPER> {
             stepper,
         } = self;
 
-        ioboard_main::run(stepper).await;
+        ioboard_main::tasks::stepper_test::run(stepper).await;
     }
 }
 
