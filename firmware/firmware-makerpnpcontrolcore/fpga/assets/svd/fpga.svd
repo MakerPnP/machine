@@ -1830,6 +1830,1671 @@
       </registers>
     </peripheral>
 
+    <!-- timer_pwm block (0x0e00 - 0x0eff) -->
+    <peripheral>
+      <name>timer_pwm</name>
+      <description>4 independent 8-bit timers (source clock, 8-bit prescaler, 8-bit auto-reload) feeding 12 flexibly-mapped PWM output channels (PM1-4, OT1-8)</description>
+      <baseAddress>0x90000e00</baseAddress>
+      <addressBlock>
+        <offset>0x0</offset>
+        <size>0x100</size>
+        <usage>registers</usage>
+      </addressBlock>
+
+      <registers>
+
+        <register>
+          <name>pwm_ctrl</name>
+          <description>master PWM output control - disabling forces every one of the 12 PWM pins LOW regardless of per-channel enable/polarity, and drives ot_en to its inactive (isolated) level</description>
+          <addressOffset>0x0000</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>output_enable</name>
+              <description>1 = PWM outputs active and ot_en drives OT1-8's isolation buffer enabled; 0 (reset default) = every PWM pin forced LOW and OT1-8 electrically isolated</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim_sync</name>
+          <description>global timer counting gate - lets every configured timer be started phase-aligned on the same sys_clk edge</description>
+          <addressOffset>0x0004</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = every timer with its own timN_ctrl.enable set counts; 0 (reset default) = no timer counts, regardless of its own enable bit</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>31</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim1_ctrl</name>
+          <description>timer 1 control</description>
+          <addressOffset>0x0008</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this timer counts (subject to tim_sync.enable)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reset</name>
+              <description>write 1 to reset this timer's counter to 0. self-clearing, always reads back 0</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+
+            <field>
+              <name>prescaler</name>
+              <description>divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim1_arr</name>
+          <description>timer 1 auto-reload value - the counter wraps to 0 the tick after reaching this value</description>
+          <addressOffset>0x000c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>auto-reload value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim1_cnt</name>
+          <description>timer 1 current counter value - also host-writable, to set an initial counter value before starting via tim_sync</description>
+          <addressOffset>0x0010</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>current counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim2_ctrl</name>
+          <description>timer 2 control</description>
+          <addressOffset>0x0014</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this timer counts (subject to tim_sync.enable)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reset</name>
+              <description>write 1 to reset this timer's counter to 0. self-clearing, always reads back 0</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+
+            <field>
+              <name>prescaler</name>
+              <description>divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim2_arr</name>
+          <description>timer 2 auto-reload value - the counter wraps to 0 the tick after reaching this value</description>
+          <addressOffset>0x0018</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>auto-reload value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim2_cnt</name>
+          <description>timer 2 current counter value - also host-writable, to set an initial counter value before starting via tim_sync</description>
+          <addressOffset>0x001c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>current counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim3_ctrl</name>
+          <description>timer 3 control</description>
+          <addressOffset>0x0020</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this timer counts (subject to tim_sync.enable)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reset</name>
+              <description>write 1 to reset this timer's counter to 0. self-clearing, always reads back 0</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+
+            <field>
+              <name>prescaler</name>
+              <description>divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim3_arr</name>
+          <description>timer 3 auto-reload value - the counter wraps to 0 the tick after reaching this value</description>
+          <addressOffset>0x0024</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>auto-reload value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim3_cnt</name>
+          <description>timer 3 current counter value - also host-writable, to set an initial counter value before starting via tim_sync</description>
+          <addressOffset>0x0028</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>current counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim4_ctrl</name>
+          <description>timer 4 control</description>
+          <addressOffset>0x002c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this timer counts (subject to tim_sync.enable)</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reset</name>
+              <description>write 1 to reset this timer's counter to 0. self-clearing, always reads back 0</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+
+            <field>
+              <name>prescaler</name>
+              <description>divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim4_arr</name>
+          <description>timer 4 auto-reload value - the counter wraps to 0 the tick after reaching this value</description>
+          <addressOffset>0x0030</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>auto-reload value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>tim4_cnt</name>
+          <description>timer 4 current counter value - also host-writable, to set an initial counter value before starting via tim_sync</description>
+          <addressOffset>0x0034</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>current counter value</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl1</name>
+          <description>PWM channel 1 (PM1) control</description>
+          <addressOffset>0x0038</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp1</name>
+          <description>PWM channel 1 (PM1) compare value</description>
+          <addressOffset>0x003c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl2</name>
+          <description>PWM channel 2 (PM2) control</description>
+          <addressOffset>0x0040</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp2</name>
+          <description>PWM channel 2 (PM2) compare value</description>
+          <addressOffset>0x0044</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl3</name>
+          <description>PWM channel 3 (PM3) control</description>
+          <addressOffset>0x0048</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp3</name>
+          <description>PWM channel 3 (PM3) compare value</description>
+          <addressOffset>0x004c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl4</name>
+          <description>PWM channel 4 (PM4) control</description>
+          <addressOffset>0x0050</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp4</name>
+          <description>PWM channel 4 (PM4) compare value</description>
+          <addressOffset>0x0054</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl5</name>
+          <description>PWM channel 5 (OT1) control</description>
+          <addressOffset>0x0058</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp5</name>
+          <description>PWM channel 5 (OT1) compare value</description>
+          <addressOffset>0x005c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl6</name>
+          <description>PWM channel 6 (OT2) control</description>
+          <addressOffset>0x0060</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp6</name>
+          <description>PWM channel 6 (OT2) compare value</description>
+          <addressOffset>0x0064</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl7</name>
+          <description>PWM channel 7 (OT3) control</description>
+          <addressOffset>0x0068</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp7</name>
+          <description>PWM channel 7 (OT3) compare value</description>
+          <addressOffset>0x006c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl8</name>
+          <description>PWM channel 8 (OT4) control</description>
+          <addressOffset>0x0070</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp8</name>
+          <description>PWM channel 8 (OT4) compare value</description>
+          <addressOffset>0x0074</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl9</name>
+          <description>PWM channel 9 (OT5) control</description>
+          <addressOffset>0x0078</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp9</name>
+          <description>PWM channel 9 (OT5) compare value</description>
+          <addressOffset>0x007c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl10</name>
+          <description>PWM channel 10 (OT6) control</description>
+          <addressOffset>0x0080</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp10</name>
+          <description>PWM channel 10 (OT6) compare value</description>
+          <addressOffset>0x0084</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl11</name>
+          <description>PWM channel 11 (OT7) control</description>
+          <addressOffset>0x0088</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp11</name>
+          <description>PWM channel 11 (OT7) compare value</description>
+          <addressOffset>0x008c</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_ctrl12</name>
+          <description>PWM channel 12 (OT8) control</description>
+          <addressOffset>0x0090</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>enable</name>
+              <description>1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>polarity</name>
+              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved0</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+
+            <field>
+              <name>timer_src</name>
+              <description>which of the 4 timers this channel compares against</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>2</bitWidth>
+              <enumeratedValues>
+
+                <enumeratedValue>
+                  <name>TIM1</name>
+                  <description>compare against timer 1's counter</description>
+                  <value>0</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM2</name>
+                  <description>compare against timer 2's counter</description>
+                  <value>1</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM3</name>
+                  <description>compare against timer 3's counter</description>
+                  <value>2</value>
+                </enumeratedValue>
+
+                <enumeratedValue>
+                  <name>TIM4</name>
+                  <description>compare against timer 4's counter</description>
+                  <value>3</value>
+                </enumeratedValue>
+
+              </enumeratedValues>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+        <register>
+          <name>pwm_cmp12</name>
+          <description>PWM channel 12 (OT8) compare value</description>
+          <addressOffset>0x0094</addressOffset>
+          <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+
+            <field>
+              <name>value</name>
+              <description>8-bit compare value, compared against the selected timer's counter</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+
+          </fields>
+        </register>
+
+      </registers>
+    </peripheral>
+
+
     <!-- system1 block (0xff00 - 0xffff) -->
     <peripheral>
       <name>system1</name>
