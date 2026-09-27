@@ -47,6 +47,10 @@ EXTRA_SRCS_loadcell := $(SRC_TEST)/io/hx717_sim.v
 EXTRA_SRCS_steppers := $(SRC_MAIN)/io/stepper_clk.v
 EXTRA_SRCS_steppers_motion := $(SRC_MAIN)/io/stepper_clk.v $(SRC_MAIN)/io/steppers.v
 EXTRA_SRCS_leds :=
+# timer_tb.v's basename ("timer") doesn't match the RTL file (timer_pwm.v),
+# so FIND_RTL can't auto-discover it - unlike timer_pwm_tb.v, whose basename
+# matches directly.
+EXTRA_SRCS_timer := $(SRC_MAIN)/io/timer_pwm.v
 
 # Special / integration TBs
 EXTRA_SRCS_int_leds_mem := $(SRC_MAIN)/io/leds.v $(SRC_MAIN)/registers/memory.v

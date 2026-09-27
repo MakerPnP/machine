@@ -117,6 +117,13 @@ module int_core_top_tb;
     reg [3:0] BCDE_DIR;
     reg       BCDE_EN;
 
+    //
+    // Timer/PWM outputs
+    //
+    wire [3:0] PM_OUT;
+    wire [7:0] OT_OUT;
+    wire       OT_EN;
+
     core_top uut (
         .TCXO(TCXO),
         .QUADSPI1_CLK(clk),
@@ -150,7 +157,11 @@ module int_core_top_tb;
         .LC1_S0(LC1_S0),
         .LC1_S1(LC1_S1),
         .LC1_PD_SCK(LC1_PD_SCK),
-        .LC1_DOUT(LC1_DOUT)
+        .LC1_DOUT(LC1_DOUT),
+
+        .PM_OUT(PM_OUT),
+        .OT_OUT(OT_OUT),
+        .OT_EN(OT_EN)
     );
 
     // Simulated HX717 on the load cell pins. This is the same model the

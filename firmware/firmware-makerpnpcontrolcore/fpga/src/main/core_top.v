@@ -32,6 +32,10 @@ module core_top (
     output wire LC1_PD_SCK,
     input wire  LC1_DOUT,
 
+    output wire [3:0] PM_OUT,
+    output wire [7:0] OT_OUT,
+    output wire       OT_EN,
+
     (* PULLUP = 1 *)
     input NWAKE_IN,
     output NWAKE_1,
@@ -129,6 +133,13 @@ module core_top (
     wire        lc0_we;
     wire        lc0_stb;
     wire        lc0_ack;
+
+    wire [7:0]  timer_pwm_addr;
+    wire [31:0] timer_pwm_din;
+    wire [31:0] timer_pwm_dout;
+    wire        timer_pwm_we;
+    wire        timer_pwm_stb;
+    wire        timer_pwm_ack;
 
     wire [15:0] led_debug;
     wire [15:0] buzzer_debug;
@@ -346,6 +357,25 @@ module core_top (
     );
 
     // ----------------------
+    // Timer/PWM
+    // ----------------------
+    timer_pwm timer_pwm_inst (
+        .reset(reset),
+        .sys_clk(sys_clk),
+
+        .bus_stb(timer_pwm_stb),
+        .bus_we(timer_pwm_we),
+        .bus_addr(timer_pwm_addr),
+        .bus_din(timer_pwm_din),
+        .bus_dout(timer_pwm_dout),
+        .bus_ack(timer_pwm_ack),
+
+        .pm_out(PM_OUT),
+        .ot_out(OT_OUT),
+        .ot_en(OT_EN)
+    );
+
+    // ----------------------
     // Instantiate Central Address Decoder
     // ----------------------
     memory memory_map_inst (
@@ -399,6 +429,13 @@ module core_top (
         .steppers_din(steppers_din),
         .steppers_dout(steppers_dout),
         .steppers_ack(steppers_ack),
+
+        .timer_pwm_stb(timer_pwm_stb),
+        .timer_pwm_we(timer_pwm_we),
+        .timer_pwm_addr(timer_pwm_addr),
+        .timer_pwm_din(timer_pwm_din),
+        .timer_pwm_dout(timer_pwm_dout),
+        .timer_pwm_ack(timer_pwm_ack),
 
         .lc0_stb(lc0_stb),
         .lc0_we(lc0_we),

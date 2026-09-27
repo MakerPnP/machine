@@ -142,7 +142,15 @@ module memory (
     output wire [7:0]  steppers_addr,
     output wire [31:0] steppers_din,
     input  wire [31:0] steppers_dout,
-    input  wire        steppers_ack
+    input  wire        steppers_ack,
+
+    // Bus Interface to Timer/PWM Module
+    output reg         timer_pwm_stb,
+    output wire        timer_pwm_we,
+    output wire [7:0]  timer_pwm_addr,
+    output wire [31:0] timer_pwm_din,
+    input  wire [31:0] timer_pwm_dout,
+    input  wire        timer_pwm_ack
 );
 
     `include "src/main/registers/map.svh"
@@ -165,12 +173,13 @@ module memory (
     localparam [7:0] TARGET_WS0         = WS0_BASE >> PERIPHERAL_BITS;
     localparam [7:0] TARGET_WS1         = WS1_BASE >> PERIPHERAL_BITS;
     localparam [7:0] TARGET_STEPPERS    = STEPPERS_BASE >> PERIPHERAL_BITS;
+    localparam [7:0] TARGET_TIMER_PWM   = TIMER_PWM_BASE >> PERIPHERAL_BITS;
     localparam [7:0] TARGET_SYSTEM1     = SYSTEM1_BASE >> PERIPHERAL_BITS;
 
     // Static Control Registers
-    reg        io_we_r, lc0_we_r, led_we_r, buzzer_we_r, encoder_we_r, ws0_we_r, ws1_we_r, steppers_we_r;
-    reg [8:0]  io_addr_r, lc0_addr_r, led_addr_r, buzzer_addr_r, encoder_addr_r, ws0_addr_r, ws1_addr_r, steppers_addr_r;
-    reg [31:0] io_din_r, lc0_din_r, led_din_r, buzzer_din_r, encoder_din_r, ws0_din_r, ws1_din_r, steppers_din_r;
+    reg        io_we_r, lc0_we_r, led_we_r, buzzer_we_r, encoder_we_r, ws0_we_r, ws1_we_r, steppers_we_r, timer_pwm_we_r;
+    reg [8:0]  io_addr_r, lc0_addr_r, led_addr_r, buzzer_addr_r, encoder_addr_r, ws0_addr_r, ws1_addr_r, steppers_addr_r, timer_pwm_addr_r;
+    reg [31:0] io_din_r, lc0_din_r, led_din_r, buzzer_din_r, encoder_din_r, ws0_din_r, ws1_din_r, steppers_din_r, timer_pwm_din_r;
 
     // Pipeline tracking elements
     reg        req_stb_r;
@@ -194,6 +203,7 @@ module memory (
     assign ws0_we        = ws0_we_r;        assign ws0_addr      = ws0_addr_r;      assign ws0_din       = ws0_din_r;
     assign ws1_we        = ws1_we_r;        assign ws1_addr      = ws1_addr_r;      assign ws1_din       = ws1_din_r;
     assign steppers_we   = steppers_we_r;   assign steppers_addr = steppers_addr_r; assign steppers_din  = steppers_din_r;
+    assign timer_pwm_we  = timer_pwm_we_r;  assign timer_pwm_addr = timer_pwm_addr_r; assign timer_pwm_din = timer_pwm_din_r;
 
     // Fast, localized combinatorial target decode
     wire [7:0] target_a = addr_a[15:8];
@@ -205,7 +215,7 @@ module memory (
     reg unmapped_stb = 0;
     reg unmapped_ack = 0;
 
-    wire active_ack = led_ack | io_ack | lc0_ack | buzzer_ack | encoder_ack | ws0_ack | ws1_ack | system0_ack | system1_ack | unmapped_ack | steppers_ack;
+    wire active_ack = led_ack | io_ack | lc0_ack | buzzer_ack | encoder_ack | ws0_ack | ws1_ack | system0_ack | system1_ack | unmapped_ack | steppers_ack | timer_pwm_ack;
 
     // These evaluate completely independently of bus_busy or ack_a logic loops
     wire system0_select   = (req_target_r == TARGET_SYSTEM0);
@@ -218,6 +228,7 @@ module memory (
     wire buzzer_select    = (req_target_r == TARGET_BUZZER);
     wire encoder_select   = (req_target_r == TARGET_ENCODER);
     wire steppers_select  = (req_target_r == TARGET_STEPPERS);
+    wire timer_pwm_select = (req_target_r == TARGET_TIMER_PWM);
 
     wire unmapped_select = !(
         system0_select |
@@ -229,6 +240,7 @@ module memory (
         led_select |
         buzzer_select |
         steppers_select |
+        timer_pwm_select |
         encoder_select
     );
 
@@ -256,6 +268,7 @@ module memory (
             ws0_stb <= 1'b0;
             ws1_stb <= 1'b0;
             steppers_stb <= 1'b0;
+            timer_pwm_stb <= 1'b0;
             system0_stb <= 1'b0;
             system1_stb <= 1'b0;
             unmapped_stb <= 1'b0;
@@ -268,6 +281,7 @@ module memory (
             ws0_we_r <= 1'b0;
             ws1_we_r <= 1'b0;
             steppers_we_r <= 1'b0;
+            timer_pwm_we_r <= 1'b0;
         end else begin
             ack_a <= 1'b0;
 
@@ -290,6 +304,7 @@ module memory (
                         TARGET_WS0:      dout_a <= ws0_dout;
                         TARGET_WS1:      dout_a <= ws1_dout;
                         TARGET_STEPPERS: dout_a <= steppers_dout;
+                        TARGET_TIMER_PWM: dout_a <= timer_pwm_dout;
                         // SYSTEM0/SYSTEM1 or un-mapped
                         default:         dout_a <= global_dout_r;
                     endcase
@@ -340,6 +355,7 @@ module memory (
                 ws0_stb <= 1'b0;
                 ws1_stb <= 1'b0;
                 steppers_stb <= 1'b0;
+                timer_pwm_stb <= 1'b0;
                 system0_stb <= 1'b0;
                 system1_stb <= 1'b0;
                 unmapped_stb <= 1'b0;
@@ -394,6 +410,12 @@ module memory (
                     steppers_din_r  <= req_din_r;
                     steppers_we_r   <= req_we_r;
                     steppers_stb    <= 1'b1;
+                end
+                if (timer_pwm_select) begin
+                    timer_pwm_addr_r <= req_addr_r;
+                    timer_pwm_din_r  <= req_din_r;
+                    timer_pwm_we_r   <= req_we_r;
+                    timer_pwm_stb    <= 1'b1;
                 end
                 // FUTURE consider making system0 and system1 real peripherals
                 if (system0_select) begin
