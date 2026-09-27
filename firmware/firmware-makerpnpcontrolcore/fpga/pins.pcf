@@ -151,3 +151,21 @@ set_io LC1_DOUT D8
 set_io LC1_PD_SCK C8
 set_io LC1_S0 D7
 set_io LC1_S1 C7
+
+### PM1-4 pins
+set_io PM_OUT[0] C6
+set_io PM_OUT[1] D6
+set_io PM_OUT[2] C5
+set_io PM_OUT[3] D5
+
+### OT1-8 pins
+set_io OT_OUT[0] B8
+set_io OT_OUT[1] A5
+set_io OT_OUT[2] B5
+set_io OT_OUT[3] A2
+set_io OT_OUT[4] B2
+set_io OT_OUT[5] A1
+set_io OT_OUT[6] B1
+set_io OT_OUT[7] C2
+
+set_io OT_EN C1
