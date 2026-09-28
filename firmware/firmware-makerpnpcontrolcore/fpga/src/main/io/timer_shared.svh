@@ -41,10 +41,23 @@ localparam TIM_CTRL_PRESCALER_W   = 8;
 
 // --------------------------------------------------------------------
 // TIM_SYNC bit layout
-//   [0] ENABLE  1 = every timer with its own CTRL.ENABLE set counts;
-//               0 = no timer counts, regardless of its own CTRL.ENABLE
+//   [0]    ENABLE      1 = every timer with its own CTRL.ENABLE set
+//                       counts; 0 = no timer counts, regardless of its
+//                       own CTRL.ENABLE
+//   [1]    reserved
+//   [7:2]  PRESCALER   divide-1, shared by all 4 timers, applied ahead
+//                       of each timer's own TIMx_CTRL.PRESCALER: a
+//                       timer only advances on sys_clk cycles this
+//                       shared stage "ticks" on, so the effective divide
+//                       to one timer TICK is
+//                       (TIM_SYNC.PRESCALER+1) * (TIMx_CTRL.PRESCALER+1)
+//                       sys_clk cycles - see timer_pwm.v's module header
+//                       for why this sits ahead of, not instead of, each
+//                       timer's own prescaler.
 // --------------------------------------------------------------------
-localparam TIM_SYNC_ENABLE_BIT = 0;
+localparam TIM_SYNC_ENABLE_BIT     = 0;
+localparam TIM_SYNC_PRESCALER_LSB  = 2;
+localparam TIM_SYNC_PRESCALER_W    = 6;
 
 // --------------------------------------------------------------------
 // PWM_CTRL (global) bit layout
@@ -176,6 +189,14 @@ function automatic [31:0] tim_ctrl_word;
     input [7:0]  prescaler;
     begin
         tim_ctrl_word = {16'd0, prescaler, 6'd0, rst, enable};
+    end
+endfunction
+
+function automatic [31:0] tim_sync_word;
+    input        enable;
+    input [5:0]  prescaler;
+    begin
+        tim_sync_word = {24'd0, prescaler, 1'd0, enable};
     end
 endfunction
 

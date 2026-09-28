@@ -1871,7 +1871,7 @@
 
         <register>
           <name>tim_sync</name>
-          <description>global timer counting gate - lets every configured timer be started phase-aligned on the same sys_clk edge</description>
+          <description>global timer counting gate - lets every configured timer be started phase-aligned on the same sys_clk edge, plus a shared prescaler ahead of all 4 timers' own prescalers</description>
           <addressOffset>0x0004</addressOffset>
           <size>32</size>
           <access>read-write</access>
@@ -1886,10 +1886,24 @@
             </field>
 
             <field>
-              <name>reserved</name>
+              <name>reserved0</name>
               <description>reserved, keep at reset value</description>
               <bitOffset>1</bitOffset>
-              <bitWidth>31</bitWidth>
+              <bitWidth>1</bitWidth>
+            </field>
+
+            <field>
+              <name>prescaler</name>
+              <description>divide-1, shared by all 4 timers ahead of each timer's own timN_ctrl.prescaler: a timer only advances on a sys_clk cycle this shared stage ticks on, so the effective divide to one timer tick is (prescaler+1) * (timN_ctrl.prescaler+1) sys_clk cycles. Parked at this value (not counting) whenever enable=0, so every timer's phase relative to it is deterministic the instant sync starts</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+
+            <field>
+              <name>reserved1</name>
+              <description>reserved, keep at reset value</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
             </field>
 
           </fields>

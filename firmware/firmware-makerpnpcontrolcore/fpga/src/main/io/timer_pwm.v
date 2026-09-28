@@ -24,6 +24,24 @@
 //   the same "arm everything, then fire together" shape as steppers.v's
 //   start-strobe bitmap, but for phase-aligning free-running counters
 //   instead of one-shot motion profiles.
+// - TIM_SYNC.PRESCALER is a SHARED 6-bit prescaler ahead of all 4
+//   timers' own 8-bit prescalers (a timer only advances on a sys_clk
+//   cycle this stage "ticks" on), multiplying rather than replacing
+//   them: effective divide to one timer TICK is (TIM_SYNC.PRESCALER+1)
+//   * (TIMx_CTRL.PRESCALER+1) sys_clk cycles, and a full period is that
+//   times (TIMx_ARR+1) ticks - up to 64*256*256 = 4,194,304 sys_clk
+//   cycles (50MHz/4194304 ~= 11.9Hz floor, versus ~763Hz with the
+//   8-bit-only per-timer prescaler alone). It costs one instance of the
+//   shared stage instead of widening all 4 timers' own prescaler
+//   fields, at the cost of the 4 timers no longer being able to pick
+//   arbitrarily different frequencies spanning the FULL range
+//   simultaneously - they all still share this one divide factor, only
+//   their own 8-bit prescaler/ARR vary independently on top of it.
+//   Like the per-timer prescaler, it's parked at its configured reload
+//   value (not counting) whenever TIM_SYNC.ENABLE is 0, so every
+//   timer's phase relative to the shared stage is deterministic the
+//   instant sync starts, the same guarantee TIMx_CTRL.RESET gives each
+//   timer's own counter.
 // - Each timer counts 0..ARR then wraps to 0 (STM32 upcounting mode).
 //   TIMx_CNT is directly host-writable (while a timer is stopped, this
 //   is how "different initial counter values" gets set up before the
@@ -104,6 +122,13 @@ module timer_pwm (
     // ------------------------------------------------------------------
     reg pwm_output_enable;
     reg tim_sync_enable;
+    reg [5:0] tim_sync_prescaler;   // shared prescaler ahead of all 4 timers
+    reg [5:0] tim_sync_presc_cnt;   // internal divide-down counter for it
+
+    // Combinational: this sys_clk cycle is a "global tick" - the one
+    // cycle in every (tim_sync_prescaler+1) that the 4 timers' own
+    // prescale/tick logic below is allowed to advance on.
+    wire tim_sync_tick = tim_sync_enable && (tim_sync_presc_cnt == 6'd0);
 
     // ------------------------------------------------------------------
     // Per-timer state (index 0-3 == TIM1-4)
@@ -204,6 +229,8 @@ module timer_pwm (
 
             pwm_output_enable <= 1'b0; // safe default: outputs disabled, OT_EN isolated
             tim_sync_enable   <= 1'b0;
+            tim_sync_prescaler <= 6'd0;
+            tim_sync_presc_cnt <= 6'd0;
 
             for (i = 0; i < 4; i = i + 1) begin
                 tim_enable[i]    <= 1'b0;
@@ -224,13 +251,30 @@ module timer_pwm (
             pwm_scan_addr_d      <= 4'd0;
         end else begin
             // ========================================================
-            // Free-running counters. Runs every cycle for all 4 timers;
-            // a same-cycle bus write to a timer's own registers (below,
-            // later in program order) overrides these nonblocking
-            // assignments for that timer.
+            // Shared prescaler ahead of all 4 timers (TIM_SYNC.
+            // PRESCALER). Parked at its configured reload value (not
+            // counting) whenever TIM_SYNC.ENABLE is 0, so every timer's
+            // phase relative to it is deterministic the instant sync
+            // starts - the same guarantee TIMx_CTRL.RESET gives each
+            // timer's own counter.
+            // ========================================================
+            if (tim_sync_enable) begin
+                if (tim_sync_tick)
+                    tim_sync_presc_cnt <= tim_sync_prescaler;
+                else
+                    tim_sync_presc_cnt <= tim_sync_presc_cnt - 6'd1;
+            end else begin
+                tim_sync_presc_cnt <= tim_sync_prescaler;
+            end
+
+            // ========================================================
+            // Free-running counters. Only advance on a shared "global
+            // tick" (tim_sync_tick above) - a same-cycle bus write to a
+            // timer's own registers (below, later in program order)
+            // overrides these nonblocking assignments for that timer.
             // ========================================================
             for (i = 0; i < 4; i = i + 1) begin
-                if (tim_sync_enable && tim_enable[i]) begin
+                if (tim_sync_tick && tim_enable[i]) begin
                     if (tim_presc_cnt[i] == 8'd0) begin
                         tim_presc_cnt[i] <= tim_prescaler[i];
                         if (tim_cnt[i] == tim_arr[i])
@@ -281,7 +325,8 @@ module timer_pwm (
                             end
 
                             REG_TIM_SYNC: begin
-                                tim_sync_enable <= bus_din[TIM_SYNC_ENABLE_BIT];
+                                tim_sync_enable    <= bus_din[TIM_SYNC_ENABLE_BIT];
+                                tim_sync_prescaler <= bus_din[TIM_SYNC_PRESCALER_LSB +: TIM_SYNC_PRESCALER_W];
                             end
 
                             REG_TIM1_CTRL: begin
@@ -338,7 +383,7 @@ module timer_pwm (
                     end else begin
                         case (bus_addr)
                             REG_PWM_CTRL: bus_dout <= {31'd0, pwm_output_enable};
-                            REG_TIM_SYNC: bus_dout <= {31'd0, tim_sync_enable};
+                            REG_TIM_SYNC: bus_dout <= tim_sync_word(tim_sync_enable, tim_sync_prescaler);
 
                             REG_TIM1_CTRL: bus_dout <= tim_ctrl_word(tim_enable[0], 1'b0, tim_prescaler[0]);
                             REG_TIM1_ARR:  bus_dout <= {24'd0, tim_arr[0]};
