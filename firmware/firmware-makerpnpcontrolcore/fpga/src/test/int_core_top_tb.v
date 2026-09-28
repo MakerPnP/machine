@@ -13,6 +13,8 @@ module int_core_top_tb;
     `include "src/main/io/loadcell_shared.svh"
     `include "src/main/io/steppers_regs.svh"
     `include "src/main/io/steppers_shared.svh"
+    `include "src/main/io/timer_regs.svh"
+    `include "src/main/io/timer_shared.svh"
     `include "src/main/registers/system0_regs.svh"
     `include "src/main/registers/system1_regs.svh"
 
@@ -517,6 +519,71 @@ module int_core_top_tb;
                        "[LOADCELL] sequence counter never advanced within the polling timeout");
         end
     endtask
+
+    // ----------------------------------------------------------------
+    // Golden-model helpers for Test 14 (timer_pwm multi-frequency test)
+    // - identical to timer_tb.v/timer_pwm_tb.v's functions of the same
+    // name; see those files for the full rationale. Duplicated locally
+    // per this codebase's convention of per-testbench golden-model
+    // helpers (e.g. steppers_motion_tb.v's period_at_step).
+    // ----------------------------------------------------------------
+    function automatic integer simulate_timer_cnt_global;
+        input integer global_prescaler;
+        input integer global_presc_start;
+        input integer prescaler;
+        input integer arr;
+        input integer start_cnt;
+        input integer start_presc_cnt;
+        input integer cycles;
+        integer k, cnt, presc, gpresc;
+        begin
+            cnt    = start_cnt;
+            presc  = start_presc_cnt;
+            gpresc = global_presc_start;
+            for (k = 0; k < cycles; k = k + 1) begin
+                if (gpresc == 0) begin
+                    gpresc = global_prescaler;
+                    if (presc == 0) begin
+                        presc = prescaler;
+                        if (cnt == arr) cnt = 0;
+                        else cnt = cnt + 1;
+                    end else begin
+                        presc = presc - 1;
+                    end
+                end else begin
+                    gpresc = gpresc - 1;
+                end
+            end
+            simulate_timer_cnt_global = cnt;
+        end
+    endfunction
+
+    function automatic level_for;
+        input integer cnt;
+        input integer cmp;
+        input         polarity;
+        begin
+            level_for = (cnt < cmp) ? polarity : !polarity;
+        end
+    endfunction
+
+    // pwm_level[ch] updates a full two cycles after cmp_scan itself
+    // reads ch, and that update's comparator reads tim_cnt as of K-1
+    // cycles - see timer_tb.v's identical function for the full,
+    // empirically-confirmed rationale.
+    function automatic integer last_scan_update_cycle;
+        input integer channel;
+        input integer scan_ref;
+        input integer n;
+        integer delta;
+        integer k;
+        begin
+            delta = (channel - scan_ref + 2 + 12) % 12;
+            if (delta == 0) delta = 12;
+            k = delta + 12 * ((n - delta) / 12);
+            last_scan_update_cycle = k - 1;
+        end
+    endfunction
 
     // Testbench execution variables
     reg [7:0] read_byte;
@@ -1206,6 +1273,187 @@ module int_core_top_tb;
             qspi_bus_write(LC0_BASE + REG_LC_CTRL, 32'h0000_0000);
 
             lc_bus_trace = 1'b0;
+        end
+
+        #100;
+
+        // -------------------------------------------------------------
+        $display("--- Test 14: timer_pwm multi-frequency/multi-duty scenario (4 timers, 12 channels) ---");
+        // -------------------------------------------------------------
+        begin : TIMER_PWM_SCENARIO_TEST
+            // Requested vs. actually-achievable frequencies, given the
+            // shared 6-bit TIM_SYNC.PRESCALER ahead of each timer's own
+            // 8-bit prescaler/ARR (see timer_pwm.v's module header):
+            // TIM1 must reach a 1,000,000 total divide (50Hz) while TIM3
+            // wants a SMALL total divide (~260, for ~192kHz) - since the
+            // prescaler is one shared register for all 4 timers, G=16
+            // is the smallest value that keeps TIM1 (50Hz) reachable at
+            // all (8-bit x 8-bit per-timer fields alone cap out at
+            // 65536:1), which in turn leaves TIM3 unable to land exactly
+            // on 192kHz - 195,312.5Hz (+1.7%) is the closest achievable
+            // at that shared prescaler value.
+            //
+            //   TIM1: requested   50Hz,   actual ~50.003Hz    (+0.006%)
+            //   TIM2: requested   10kHz,  actual ~10,016.03Hz (+0.16%)
+            //   TIM3: requested   192kHz, actual  195,312.5Hz (+1.7%)
+            //   TIM4: requested   200Hz,  actual  200Hz exactly
+            //
+            // Duty cycles land exactly on TIM1/TIM2/TIM4's channels
+            // (their ARR values were chosen specifically to divide
+            // evenly into the requested percentages); TIM3's small ARR
+            // (16) only allows 1/16 granularity, so its channels land on
+            // the nearest achievable sixteenth instead of the literal
+            // requested percentage - see channel_cmp below.
+            localparam GLOBAL_PRESCALER_REG = 15; // divide-16, shared by all 4 timers
+
+            integer prescaler_reg_tbl [0:3]; // TIM1-4
+            integer arr_reg_tbl       [0:3];
+            integer channel_timer     [0:11]; // which TIM0-3 each channel watches
+            integer channel_polarity  [0:11];
+            integer channel_cmp       [0:11];
+
+            integer cnt_ref   [0:3];
+            integer presc_ref [0:3];
+            integer cmp_scan_ref;
+            integer global_presc_ref;
+            integer expected_cnt;
+            integer update_cycle;
+            reg     expected_lvl;
+            integer t, ch;
+            reg [31:0] rd;
+
+            prescaler_reg_tbl[0] = 247; arr_reg_tbl[0] = 251; // TIM1 ~50Hz
+            prescaler_reg_tbl[1] = 7;   arr_reg_tbl[1] = 38;  // TIM2 ~10kHz
+            prescaler_reg_tbl[2] = 0;   arr_reg_tbl[2] = 15;  // TIM3 ~195.3kHz
+            prescaler_reg_tbl[3] = 124; arr_reg_tbl[3] = 124; // TIM4 200Hz
+
+            // PM1-4 (ch0-3) -> TIM3 @ 20/40/60/80% (nearest achievable: 1/16 steps)
+            channel_timer[0] = 2; channel_polarity[0] = PWM_POLARITY_NORMAL; channel_cmp[0] = 3;  // PM1 18.75%
+            channel_timer[1] = 2; channel_polarity[1] = PWM_POLARITY_NORMAL; channel_cmp[1] = 6;  // PM2 37.5%
+            channel_timer[2] = 2; channel_polarity[2] = PWM_POLARITY_NORMAL; channel_cmp[2] = 10; // PM3 62.5%
+            channel_timer[3] = 2; channel_polarity[3] = PWM_POLARITY_NORMAL; channel_cmp[3] = 13; // PM4 81.25%
+            // OT1-2 -> TIM1 @ 25%/75%
+            channel_timer[4] = 0; channel_polarity[4] = PWM_POLARITY_NORMAL;   channel_cmp[4] = 63;  // OT1 25%
+            channel_timer[5] = 0; channel_polarity[5] = PWM_POLARITY_INVERTED; channel_cmp[5] = 189; // OT2 75%
+            // OT3 -> TIM2 @ 33% (exact 1/3, ARR chosen divisible by 3)
+            channel_timer[6] = 1; channel_polarity[6] = PWM_POLARITY_NORMAL; channel_cmp[6] = 13; // OT3 33.33%
+            // OT4 -> TIM3 @ 33% (nearest achievable at 1/16 steps)
+            channel_timer[7] = 2; channel_polarity[7] = PWM_POLARITY_INVERTED; channel_cmp[7] = 5; // OT4 31.25%
+            // OT5-8 -> TIM4 @ 20/40/60/80% (exact, ARR divisible by 5)
+            channel_timer[8]  = 3; channel_polarity[8]  = PWM_POLARITY_NORMAL; channel_cmp[8]  = 25;  // OT5 20%
+            channel_timer[9]  = 3; channel_polarity[9]  = PWM_POLARITY_NORMAL; channel_cmp[9]  = 50;  // OT6 40%
+            channel_timer[10] = 3; channel_polarity[10] = PWM_POLARITY_NORMAL; channel_cmp[10] = 75;  // OT7 60%
+            channel_timer[11] = 3; channel_polarity[11] = PWM_POLARITY_NORMAL; channel_cmp[11] = 100; // OT8 80%
+
+            // ---- configure all 4 timers: reset+prescaler, ARR, then enable ----
+            for (t = 0; t < 4; t = t + 1) begin
+                qspi_bus_write(TIMER_PWM_BASE + tim_ctrl_reg(t[1:0]),
+                                tim_ctrl_word(1'b0, 1'b1, prescaler_reg_tbl[t][7:0]));
+                qspi_bus_write(TIMER_PWM_BASE + tim_arr_reg(t[1:0]), {24'd0, arr_reg_tbl[t][7:0]});
+                qspi_bus_write(TIMER_PWM_BASE + tim_ctrl_reg(t[1:0]),
+                                tim_ctrl_word(1'b1, 1'b0, prescaler_reg_tbl[t][7:0]));
+            end
+
+            // ---- configure all 12 PWM channels ----
+            for (ch = 0; ch < 12; ch = ch + 1) begin
+                qspi_bus_write(TIMER_PWM_BASE + pwm_ctrl_reg(ch[3:0]),
+                                pwm_ctrl_word(1'b1, channel_polarity[ch], channel_timer[ch][1:0]));
+                qspi_bus_write(TIMER_PWM_BASE + pwm_cmp_reg(ch[3:0]), {24'd0, channel_cmp[ch][7:0]});
+            end
+
+            // ---- sanity: read a couple of registers back over QSPI to
+            // prove the bus path (QSPI -> memory.v decoder -> timer_pwm.v)
+            // works end-to-end, not just the direct-bus unit tests ----
+            qspi_bus_read(TIMER_PWM_BASE + tim_ctrl_reg(2'd2), rd);
+            `ASSERT_EQ(rd, tim_ctrl_word(1'b1, 1'b0, prescaler_reg_tbl[2][7:0]), "0x%08h",
+                       "[TIMER_PWM SCENARIO] TIM3_CTRL readback mismatch");
+            qspi_bus_read(TIMER_PWM_BASE + pwm_cmp_reg(4'd7), rd);
+            `ASSERT_EQ(rd, {24'd0, channel_cmp[7][7:0]}, "0x%08h",
+                       "[TIMER_PWM SCENARIO] OT4's PWM_CMP readback mismatch");
+
+            // ---- global output enable, then verify every configured
+            // channel is frozen at its pre-compare level before TIM_SYNC
+            // (CNT=0 on every timer, every CMP>0, so normal-polarity
+            // channels read LOW and inverted-polarity channels read
+            // HIGH) - settled >=12 sys_clk cycles so the shared, round-
+            // robin comparator (see timer_pwm.v) has revisited every
+            // channel at least once since configuration.
+            qspi_bus_write(TIMER_PWM_BASE + REG_PWM_CTRL, 32'h1);
+            repeat (13) @(posedge uut.sys_clk);
+            `ASSERT_EQ(PM_OUT, 4'b0000, "0b%04b",
+                       "[TIMER_PWM SCENARIO] PM outputs should all be LOW before TIM_SYNC");
+            `ASSERT_EQ(OT_OUT, 8'b00001010, "0b%08b",
+                       "[TIMER_PWM SCENARIO] OT outputs mismatch before TIM_SYNC (OT4/OT2 inverted -> HIGH)");
+
+            // ---- start every timer AND arm the shared prescaler in the
+            // same write ----
+            qspi_bus_write(TIMER_PWM_BASE + REG_TIM_SYNC,
+                            tim_sync_word(1'b1, GLOBAL_PRESCALER_REG[5:0]));
+
+            // Settle a few sys_clk cycles (waited on the DUT's own
+            // internal clock, so this is robust regardless of the QSPI
+            // transaction's own timing), then snapshot the baseline.
+            repeat (3) @(posedge uut.sys_clk);
+            #1;
+            for (t = 0; t < 4; t = t + 1) begin
+                cnt_ref[t]   = uut.timer_pwm_inst.tim_cnt[t];
+                presc_ref[t] = uut.timer_pwm_inst.tim_presc_cnt[t];
+            end
+            cmp_scan_ref     = uut.timer_pwm_inst.cmp_scan;
+            global_presc_ref = uut.timer_pwm_inst.tim_sync_presc_cnt;
+
+            // ---- checkpoint 1: 300 sys_clk cycles - enough for TIM3
+            // (~195kHz, 16 cycles/tick) and TIM2 (~10kHz, 128 cycles/
+            // tick) to have advanced several ticks; TIM1 (~50Hz, 3968
+            // cycles/tick) and TIM4 (200Hz, 2000 cycles/tick) correctly
+            // have NOT ticked yet at this point - both checked below.
+            repeat (300) @(posedge uut.sys_clk);
+            #1;
+            for (t = 0; t < 4; t = t + 1) begin
+                expected_cnt = simulate_timer_cnt_global(GLOBAL_PRESCALER_REG, global_presc_ref,
+                                                          prescaler_reg_tbl[t], arr_reg_tbl[t],
+                                                          cnt_ref[t], presc_ref[t], 300);
+                `ASSERT_EQ(uut.timer_pwm_inst.tim_cnt[t], expected_cnt[7:0], "%0d",
+                           $sformatf("[TIMER_PWM SCENARIO] TIM%0d CNT mismatch at checkpoint 1", t + 1));
+            end
+            for (ch = 0; ch < 12; ch = ch + 1) begin
+                t = channel_timer[ch];
+                update_cycle = last_scan_update_cycle(ch, cmp_scan_ref, 300);
+                expected_cnt = simulate_timer_cnt_global(GLOBAL_PRESCALER_REG, global_presc_ref,
+                                                          prescaler_reg_tbl[t], arr_reg_tbl[t],
+                                                          cnt_ref[t], presc_ref[t], update_cycle);
+                expected_lvl = level_for(expected_cnt, channel_cmp[ch], channel_polarity[ch]);
+                `ASSERT_EQ((ch < 4) ? PM_OUT[ch] : OT_OUT[ch - 4], expected_lvl, "%0d",
+                           $sformatf("[TIMER_PWM SCENARIO] channel %0d level mismatch at checkpoint 1", ch));
+            end
+
+            // ---- checkpoint 2: 4200 sys_clk cycles total - past TIM1's
+            // first tick (3968 cycles) and TIM4's first two ticks (2000
+            // cycles each), so every one of the 4 timers has now
+            // definitely counted at least once.
+            repeat (3900) @(posedge uut.sys_clk); // 300 + 3900 = 4200 total
+            #1;
+            for (t = 0; t < 4; t = t + 1) begin
+                expected_cnt = simulate_timer_cnt_global(GLOBAL_PRESCALER_REG, global_presc_ref,
+                                                          prescaler_reg_tbl[t], arr_reg_tbl[t],
+                                                          cnt_ref[t], presc_ref[t], 4200);
+                `ASSERT_EQ(uut.timer_pwm_inst.tim_cnt[t], expected_cnt[7:0], "%0d",
+                           $sformatf("[TIMER_PWM SCENARIO] TIM%0d CNT mismatch at checkpoint 2", t + 1));
+            end
+            for (ch = 0; ch < 12; ch = ch + 1) begin
+                t = channel_timer[ch];
+                update_cycle = last_scan_update_cycle(ch, cmp_scan_ref, 4200);
+                expected_cnt = simulate_timer_cnt_global(GLOBAL_PRESCALER_REG, global_presc_ref,
+                                                          prescaler_reg_tbl[t], arr_reg_tbl[t],
+                                                          cnt_ref[t], presc_ref[t], update_cycle);
+                expected_lvl = level_for(expected_cnt, channel_cmp[ch], channel_polarity[ch]);
+                `ASSERT_EQ((ch < 4) ? PM_OUT[ch] : OT_OUT[ch - 4], expected_lvl, "%0d",
+                           $sformatf("[TIMER_PWM SCENARIO] channel %0d level mismatch at checkpoint 2", ch));
+            end
+
+            // Leave the peripheral idle.
+            qspi_bus_write(TIMER_PWM_BASE + REG_TIM_SYNC, 32'h0);
+            qspi_bus_write(TIMER_PWM_BASE + REG_PWM_CTRL, 32'h0);
         end
 
         #100;
