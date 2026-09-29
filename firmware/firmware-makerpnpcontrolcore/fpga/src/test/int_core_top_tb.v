@@ -521,69 +521,93 @@ module int_core_top_tb;
     endtask
 
     // ----------------------------------------------------------------
-    // Golden-model helpers for Test 14 (timer_pwm multi-frequency test)
-    // - identical to timer_tb.v/timer_pwm_tb.v's functions of the same
-    // name; see those files for the full rationale. Duplicated locally
-    // per this codebase's convention of per-testbench golden-model
-    // helpers (e.g. steppers_motion_tb.v's period_at_step).
+    // Waveform capture for Test 14 (timer_pwm multi-frequency test).
+    // Black-box: watches the actual PM_OUT/OT_OUT pins for level
+    // changes and records up to 4 per channel (time + new value), the
+    // same "capture the generated waveform, then assert against a pre-
+    // computed expected model" shape as ws2812_tb.v/steppers_motion_tb.v
+    // use - deliberately independent of timer_pwm.v's internal state
+    // (no hierarchical signal access), so this test is not coupled to
+    // the unit tests or to the peripheral's implementation, only to its
+    // documented register-level behaviour. Declared at module scope
+    // since the generate blocks below must live outside any procedural
+    // block.
     // ----------------------------------------------------------------
-    function automatic integer simulate_timer_cnt_global;
-        input integer global_prescaler;
-        input integer global_presc_start;
-        input integer prescaler;
-        input integer arr;
-        input integer start_cnt;
-        input integer start_presc_cnt;
-        input integer cycles;
-        integer k, cnt, presc, gpresc;
-        begin
-            cnt    = start_cnt;
-            presc  = start_presc_cnt;
-            gpresc = global_presc_start;
-            for (k = 0; k < cycles; k = k + 1) begin
-                if (gpresc == 0) begin
-                    gpresc = global_prescaler;
-                    if (presc == 0) begin
-                        presc = prescaler;
-                        if (cnt == arr) cnt = 0;
-                        else cnt = cnt + 1;
-                    end else begin
-                        presc = presc - 1;
-                    end
-                end else begin
-                    gpresc = gpresc - 1;
+    localparam PWM_CAPTURE_CHANNELS = 12;
+    localparam PWM_CAPTURE_DEPTH    = 4;
+
+    reg     pwm_capture_active = 1'b0;
+    time    pwm_capture_time  [0:PWM_CAPTURE_CHANNELS-1][0:PWM_CAPTURE_DEPTH-1];
+    reg     pwm_capture_value [0:PWM_CAPTURE_CHANNELS-1][0:PWM_CAPTURE_DEPTH-1];
+    integer pwm_capture_count [0:PWM_CAPTURE_CHANNELS-1];
+
+    genvar gpc;
+    generate
+        for (gpc = 0; gpc < 4; gpc = gpc + 1) begin : PWM_CAPTURE_PM
+            always @(PM_OUT[gpc]) begin
+                if (pwm_capture_active && pwm_capture_count[gpc] < PWM_CAPTURE_DEPTH) begin
+                    pwm_capture_time[gpc][pwm_capture_count[gpc]]  = $time;
+                    pwm_capture_value[gpc][pwm_capture_count[gpc]] = PM_OUT[gpc];
+                    pwm_capture_count[gpc] = pwm_capture_count[gpc] + 1;
+                    // TEMP DIAGNOSTIC - remove once the "never completes"
+                    // report is root-caused.
+                    $display("[PWM_CAPTURE_DIAG] t=%0t PM channel %0d edge %0d -> %0d",
+                             $time, gpc, pwm_capture_count[gpc]-1, PM_OUT[gpc]);
                 end
             end
-            simulate_timer_cnt_global = cnt;
         end
-    endfunction
+        for (gpc = 0; gpc < 8; gpc = gpc + 1) begin : PWM_CAPTURE_OT
+            always @(OT_OUT[gpc]) begin
+                if (pwm_capture_active && pwm_capture_count[gpc + 4] < PWM_CAPTURE_DEPTH) begin
+                    pwm_capture_time[gpc + 4][pwm_capture_count[gpc + 4]]  = $time;
+                    pwm_capture_value[gpc + 4][pwm_capture_count[gpc + 4]] = OT_OUT[gpc];
+                    pwm_capture_count[gpc + 4] = pwm_capture_count[gpc + 4] + 1;
+                    // TEMP DIAGNOSTIC - remove once the "never completes"
+                    // report is root-caused.
+                    $display("[PWM_CAPTURE_DIAG] t=%0t OT channel %0d edge %0d -> %0d",
+                             $time, gpc + 4, pwm_capture_count[gpc + 4]-1, OT_OUT[gpc]);
+                end
+            end
+        end
+    endgenerate
 
-    function automatic level_for;
-        input integer cnt;
-        input integer cmp;
-        input         polarity;
+    // Polls (not event-driven, since it must also detect "never
+    // finished") until every channel has captured PWM_CAPTURE_DEPTH
+    // transitions, or timeout_ns elapses - a safety ceiling, not a
+    // timing prediction (matches steppers_motion_tb.v's
+    // wait_for_captures shape), independently written for this file
+    // rather than shared with it.
+    task automatic wait_for_all_pwm_captures;
+        input integer timeout_ns;
+        integer waited;
+        integer c;
+        integer all_done;
+        integer last_heartbeat_diag;
         begin
-            level_for = (cnt < cmp) ? polarity : !polarity;
+            waited = 0;
+            all_done = 0;
+            last_heartbeat_diag = 0;
+            while (!all_done && waited < timeout_ns) begin
+                #1000;
+                waited = waited + 1000;
+                all_done = 1;
+                for (c = 0; c < PWM_CAPTURE_CHANNELS; c = c + 1) begin
+                    if (pwm_capture_count[c] < PWM_CAPTURE_DEPTH) all_done = 0;
+                end
+                // TEMP DIAGNOSTIC - remove once the "never completes"
+                // report is root-caused.
+                if (waited - last_heartbeat_diag >= 2_000_000) begin
+                    last_heartbeat_diag = waited;
+                    $display("[PWM_WAIT_DIAG] t=%0t waited=%0d all_done=%0d counts=%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d",
+                             $time, waited, all_done,
+                             pwm_capture_count[0], pwm_capture_count[1], pwm_capture_count[2], pwm_capture_count[3],
+                             pwm_capture_count[4], pwm_capture_count[5], pwm_capture_count[6], pwm_capture_count[7],
+                             pwm_capture_count[8], pwm_capture_count[9], pwm_capture_count[10], pwm_capture_count[11]);
+                end
+            end
+            $display("[PWM_WAIT_DIAG] DONE t=%0t waited=%0d all_done=%0d", $time, waited, all_done);
         end
-    endfunction
-
-    // pwm_level[ch] updates a full two cycles after cmp_scan itself
-    // reads ch, and that update's comparator reads tim_cnt as of K-1
-    // cycles - see timer_tb.v's identical function for the full,
-    // empirically-confirmed rationale.
-    function automatic integer last_scan_update_cycle;
-        input integer channel;
-        input integer scan_ref;
-        input integer n;
-        integer delta;
-        integer k;
-        begin
-            delta = (channel - scan_ref + 2 + 12) % 12;
-            if (delta == 0) delta = 12;
-            k = delta + 12 * ((n - delta) / 12);
-            last_scan_update_cycle = k - 1;
-        end
-    endfunction
+    endtask
 
     // Testbench execution variables
     reg [7:0] read_byte;
@@ -1312,15 +1336,43 @@ module int_core_top_tb;
             integer channel_polarity  [0:11];
             integer channel_cmp       [0:11];
 
-            integer cnt_ref   [0:3];
-            integer presc_ref [0:3];
-            integer cmp_scan_ref;
-            integer global_presc_ref;
-            integer expected_cnt;
-            integer update_cycle;
-            reg     expected_lvl;
-            integer t, ch;
+            // Pre-computed expected waveform: for channel ch, the 4
+            // transitions timer_pwm.v's documented CNT/CMP/ARR behaviour
+            // predicts, as (offset in ns from TIM_SYNC being enabled,
+            // new level after that transition). Built from the public
+            // register semantics alone (prescaler/ARR are divide-1,
+            // CMP is compared against a 0..ARR upcounter) - not from any
+            // internal timing model.
+            integer expected_offset_ns [0:11][0:3];
+            reg     expected_value     [0:11][0:3];
+
+            integer divide_per_tick [0:3]; // (global divide) * (this timer's own divide)
+            integer period_cycles   [0:3]; // divide_per_tick * (ARR+1)
+            integer cross_cycles;          // divide_per_tick * CMP, within one period
+
+            time    t_sync;
+            integer t, ch, k;
             reg [31:0] rd;
+
+            // Two independent, bus-protocol-level sources of slop apply
+            // to every measured offset, in both directions:
+            //  - Round-robin comparator sharing (see timer_pwm.v) delays
+            //    a channel's pin update by up to ~12 sys_clk cycles after
+            //    the true CNT/CMP crossing (documented behaviour) -> pin
+            //    transitions can land a bit LATE.
+            //  - t_sync is sampled once the TIM_SYNC qspi_bus_write task
+            //    returns, which is after that task's own trailing settle
+            //    margin - the write's effect can already be live inside
+            //    the peripheral before t_sync is sampled, making t_sync
+            //    itself read a bit LATE relative to the true start -> so
+            //    measured (capture_time - t_sync) offsets can look a bit
+            //    EARLY than the ideal, register-semantics-only offset.
+            // Neither is a secret implementation detail - both are
+            // documented, bounded properties of the bus/peripheral - so
+            // allow the same margin on both sides of the ideal offset.
+            localparam NS_PER_SYS_CYCLE       = 20;
+            localparam OFFSET_TOLERANCE_NS    = 40 * NS_PER_SYS_CYCLE;
+            localparam CAPTURE_TIMEOUT_NS     = 50_000_000; // TIM1 needs ~40ms for 2 periods
 
             prescaler_reg_tbl[0] = 247; arr_reg_tbl[0] = 251; // TIM1 ~50Hz
             prescaler_reg_tbl[1] = 7;   arr_reg_tbl[1] = 38;  // TIM2 ~10kHz
@@ -1385,70 +1437,56 @@ module int_core_top_tb;
             `ASSERT_EQ(OT_OUT, 8'b00001010, "0b%08b",
                        "[TIMER_PWM SCENARIO] OT outputs mismatch before TIM_SYNC (OT4/OT2 inverted -> HIGH)");
 
+            // ---- pre-compute the expected waveform (4 transitions per
+            // channel) from the register-level semantics alone: a timer
+            // ticks once every (global divide * its own divide) sys_clk
+            // cycles, counts 0..ARR then wraps, and each channel's pin
+            // goes to !POLARITY the instant its own timer's CNT reaches
+            // its CMP, back to POLARITY the instant CNT wraps to 0. So
+            // for one period P (cycles) and crossing point C (cycles
+            // into the period), the 4 transitions land at C, P, P+C,
+            // 2P, alternating !POLARITY/POLARITY/!POLARITY/POLARITY.
+            for (t = 0; t < 4; t = t + 1) begin
+                divide_per_tick[t] = (GLOBAL_PRESCALER_REG + 1) * (prescaler_reg_tbl[t] + 1);
+                period_cycles[t]   = divide_per_tick[t] * (arr_reg_tbl[t] + 1);
+            end
+            for (ch = 0; ch < 12; ch = ch + 1) begin
+                t = channel_timer[ch];
+                cross_cycles = divide_per_tick[t] * channel_cmp[ch];
+                expected_offset_ns[ch][0] = cross_cycles * NS_PER_SYS_CYCLE;
+                expected_offset_ns[ch][1] = period_cycles[t] * NS_PER_SYS_CYCLE;
+                expected_offset_ns[ch][2] = (period_cycles[t] + cross_cycles) * NS_PER_SYS_CYCLE;
+                expected_offset_ns[ch][3] = (2 * period_cycles[t]) * NS_PER_SYS_CYCLE;
+                expected_value[ch][0] = !channel_polarity[ch];
+                expected_value[ch][1] = channel_polarity[ch];
+                expected_value[ch][2] = !channel_polarity[ch];
+                expected_value[ch][3] = channel_polarity[ch];
+            end
+
+            for (ch = 0; ch < PWM_CAPTURE_CHANNELS; ch = ch + 1) pwm_capture_count[ch] = 0;
+            pwm_capture_active = 1'b1;
+
             // ---- start every timer AND arm the shared prescaler in the
             // same write ----
             qspi_bus_write(TIMER_PWM_BASE + REG_TIM_SYNC,
                             tim_sync_word(1'b1, GLOBAL_PRESCALER_REG[5:0]));
+            t_sync = $time;
 
-            // Settle a few sys_clk cycles (waited on the DUT's own
-            // internal clock, so this is robust regardless of the QSPI
-            // transaction's own timing), then snapshot the baseline.
-            repeat (3) @(posedge uut.sys_clk);
-            #1;
-            for (t = 0; t < 4; t = t + 1) begin
-                cnt_ref[t]   = uut.timer_pwm_inst.tim_cnt[t];
-                presc_ref[t] = uut.timer_pwm_inst.tim_presc_cnt[t];
-            end
-            cmp_scan_ref     = uut.timer_pwm_inst.cmp_scan;
-            global_presc_ref = uut.timer_pwm_inst.tim_sync_presc_cnt;
+            wait_for_all_pwm_captures(CAPTURE_TIMEOUT_NS);
+            pwm_capture_active = 1'b0;
 
-            // ---- checkpoint 1: 300 sys_clk cycles - enough for TIM3
-            // (~195kHz, 16 cycles/tick) and TIM2 (~10kHz, 128 cycles/
-            // tick) to have advanced several ticks; TIM1 (~50Hz, 3968
-            // cycles/tick) and TIM4 (200Hz, 2000 cycles/tick) correctly
-            // have NOT ticked yet at this point - both checked below.
-            repeat (300) @(posedge uut.sys_clk);
-            #1;
-            for (t = 0; t < 4; t = t + 1) begin
-                expected_cnt = simulate_timer_cnt_global(GLOBAL_PRESCALER_REG, global_presc_ref,
-                                                          prescaler_reg_tbl[t], arr_reg_tbl[t],
-                                                          cnt_ref[t], presc_ref[t], 300);
-                `ASSERT_EQ(uut.timer_pwm_inst.tim_cnt[t], expected_cnt[7:0], "%0d",
-                           $sformatf("[TIMER_PWM SCENARIO] TIM%0d CNT mismatch at checkpoint 1", t + 1));
-            end
             for (ch = 0; ch < 12; ch = ch + 1) begin
-                t = channel_timer[ch];
-                update_cycle = last_scan_update_cycle(ch, cmp_scan_ref, 300);
-                expected_cnt = simulate_timer_cnt_global(GLOBAL_PRESCALER_REG, global_presc_ref,
-                                                          prescaler_reg_tbl[t], arr_reg_tbl[t],
-                                                          cnt_ref[t], presc_ref[t], update_cycle);
-                expected_lvl = level_for(expected_cnt, channel_cmp[ch], channel_polarity[ch]);
-                `ASSERT_EQ((ch < 4) ? PM_OUT[ch] : OT_OUT[ch - 4], expected_lvl, "%0d",
-                           $sformatf("[TIMER_PWM SCENARIO] channel %0d level mismatch at checkpoint 1", ch));
-            end
-
-            // ---- checkpoint 2: 4200 sys_clk cycles total - past TIM1's
-            // first tick (3968 cycles) and TIM4's first two ticks (2000
-            // cycles each), so every one of the 4 timers has now
-            // definitely counted at least once.
-            repeat (3900) @(posedge uut.sys_clk); // 300 + 3900 = 4200 total
-            #1;
-            for (t = 0; t < 4; t = t + 1) begin
-                expected_cnt = simulate_timer_cnt_global(GLOBAL_PRESCALER_REG, global_presc_ref,
-                                                          prescaler_reg_tbl[t], arr_reg_tbl[t],
-                                                          cnt_ref[t], presc_ref[t], 4200);
-                `ASSERT_EQ(uut.timer_pwm_inst.tim_cnt[t], expected_cnt[7:0], "%0d",
-                           $sformatf("[TIMER_PWM SCENARIO] TIM%0d CNT mismatch at checkpoint 2", t + 1));
-            end
-            for (ch = 0; ch < 12; ch = ch + 1) begin
-                t = channel_timer[ch];
-                update_cycle = last_scan_update_cycle(ch, cmp_scan_ref, 4200);
-                expected_cnt = simulate_timer_cnt_global(GLOBAL_PRESCALER_REG, global_presc_ref,
-                                                          prescaler_reg_tbl[t], arr_reg_tbl[t],
-                                                          cnt_ref[t], presc_ref[t], update_cycle);
-                expected_lvl = level_for(expected_cnt, channel_cmp[ch], channel_polarity[ch]);
-                `ASSERT_EQ((ch < 4) ? PM_OUT[ch] : OT_OUT[ch - 4], expected_lvl, "%0d",
-                           $sformatf("[TIMER_PWM SCENARIO] channel %0d level mismatch at checkpoint 2", ch));
+                `ASSERT_EQ(pwm_capture_count[ch], PWM_CAPTURE_DEPTH, "%0d",
+                           $sformatf("[TIMER_PWM SCENARIO] channel %0d never captured all %0d transitions",
+                                     ch, PWM_CAPTURE_DEPTH));
+                for (k = 0; k < PWM_CAPTURE_DEPTH; k = k + 1) begin
+                    `ASSERT_EQ(pwm_capture_value[ch][k], expected_value[ch][k], "%0d",
+                               $sformatf("[TIMER_PWM SCENARIO] channel %0d transition %0d: wrong level", ch, k));
+                    `ASSERT_GE(pwm_capture_time[ch][k] - t_sync, expected_offset_ns[ch][k] - OFFSET_TOLERANCE_NS, "%0d",
+                               $sformatf("[TIMER_PWM SCENARIO] channel %0d transition %0d: happened too early", ch, k));
+                    `ASSERT_LE(pwm_capture_time[ch][k] - t_sync, expected_offset_ns[ch][k] + OFFSET_TOLERANCE_NS, "%0d",
+                               $sformatf("[TIMER_PWM SCENARIO] channel %0d transition %0d: happened too late", ch, k));
+                end
             end
 
             // Leave the peripheral idle.
