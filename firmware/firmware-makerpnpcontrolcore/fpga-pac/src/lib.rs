@@ -3,6 +3,26 @@
 #![allow(non_upper_case_globals)]
 #![doc = "Peripheral access API (generated using chiptool v0.1.0 (bcf538a 2026-05-18))"]
 #![no_std]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum Interrupt {}
+unsafe impl cortex_m::interrupt::InterruptNumber for Interrupt {
+    #[inline(always)]
+    fn number(self) -> u16 {
+        self as u16
+    }
+}
+#[cfg(feature = "rt")]
+mod _vectors {
+    unsafe extern "C" {}
+    pub union Vector {
+        _handler: unsafe extern "C" fn(),
+        _reserved: u32,
+    }
+    #[unsafe(link_section = ".vector_table.interrupts")]
+    #[unsafe(no_mangle)]
+    pub static __INTERRUPTS: [Vector; 0] = [];
+}
 #[doc = "system block 0"]
 pub const SYSTEM0: system0::system0 = unsafe { system0::system0::from_ptr(0x9000_0000usize as _) };
 #[doc = "led control block"]
@@ -26,8 +46,15 @@ pub const ENCODERS: encoders::encoders =
 #[doc = "8-channel stepper motor step/dir pulse generator (2 banks of 4)"]
 pub const STEPPERS: steppers::steppers =
     unsafe { steppers::steppers::from_ptr(0x9000_0d00usize as _) };
+#[doc = "4 independent 8-bit timers (source clock, 8-bit prescaler, 8-bit auto-reload) feeding 12 flexibly-mapped PWM output channels (PM1-4, OT1-8)"]
+pub const TIMER_PWM: timer_pwm::timer_pwm =
+    unsafe { timer_pwm::timer_pwm::from_ptr(0x9000_0e00usize as _) };
 #[doc = "system block 1"]
 pub const SYSTEM1: system1::system1 = unsafe { system1::system1::from_ptr(0x9000_ff00usize as _) };
+#[cfg(feature = "rt")]
+pub use cortex_m_rt::interrupt;
+#[cfg(feature = "rt")]
+pub use Interrupt as interrupt;
 pub mod buzzer {
     #[doc = "buzzer control block."]
     #[derive(Copy, Clone, Eq, PartialEq)]
@@ -111,47 +138,7 @@ pub mod buzzer {
     }
 }
 pub mod common {
-
-    // The QuadSPI peripheral has a FIFO that cannot be turned off and is always used.
-    //
-    // The FIFO is a block of 0x20 bytes.
-    // * On the first read from the block, say at 0x84, the hardware issues a block read start at
-    //   address 0x84 and fills up-to the length of the FIFI.
-    // * A second read from an address in the block will NOT trigger a new octospi transaction,
-    //   but will instead read the data from the FIFO.
-    //
-    // This means data in the FIFO will be stale, polling registers in the same block will not work.
-    //
-    // To workaround this, we must check if the second read is in the same block as the first read,
-    // and if IS in the same block, then we need to issue a dummy read OUTSIDE of the block, then
-    // issue the actual read afterwards, this cases the FIFO to be fulled by the data from the dummy
-    // read so that when the actual read is requested the FIFO will be filled again.
-    //
-    // Safety:
-    //
-    // An AtomicUsize is used to keep track of the last block read, which it makes it thread-safe.
-    // FPGA register must not have side-effects on reads.
-
-    static LAST_BLOCK: AtomicUsize = AtomicUsize::new(usize::MAX);
-    const QUAD_SPI_FIFO_DEPTH: usize = 0x20;
-    const FPGA_MEMORY_SIZE: usize = 0x0000_0200;
-
-    // Note: This assumes OCTOSPI1 is used
-    const DUMMY_READ_ADDRESS: usize = 0x9000_0000 + FPGA_MEMORY_SIZE;
-
-    #[inline(always)]
-    fn compute_block(addr: usize) -> usize {
-        addr & !(QUAD_SPI_FIFO_DEPTH - 1)
-    }
-
-    #[inline(always)]
-    fn dummy_read() {
-        unsafe { core::ptr::read_volatile(DUMMY_READ_ADDRESS as *mut u8); }
-    }
-
     use core::marker::PhantomData;
-    use core::sync::atomic::{AtomicUsize, Ordering};
-
     #[derive(Copy, Clone, PartialEq, Eq)]
     pub struct RW;
     #[derive(Copy, Clone, PartialEq, Eq)]
@@ -196,28 +183,12 @@ pub mod common {
             self.ptr as _
         }
     }
-
-    /// OctoSPI-safe read implementation, with OctoSPI FIFO bypass.
     impl<T: Copy, A: Read> Reg<T, A> {
         #[inline(always)]
         pub fn read(&self) -> T {
-            let addr = self.ptr as usize;
-            let block = compute_block(addr);
-
-            let last = LAST_BLOCK.load(Ordering::Relaxed);
-
-            if last == block {
-                // Same FIFO block → force flush
-                dummy_read();
-            }
-
-            // Update block AFTER dummy logic
-            LAST_BLOCK.store(block, Ordering::Relaxed);
-
             unsafe { (self.ptr as *mut T).read_volatile() }
         }
     }
-
     impl<T: Copy, A: Write> Reg<T, A> {
         #[inline(always)]
         pub fn write_value(&self, val: T) {
@@ -3665,6 +3636,3328 @@ pub mod system1 {
         impl defmt::Format for marker {
             fn format(&self, f: defmt::Formatter) {
                 defmt::write!(f, "marker {{ marker: {=u32:?} }}", self.marker())
+            }
+        }
+    }
+}
+pub mod timer_pwm {
+    #[doc = "4 independent 8-bit timers (source clock, 8-bit prescaler, 8-bit auto-reload) feeding 12 flexibly-mapped PWM output channels (PM1-4, OT1-8)."]
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    pub struct timer_pwm {
+        ptr: *mut u8,
+    }
+    unsafe impl Send for timer_pwm {}
+    unsafe impl Sync for timer_pwm {}
+    impl timer_pwm {
+        #[inline(always)]
+        pub const unsafe fn from_ptr(ptr: *mut ()) -> Self {
+            Self { ptr: ptr as _ }
+        }
+        #[inline(always)]
+        pub const fn as_ptr(&self) -> *mut () {
+            self.ptr as _
+        }
+        #[doc = "master PWM output control - disabling forces every one of the 12 PWM pins LOW regardless of per-channel enable/polarity, and drives ot_en to its inactive (isolated) level."]
+        #[inline(always)]
+        pub const fn pwm_ctrl(self) -> crate::common::Reg<regs::pwm_ctrl, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x0usize) as _) }
+        }
+        #[doc = "global timer counting gate - lets every configured timer be started phase-aligned on the same sys_clk edge, plus a shared prescaler ahead of all 4 timers' own prescalers."]
+        #[inline(always)]
+        pub const fn tim_sync(self) -> crate::common::Reg<regs::tim_sync, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x04usize) as _) }
+        }
+        #[doc = "timer 1 control."]
+        #[inline(always)]
+        pub const fn tim1_ctrl(self) -> crate::common::Reg<regs::tim1_ctrl, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x08usize) as _) }
+        }
+        #[doc = "timer 1 auto-reload value - the counter wraps to 0 the tick after reaching this value."]
+        #[inline(always)]
+        pub const fn tim1_arr(self) -> crate::common::Reg<regs::tim1_arr, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x0cusize) as _) }
+        }
+        #[doc = "timer 1 current counter value - also host-writable, to set an initial counter value before starting via tim_sync."]
+        #[inline(always)]
+        pub const fn tim1_cnt(self) -> crate::common::Reg<regs::tim1_cnt, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x10usize) as _) }
+        }
+        #[doc = "timer 2 control."]
+        #[inline(always)]
+        pub const fn tim2_ctrl(self) -> crate::common::Reg<regs::tim2_ctrl, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x14usize) as _) }
+        }
+        #[doc = "timer 2 auto-reload value - the counter wraps to 0 the tick after reaching this value."]
+        #[inline(always)]
+        pub const fn tim2_arr(self) -> crate::common::Reg<regs::tim2_arr, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x18usize) as _) }
+        }
+        #[doc = "timer 2 current counter value - also host-writable, to set an initial counter value before starting via tim_sync."]
+        #[inline(always)]
+        pub const fn tim2_cnt(self) -> crate::common::Reg<regs::tim2_cnt, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x1cusize) as _) }
+        }
+        #[doc = "timer 3 control."]
+        #[inline(always)]
+        pub const fn tim3_ctrl(self) -> crate::common::Reg<regs::tim3_ctrl, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x20usize) as _) }
+        }
+        #[doc = "timer 3 auto-reload value - the counter wraps to 0 the tick after reaching this value."]
+        #[inline(always)]
+        pub const fn tim3_arr(self) -> crate::common::Reg<regs::tim3_arr, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x24usize) as _) }
+        }
+        #[doc = "timer 3 current counter value - also host-writable, to set an initial counter value before starting via tim_sync."]
+        #[inline(always)]
+        pub const fn tim3_cnt(self) -> crate::common::Reg<regs::tim3_cnt, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x28usize) as _) }
+        }
+        #[doc = "timer 4 control."]
+        #[inline(always)]
+        pub const fn tim4_ctrl(self) -> crate::common::Reg<regs::tim4_ctrl, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x2cusize) as _) }
+        }
+        #[doc = "timer 4 auto-reload value - the counter wraps to 0 the tick after reaching this value."]
+        #[inline(always)]
+        pub const fn tim4_arr(self) -> crate::common::Reg<regs::tim4_arr, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x30usize) as _) }
+        }
+        #[doc = "timer 4 current counter value - also host-writable, to set an initial counter value before starting via tim_sync."]
+        #[inline(always)]
+        pub const fn tim4_cnt(self) -> crate::common::Reg<regs::tim4_cnt, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x34usize) as _) }
+        }
+        #[doc = "PWM channel 1 (PM1) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl1(self) -> crate::common::Reg<regs::pwm_ctrl1, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x38usize) as _) }
+        }
+        #[doc = "PWM channel 1 (PM1) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp1(self) -> crate::common::Reg<regs::pwm_cmp1, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x3cusize) as _) }
+        }
+        #[doc = "PWM channel 2 (PM2) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl2(self) -> crate::common::Reg<regs::pwm_ctrl2, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x40usize) as _) }
+        }
+        #[doc = "PWM channel 2 (PM2) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp2(self) -> crate::common::Reg<regs::pwm_cmp2, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x44usize) as _) }
+        }
+        #[doc = "PWM channel 3 (PM3) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl3(self) -> crate::common::Reg<regs::pwm_ctrl3, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x48usize) as _) }
+        }
+        #[doc = "PWM channel 3 (PM3) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp3(self) -> crate::common::Reg<regs::pwm_cmp3, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x4cusize) as _) }
+        }
+        #[doc = "PWM channel 4 (PM4) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl4(self) -> crate::common::Reg<regs::pwm_ctrl4, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x50usize) as _) }
+        }
+        #[doc = "PWM channel 4 (PM4) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp4(self) -> crate::common::Reg<regs::pwm_cmp4, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x54usize) as _) }
+        }
+        #[doc = "PWM channel 5 (OT1) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl5(self) -> crate::common::Reg<regs::pwm_ctrl5, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x58usize) as _) }
+        }
+        #[doc = "PWM channel 5 (OT1) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp5(self) -> crate::common::Reg<regs::pwm_cmp5, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x5cusize) as _) }
+        }
+        #[doc = "PWM channel 6 (OT2) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl6(self) -> crate::common::Reg<regs::pwm_ctrl6, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x60usize) as _) }
+        }
+        #[doc = "PWM channel 6 (OT2) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp6(self) -> crate::common::Reg<regs::pwm_cmp6, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x64usize) as _) }
+        }
+        #[doc = "PWM channel 7 (OT3) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl7(self) -> crate::common::Reg<regs::pwm_ctrl7, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x68usize) as _) }
+        }
+        #[doc = "PWM channel 7 (OT3) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp7(self) -> crate::common::Reg<regs::pwm_cmp7, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x6cusize) as _) }
+        }
+        #[doc = "PWM channel 8 (OT4) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl8(self) -> crate::common::Reg<regs::pwm_ctrl8, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x70usize) as _) }
+        }
+        #[doc = "PWM channel 8 (OT4) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp8(self) -> crate::common::Reg<regs::pwm_cmp8, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x74usize) as _) }
+        }
+        #[doc = "PWM channel 9 (OT5) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl9(self) -> crate::common::Reg<regs::pwm_ctrl9, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x78usize) as _) }
+        }
+        #[doc = "PWM channel 9 (OT5) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp9(self) -> crate::common::Reg<regs::pwm_cmp9, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x7cusize) as _) }
+        }
+        #[doc = "PWM channel 10 (OT6) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl10(self) -> crate::common::Reg<regs::pwm_ctrl10, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x80usize) as _) }
+        }
+        #[doc = "PWM channel 10 (OT6) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp10(self) -> crate::common::Reg<regs::pwm_cmp10, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x84usize) as _) }
+        }
+        #[doc = "PWM channel 11 (OT7) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl11(self) -> crate::common::Reg<regs::pwm_ctrl11, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x88usize) as _) }
+        }
+        #[doc = "PWM channel 11 (OT7) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp11(self) -> crate::common::Reg<regs::pwm_cmp11, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x8cusize) as _) }
+        }
+        #[doc = "PWM channel 12 (OT8) control."]
+        #[inline(always)]
+        pub const fn pwm_ctrl12(self) -> crate::common::Reg<regs::pwm_ctrl12, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x90usize) as _) }
+        }
+        #[doc = "PWM channel 12 (OT8) compare value."]
+        #[inline(always)]
+        pub const fn pwm_cmp12(self) -> crate::common::Reg<regs::pwm_cmp12, crate::common::RW> {
+            unsafe { crate::common::Reg::from_ptr(self.ptr.wrapping_add(0x94usize) as _) }
+        }
+    }
+    pub mod regs {
+        #[doc = "PWM channel 1 (PM1) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp1(pub u32);
+        impl pwm_cmp1 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp1 {
+            #[inline(always)]
+            fn default() -> pwm_cmp1 {
+                pwm_cmp1(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp1 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp1")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp1 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp1 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 10 (OT6) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp10(pub u32);
+        impl pwm_cmp10 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp10 {
+            #[inline(always)]
+            fn default() -> pwm_cmp10 {
+                pwm_cmp10(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp10 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp10")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp10 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp10 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 11 (OT7) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp11(pub u32);
+        impl pwm_cmp11 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp11 {
+            #[inline(always)]
+            fn default() -> pwm_cmp11 {
+                pwm_cmp11(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp11 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp11")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp11 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp11 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 12 (OT8) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp12(pub u32);
+        impl pwm_cmp12 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp12 {
+            #[inline(always)]
+            fn default() -> pwm_cmp12 {
+                pwm_cmp12(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp12 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp12")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp12 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp12 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 2 (PM2) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp2(pub u32);
+        impl pwm_cmp2 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp2 {
+            #[inline(always)]
+            fn default() -> pwm_cmp2 {
+                pwm_cmp2(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp2 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp2")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp2 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp2 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 3 (PM3) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp3(pub u32);
+        impl pwm_cmp3 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp3 {
+            #[inline(always)]
+            fn default() -> pwm_cmp3 {
+                pwm_cmp3(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp3 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp3")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp3 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp3 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 4 (PM4) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp4(pub u32);
+        impl pwm_cmp4 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp4 {
+            #[inline(always)]
+            fn default() -> pwm_cmp4 {
+                pwm_cmp4(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp4 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp4")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp4 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp4 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 5 (OT1) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp5(pub u32);
+        impl pwm_cmp5 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp5 {
+            #[inline(always)]
+            fn default() -> pwm_cmp5 {
+                pwm_cmp5(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp5 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp5")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp5 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp5 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 6 (OT2) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp6(pub u32);
+        impl pwm_cmp6 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp6 {
+            #[inline(always)]
+            fn default() -> pwm_cmp6 {
+                pwm_cmp6(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp6 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp6")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp6 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp6 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 7 (OT3) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp7(pub u32);
+        impl pwm_cmp7 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp7 {
+            #[inline(always)]
+            fn default() -> pwm_cmp7 {
+                pwm_cmp7(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp7 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp7")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp7 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp7 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 8 (OT4) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp8(pub u32);
+        impl pwm_cmp8 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp8 {
+            #[inline(always)]
+            fn default() -> pwm_cmp8 {
+                pwm_cmp8(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp8 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp8")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp8 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp8 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 9 (OT5) compare value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_cmp9(pub u32);
+        impl pwm_cmp9 {
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "8-bit compare value, compared against the selected timer's counter."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for pwm_cmp9 {
+            #[inline(always)]
+            fn default() -> pwm_cmp9 {
+                pwm_cmp9(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_cmp9 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_cmp9")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_cmp9 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_cmp9 {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "master PWM output control - disabling forces every one of the 12 PWM pins LOW regardless of per-channel enable/polarity, and drives ot_en to its inactive (isolated) level."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl(pub u32);
+        impl pwm_ctrl {
+            #[doc = "1 = PWM outputs active and ot_en drives OT1-8's isolation buffer enabled; 0 (reset default) = every PWM pin forced LOW and OT1-8 electrically isolated."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn output_enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = PWM outputs active and ot_en drives OT1-8's isolation buffer enabled; 0 (reset default) = every PWM pin forced LOW and OT1-8 electrically isolated."]
+            #[inline(always)]
+            pub const fn set_output_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 1usize) & 0x7fff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x7fff_ffff << 1usize)) | (((val as u32) & 0x7fff_ffff) << 1usize);
+            }
+        }
+        impl Default for pwm_ctrl {
+            #[inline(always)]
+            fn default() -> pwm_ctrl {
+                pwm_ctrl(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl")
+                    .field("output_enable", &self.output_enable())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "pwm_ctrl {{ output_enable: {=bool:?}, reserved: {=u32:?} }}",
+                    self.output_enable(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "PWM channel 1 (PM1) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl1(pub u32);
+        impl pwm_ctrl1 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl1_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl1_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl1_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl1 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl1 {
+                pwm_ctrl1(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl1 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl1")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl1 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl1 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 10 (OT6) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl10(pub u32);
+        impl pwm_ctrl10 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl10_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl10_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl10_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl10 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl10 {
+                pwm_ctrl10(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl10 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl10")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl10 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl10 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 11 (OT7) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl11(pub u32);
+        impl pwm_ctrl11 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl11_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl11_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl11_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl11 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl11 {
+                pwm_ctrl11(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl11 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl11")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl11 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl11 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 12 (OT8) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl12(pub u32);
+        impl pwm_ctrl12 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl12_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl12_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl12_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl12 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl12 {
+                pwm_ctrl12(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl12 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl12")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl12 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl12 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 2 (PM2) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl2(pub u32);
+        impl pwm_ctrl2 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl2_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl2_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl2_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl2 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl2 {
+                pwm_ctrl2(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl2 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl2")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl2 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl2 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 3 (PM3) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl3(pub u32);
+        impl pwm_ctrl3 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl3_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl3_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl3_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl3 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl3 {
+                pwm_ctrl3(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl3 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl3")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl3 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl3 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 4 (PM4) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl4(pub u32);
+        impl pwm_ctrl4 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl4_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl4_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl4_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl4 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl4 {
+                pwm_ctrl4(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl4 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl4")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl4 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl4 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 5 (OT1) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl5(pub u32);
+        impl pwm_ctrl5 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl5_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl5_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl5_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl5 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl5 {
+                pwm_ctrl5(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl5 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl5")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl5 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl5 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 6 (OT2) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl6(pub u32);
+        impl pwm_ctrl6 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl6_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl6_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl6_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl6 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl6 {
+                pwm_ctrl6(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl6 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl6")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl6 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl6 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 7 (OT3) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl7(pub u32);
+        impl pwm_ctrl7 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl7_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl7_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl7_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl7 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl7 {
+                pwm_ctrl7(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl7 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl7")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl7 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl7 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 8 (OT4) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl8(pub u32);
+        impl pwm_ctrl8 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl8_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl8_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl8_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl8 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl8 {
+                pwm_ctrl8(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl8 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl8")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl8 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl8 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "PWM channel 9 (OT5) control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct pwm_ctrl9(pub u32);
+        impl pwm_ctrl9 {
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this channel drives its pin from its selected timer's comparator; 0 (reset default) = pin forced LOW regardless of polarity."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn polarity(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[inline(always)]
+            pub const fn set_polarity(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x03;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x03 << 2usize)) | (((val as u32) & 0x03) << 2usize);
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn timer_src(&self) -> super::vals::pwm_ctrl9_timer_src {
+                let val = (self.0 >> 4usize) & 0x03;
+                super::vals::pwm_ctrl9_timer_src::from_bits(val as u8)
+            }
+            #[doc = "which of the 4 timers this channel compares against."]
+            #[inline(always)]
+            pub const fn set_timer_src(&mut self, val: super::vals::pwm_ctrl9_timer_src) {
+                self.0 = (self.0 & !(0x03 << 4usize)) | (((val.to_bits() as u32) & 0x03) << 4usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 6usize) & 0x03ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x03ff_ffff << 6usize)) | (((val as u32) & 0x03ff_ffff) << 6usize);
+            }
+        }
+        impl Default for pwm_ctrl9 {
+            #[inline(always)]
+            fn default() -> pwm_ctrl9 {
+                pwm_ctrl9(0)
+            }
+        }
+        impl core::fmt::Debug for pwm_ctrl9 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("pwm_ctrl9")
+                    .field("enable", &self.enable())
+                    .field("polarity", &self.polarity())
+                    .field("reserved0", &self.reserved0())
+                    .field("timer_src", &self.timer_src())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for pwm_ctrl9 {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "pwm_ctrl9 {{ enable: {=bool:?}, polarity: {=bool:?}, reserved0: {=u8:?}, timer_src: {:?}, reserved1: {=u32:?} }}" , self . enable () , self . polarity () , self . reserved0 () , self . timer_src () , self . reserved1 ())
+            }
+        }
+        #[doc = "timer 1 auto-reload value - the counter wraps to 0 the tick after reaching this value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim1_arr(pub u32);
+        impl tim1_arr {
+            #[doc = "auto-reload value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "auto-reload value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for tim1_arr {
+            #[inline(always)]
+            fn default() -> tim1_arr {
+                tim1_arr(0)
+            }
+        }
+        impl core::fmt::Debug for tim1_arr {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim1_arr")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim1_arr {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "tim1_arr {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "timer 1 current counter value - also host-writable, to set an initial counter value before starting via tim_sync."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim1_cnt(pub u32);
+        impl tim1_cnt {
+            #[doc = "current counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "current counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for tim1_cnt {
+            #[inline(always)]
+            fn default() -> tim1_cnt {
+                tim1_cnt(0)
+            }
+        }
+        impl core::fmt::Debug for tim1_cnt {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim1_cnt")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim1_cnt {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "tim1_cnt {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "timer 1 control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim1_ctrl(pub u32);
+        impl tim1_ctrl {
+            #[doc = "1 = this timer counts (subject to tim_sync.enable)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this timer counts (subject to tim_sync.enable)."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "write 1 to reset this timer's counter to 0. self-clearing, always reads back 0."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reset(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "write 1 to reset this timer's counter to 0. self-clearing, always reads back 0."]
+            #[inline(always)]
+            pub const fn set_reset(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x3f;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x3f << 2usize)) | (((val as u32) & 0x3f) << 2usize);
+            }
+            #[doc = "divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn prescaler(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[doc = "divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles."]
+            #[inline(always)]
+            pub const fn set_prescaler(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for tim1_ctrl {
+            #[inline(always)]
+            fn default() -> tim1_ctrl {
+                tim1_ctrl(0)
+            }
+        }
+        impl core::fmt::Debug for tim1_ctrl {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim1_ctrl")
+                    .field("enable", &self.enable())
+                    .field("reset", &self.reset())
+                    .field("reserved0", &self.reserved0())
+                    .field("prescaler", &self.prescaler())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim1_ctrl {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "tim1_ctrl {{ enable: {=bool:?}, reset: {=bool:?}, reserved0: {=u8:?}, prescaler: {=u8:?}, reserved1: {=u16:?} }}" , self . enable () , self . reset () , self . reserved0 () , self . prescaler () , self . reserved1 ())
+            }
+        }
+        #[doc = "timer 2 auto-reload value - the counter wraps to 0 the tick after reaching this value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim2_arr(pub u32);
+        impl tim2_arr {
+            #[doc = "auto-reload value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "auto-reload value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for tim2_arr {
+            #[inline(always)]
+            fn default() -> tim2_arr {
+                tim2_arr(0)
+            }
+        }
+        impl core::fmt::Debug for tim2_arr {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim2_arr")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim2_arr {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "tim2_arr {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "timer 2 current counter value - also host-writable, to set an initial counter value before starting via tim_sync."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim2_cnt(pub u32);
+        impl tim2_cnt {
+            #[doc = "current counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "current counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for tim2_cnt {
+            #[inline(always)]
+            fn default() -> tim2_cnt {
+                tim2_cnt(0)
+            }
+        }
+        impl core::fmt::Debug for tim2_cnt {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim2_cnt")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim2_cnt {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "tim2_cnt {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "timer 2 control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim2_ctrl(pub u32);
+        impl tim2_ctrl {
+            #[doc = "1 = this timer counts (subject to tim_sync.enable)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this timer counts (subject to tim_sync.enable)."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "write 1 to reset this timer's counter to 0. self-clearing, always reads back 0."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reset(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "write 1 to reset this timer's counter to 0. self-clearing, always reads back 0."]
+            #[inline(always)]
+            pub const fn set_reset(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x3f;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x3f << 2usize)) | (((val as u32) & 0x3f) << 2usize);
+            }
+            #[doc = "divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn prescaler(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[doc = "divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles."]
+            #[inline(always)]
+            pub const fn set_prescaler(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for tim2_ctrl {
+            #[inline(always)]
+            fn default() -> tim2_ctrl {
+                tim2_ctrl(0)
+            }
+        }
+        impl core::fmt::Debug for tim2_ctrl {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim2_ctrl")
+                    .field("enable", &self.enable())
+                    .field("reset", &self.reset())
+                    .field("reserved0", &self.reserved0())
+                    .field("prescaler", &self.prescaler())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim2_ctrl {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "tim2_ctrl {{ enable: {=bool:?}, reset: {=bool:?}, reserved0: {=u8:?}, prescaler: {=u8:?}, reserved1: {=u16:?} }}" , self . enable () , self . reset () , self . reserved0 () , self . prescaler () , self . reserved1 ())
+            }
+        }
+        #[doc = "timer 3 auto-reload value - the counter wraps to 0 the tick after reaching this value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim3_arr(pub u32);
+        impl tim3_arr {
+            #[doc = "auto-reload value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "auto-reload value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for tim3_arr {
+            #[inline(always)]
+            fn default() -> tim3_arr {
+                tim3_arr(0)
+            }
+        }
+        impl core::fmt::Debug for tim3_arr {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim3_arr")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim3_arr {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "tim3_arr {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "timer 3 current counter value - also host-writable, to set an initial counter value before starting via tim_sync."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim3_cnt(pub u32);
+        impl tim3_cnt {
+            #[doc = "current counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "current counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for tim3_cnt {
+            #[inline(always)]
+            fn default() -> tim3_cnt {
+                tim3_cnt(0)
+            }
+        }
+        impl core::fmt::Debug for tim3_cnt {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim3_cnt")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim3_cnt {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "tim3_cnt {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "timer 3 control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim3_ctrl(pub u32);
+        impl tim3_ctrl {
+            #[doc = "1 = this timer counts (subject to tim_sync.enable)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this timer counts (subject to tim_sync.enable)."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "write 1 to reset this timer's counter to 0. self-clearing, always reads back 0."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reset(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "write 1 to reset this timer's counter to 0. self-clearing, always reads back 0."]
+            #[inline(always)]
+            pub const fn set_reset(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x3f;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x3f << 2usize)) | (((val as u32) & 0x3f) << 2usize);
+            }
+            #[doc = "divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn prescaler(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[doc = "divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles."]
+            #[inline(always)]
+            pub const fn set_prescaler(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for tim3_ctrl {
+            #[inline(always)]
+            fn default() -> tim3_ctrl {
+                tim3_ctrl(0)
+            }
+        }
+        impl core::fmt::Debug for tim3_ctrl {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim3_ctrl")
+                    .field("enable", &self.enable())
+                    .field("reset", &self.reset())
+                    .field("reserved0", &self.reserved0())
+                    .field("prescaler", &self.prescaler())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim3_ctrl {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "tim3_ctrl {{ enable: {=bool:?}, reset: {=bool:?}, reserved0: {=u8:?}, prescaler: {=u8:?}, reserved1: {=u16:?} }}" , self . enable () , self . reset () , self . reserved0 () , self . prescaler () , self . reserved1 ())
+            }
+        }
+        #[doc = "timer 4 auto-reload value - the counter wraps to 0 the tick after reaching this value."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim4_arr(pub u32);
+        impl tim4_arr {
+            #[doc = "auto-reload value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "auto-reload value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for tim4_arr {
+            #[inline(always)]
+            fn default() -> tim4_arr {
+                tim4_arr(0)
+            }
+        }
+        impl core::fmt::Debug for tim4_arr {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim4_arr")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim4_arr {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "tim4_arr {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "timer 4 current counter value - also host-writable, to set an initial counter value before starting via tim_sync."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim4_cnt(pub u32);
+        impl tim4_cnt {
+            #[doc = "current counter value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn value(&self) -> u8 {
+                let val = (self.0 >> 0usize) & 0xff;
+                val as u8
+            }
+            #[doc = "current counter value."]
+            #[inline(always)]
+            pub const fn set_value(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 0usize)) | (((val as u32) & 0xff) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for tim4_cnt {
+            #[inline(always)]
+            fn default() -> tim4_cnt {
+                tim4_cnt(0)
+            }
+        }
+        impl core::fmt::Debug for tim4_cnt {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim4_cnt")
+                    .field("value", &self.value())
+                    .field("reserved", &self.reserved())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim4_cnt {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(
+                    f,
+                    "tim4_cnt {{ value: {=u8:?}, reserved: {=u32:?} }}",
+                    self.value(),
+                    self.reserved()
+                )
+            }
+        }
+        #[doc = "timer 4 control."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim4_ctrl(pub u32);
+        impl tim4_ctrl {
+            #[doc = "1 = this timer counts (subject to tim_sync.enable)."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = this timer counts (subject to tim_sync.enable)."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "write 1 to reset this timer's counter to 0. self-clearing, always reads back 0."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reset(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "write 1 to reset this timer's counter to 0. self-clearing, always reads back 0."]
+            #[inline(always)]
+            pub const fn set_reset(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x3f;
+                val as u8
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x3f << 2usize)) | (((val as u32) & 0x3f) << 2usize);
+            }
+            #[doc = "divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn prescaler(&self) -> u8 {
+                let val = (self.0 >> 8usize) & 0xff;
+                val as u8
+            }
+            #[doc = "divide-1: the counter advances one tick every (prescaler+1) sys_clk cycles."]
+            #[inline(always)]
+            pub const fn set_prescaler(&mut self, val: u8) {
+                self.0 = (self.0 & !(0xff << 8usize)) | (((val as u32) & 0xff) << 8usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u16 {
+                let val = (self.0 >> 16usize) & 0xffff;
+                val as u16
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u16) {
+                self.0 = (self.0 & !(0xffff << 16usize)) | (((val as u32) & 0xffff) << 16usize);
+            }
+        }
+        impl Default for tim4_ctrl {
+            #[inline(always)]
+            fn default() -> tim4_ctrl {
+                tim4_ctrl(0)
+            }
+        }
+        impl core::fmt::Debug for tim4_ctrl {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim4_ctrl")
+                    .field("enable", &self.enable())
+                    .field("reset", &self.reset())
+                    .field("reserved0", &self.reserved0())
+                    .field("prescaler", &self.prescaler())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim4_ctrl {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "tim4_ctrl {{ enable: {=bool:?}, reset: {=bool:?}, reserved0: {=u8:?}, prescaler: {=u8:?}, reserved1: {=u16:?} }}" , self . enable () , self . reset () , self . reserved0 () , self . prescaler () , self . reserved1 ())
+            }
+        }
+        #[doc = "global timer counting gate - lets every configured timer be started phase-aligned on the same sys_clk edge, plus a shared prescaler ahead of all 4 timers' own prescalers."]
+        #[repr(transparent)]
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        pub struct tim_sync(pub u32);
+        impl tim_sync {
+            #[doc = "1 = every timer with its own timN_ctrl.enable set counts; 0 (reset default) = no timer counts, regardless of its own enable bit."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn enable(&self) -> bool {
+                let val = (self.0 >> 0usize) & 0x01;
+                val != 0
+            }
+            #[doc = "1 = every timer with its own timN_ctrl.enable set counts; 0 (reset default) = no timer counts, regardless of its own enable bit."]
+            #[inline(always)]
+            pub const fn set_enable(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved0(&self) -> bool {
+                let val = (self.0 >> 1usize) & 0x01;
+                val != 0
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved0(&mut self, val: bool) {
+                self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
+            }
+            #[doc = "divide-1, shared by all 4 timers ahead of each timer's own timN_ctrl.prescaler: a timer only advances on a sys_clk cycle this shared stage ticks on, so the effective divide to one timer tick is (prescaler+1) * (timN_ctrl.prescaler+1) sys_clk cycles. Parked at this value (not counting) whenever enable=0, so every timer's phase relative to it is deterministic the instant sync starts."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn prescaler(&self) -> u8 {
+                let val = (self.0 >> 2usize) & 0x3f;
+                val as u8
+            }
+            #[doc = "divide-1, shared by all 4 timers ahead of each timer's own timN_ctrl.prescaler: a timer only advances on a sys_clk cycle this shared stage ticks on, so the effective divide to one timer tick is (prescaler+1) * (timN_ctrl.prescaler+1) sys_clk cycles. Parked at this value (not counting) whenever enable=0, so every timer's phase relative to it is deterministic the instant sync starts."]
+            #[inline(always)]
+            pub const fn set_prescaler(&mut self, val: u8) {
+                self.0 = (self.0 & !(0x3f << 2usize)) | (((val as u32) & 0x3f) << 2usize);
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn reserved1(&self) -> u32 {
+                let val = (self.0 >> 8usize) & 0x00ff_ffff;
+                val as u32
+            }
+            #[doc = "reserved, keep at reset value."]
+            #[inline(always)]
+            pub const fn set_reserved1(&mut self, val: u32) {
+                self.0 =
+                    (self.0 & !(0x00ff_ffff << 8usize)) | (((val as u32) & 0x00ff_ffff) << 8usize);
+            }
+        }
+        impl Default for tim_sync {
+            #[inline(always)]
+            fn default() -> tim_sync {
+                tim_sync(0)
+            }
+        }
+        impl core::fmt::Debug for tim_sync {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.debug_struct("tim_sync")
+                    .field("enable", &self.enable())
+                    .field("reserved0", &self.reserved0())
+                    .field("prescaler", &self.prescaler())
+                    .field("reserved1", &self.reserved1())
+                    .finish()
+            }
+        }
+        #[cfg(feature = "defmt")]
+        impl defmt::Format for tim_sync {
+            fn format(&self, f: defmt::Formatter) {
+                defmt :: write ! (f , "tim_sync {{ enable: {=bool:?}, reserved0: {=bool:?}, prescaler: {=u8:?}, reserved1: {=u32:?} }}" , self . enable () , self . reserved0 () , self . prescaler () , self . reserved1 ())
+            }
+        }
+    }
+    pub mod vals {
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl10_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl10_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl10_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl10_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl10_timer_src {
+                pwm_ctrl10_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl10_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl10_timer_src) -> u8 {
+                pwm_ctrl10_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl11_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl11_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl11_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl11_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl11_timer_src {
+                pwm_ctrl11_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl11_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl11_timer_src) -> u8 {
+                pwm_ctrl11_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl12_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl12_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl12_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl12_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl12_timer_src {
+                pwm_ctrl12_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl12_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl12_timer_src) -> u8 {
+                pwm_ctrl12_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl1_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl1_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl1_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl1_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl1_timer_src {
+                pwm_ctrl1_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl1_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl1_timer_src) -> u8 {
+                pwm_ctrl1_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl2_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl2_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl2_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl2_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl2_timer_src {
+                pwm_ctrl2_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl2_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl2_timer_src) -> u8 {
+                pwm_ctrl2_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl3_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl3_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl3_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl3_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl3_timer_src {
+                pwm_ctrl3_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl3_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl3_timer_src) -> u8 {
+                pwm_ctrl3_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl4_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl4_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl4_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl4_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl4_timer_src {
+                pwm_ctrl4_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl4_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl4_timer_src) -> u8 {
+                pwm_ctrl4_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl5_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl5_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl5_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl5_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl5_timer_src {
+                pwm_ctrl5_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl5_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl5_timer_src) -> u8 {
+                pwm_ctrl5_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl6_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl6_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl6_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl6_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl6_timer_src {
+                pwm_ctrl6_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl6_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl6_timer_src) -> u8 {
+                pwm_ctrl6_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl7_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl7_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl7_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl7_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl7_timer_src {
+                pwm_ctrl7_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl7_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl7_timer_src) -> u8 {
+                pwm_ctrl7_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl8_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl8_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl8_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl8_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl8_timer_src {
+                pwm_ctrl8_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl8_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl8_timer_src) -> u8 {
+                pwm_ctrl8_timer_src::to_bits(val)
+            }
+        }
+        #[repr(u8)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        pub enum pwm_ctrl9_timer_src {
+            #[doc = "compare against timer 1's counter."]
+            TIM1 = 0x0,
+            #[doc = "compare against timer 2's counter."]
+            TIM2 = 0x01,
+            #[doc = "compare against timer 3's counter."]
+            TIM3 = 0x02,
+            #[doc = "compare against timer 4's counter."]
+            TIM4 = 0x03,
+        }
+        impl pwm_ctrl9_timer_src {
+            #[inline(always)]
+            pub const fn from_bits(val: u8) -> pwm_ctrl9_timer_src {
+                unsafe { core::mem::transmute(val & 0x03) }
+            }
+            #[inline(always)]
+            pub const fn to_bits(self) -> u8 {
+                unsafe { core::mem::transmute(self) }
+            }
+        }
+        impl From<u8> for pwm_ctrl9_timer_src {
+            #[inline(always)]
+            fn from(val: u8) -> pwm_ctrl9_timer_src {
+                pwm_ctrl9_timer_src::from_bits(val)
+            }
+        }
+        impl From<pwm_ctrl9_timer_src> for u8 {
+            #[inline(always)]
+            fn from(val: pwm_ctrl9_timer_src) -> u8 {
+                pwm_ctrl9_timer_src::to_bits(val)
             }
         }
     }
