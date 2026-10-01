@@ -521,8 +521,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     bank[11].set_duty(75).unwrap();
     bank[11].start();
 
-    // TODO separate the TIM_SYNC from `allocate` above, call it manually here
-    // bank.start_synced();
+    bank.start_synced();
 
     lp_spawner.spawn(unwrap!(fpga_task(fpga)));
 

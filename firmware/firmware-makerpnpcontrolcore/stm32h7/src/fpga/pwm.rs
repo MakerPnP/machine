@@ -5,8 +5,9 @@
 //!    off-target via the `fpga-config` crate to validate a configuration before it is created.
 //! 2. [`allocate`] the plan, which tears down and reprograms the whole peripheral and returns a
 //!    [`PwmBank`] with one [`PwmChannel`] per request, in request order.  Every channel starts
-//!    stopped, and all outputs are globally disabled.
+//!    stopped, all timers are stopped, and all outputs are globally disabled.
 //! 3. [`PwmBank::enable_outputs`], then set the duty and [`PwmChannel::start`] each channel.
+//! 4. [`PwmBank::start_synced`] to start all timers on the same sysclk edge.
 //!
 //! Requires memory-mapped mode.
 //!
@@ -112,22 +113,47 @@ pub fn allocate(plan: &PwmPlan) -> PwmBank {
         })
         .collect();
 
+    // the timers stay stopped until `PwmBank::start_synced`.
     defmt::debug!("PWM global prescaler: {}", plan.global_prescaler);
     timer_pwm.tim_sync().write(|w| {
-        w.set_enable(true);
+        w.set_enable(false);
         w.set_prescaler(plan.global_prescaler_reg());
     });
 
     PwmBank {
         channels,
+        global_prescaler_reg: plan.global_prescaler_reg(),
     }
 }
 
 pub struct PwmBank {
     channels: Vec<PwmChannel>,
+    global_prescaler_reg: u8,
 }
 
 impl PwmBank {
+    /// Starts all allocated timers counting on the same sysclk edge (TIM_SYNC.ENABLE).
+    ///
+    /// Channels can be configured and started before or after this; a started channel's output
+    /// follows its timer's counter, which stays at 0 (the start of the period) until then.
+    pub fn start_synced(&mut self) {
+        self.write_sync(true);
+    }
+
+    /// Freezes all timers' counters (TIM_SYNC.ENABLE).  Started channels hold whatever level they
+    /// were at when the counters stopped; [`PwmChannel::stop`] a channel to hold its idle level.
+    /// [`Self::start_synced`] resumes counting from where the timers stopped.
+    pub fn stop_synced(&mut self) {
+        self.write_sync(false);
+    }
+
+    fn write_sync(&self, enable: bool) {
+        fpga_pac::TIMER_PWM.tim_sync().write(|w| {
+            w.set_enable(enable);
+            w.set_prescaler(self.global_prescaler_reg);
+        });
+    }
+
     /// Master output enable for all 12 outputs, also enables the OT1-8 output buffer.
     pub fn enable_outputs(&mut self) {
         fpga_pac::TIMER_PWM
