@@ -95,7 +95,7 @@ module timer_pwm_tb;
         input integer cmp;
         input         polarity;
         begin
-            level_for = (cnt < cmp) ? polarity : !polarity;
+            level_for = (cnt < cmp) ? !polarity : polarity;
         end
     endfunction
 
@@ -224,16 +224,17 @@ module timer_pwm_tb;
 
             // A3: one channel at a time, alternating polarity - every
             // OTHER channel must stay LOW while only the one under test
-            // reflects its configured polarity (every timer is stopped
-            // at CNT=0, CMP=50>0, so CNT<CMP always here). PWM_SETTLE_NS
-            // gives the shared, round-robin comparator (see timer_pwm.v)
+            // reflects its configured polarity's ACTIVE level (every
+            // timer is stopped at CNT=0, CMP=50>0, so CNT<CMP always
+            // here, which is the active phase - see timer_pwm.v).
+            // PWM_SETTLE_NS gives the shared, round-robin comparator
             // time to have revisited every channel at least once since
             // the last config write, before checking any pin.
             for (ch = 0; ch < 12; ch = ch + 1) begin
                 config_channel(ch, 1'b1, ch[0], channel_timer_tbl[ch], 8'd50);
                 #PWM_SETTLE_NS;
 
-                `ASSERT_EQ(channel_pin(ch), ch[0], "%0d",
+                `ASSERT_EQ(channel_pin(ch), !ch[0], "%0d",
                            $sformatf("Channel %0d static level mismatch for polarity=%0d", ch + 1, ch[0]));
 
                 config_channel(ch, 1'b0, ch[0], channel_timer_tbl[ch], 8'd50);
@@ -249,7 +250,7 @@ module timer_pwm_tb;
             #PWM_SETTLE_NS;
 
             for (ch = 0; ch < 12; ch = ch + 1) begin
-                `ASSERT_EQ(channel_pin(ch), ch[0], "%0d",
+                `ASSERT_EQ(channel_pin(ch), !ch[0], "%0d",
                            $sformatf("Channel %0d level mismatch with every channel enabled together", ch + 1));
             end
 
@@ -304,13 +305,13 @@ module timer_pwm_tb;
 
             // ---- verify initial output levels (TIM_SYNC still 0) -----
             // CNT=0 < CMP=5 on every timer, so every channel sits at its
-            // own polarity's "before compare" level: TIM1/TIM3-mapped
-            // channels LOW, TIM2/TIM4-mapped channels HIGH. Settle first
-            // so every channel's shared-comparator slot has re-evaluated
-            // with its final configuration.
+            // own polarity's ACTIVE level: TIM1/TIM3-mapped (normal)
+            // channels HIGH, TIM2/TIM4-mapped (inverted) channels LOW.
+            // Settle first so every channel's shared-comparator slot has
+            // re-evaluated with its final configuration.
             #PWM_SETTLE_NS;
-            `ASSERT_EQ(pm_out, 4'b1010, "0b%04b", "Initial PM levels mismatch before TIM_SYNC");
-            `ASSERT_EQ(ot_out, 8'b11001100, "0b%08b", "Initial OT levels mismatch before TIM_SYNC");
+            `ASSERT_EQ(pm_out, 4'b0101, "0b%04b", "Initial PM levels mismatch before TIM_SYNC");
+            `ASSERT_EQ(ot_out, 8'b00110011, "0b%08b", "Initial OT levels mismatch before TIM_SYNC");
 
             // ---- enable global sync, advance time, check dynamic levels ----
             bus_write(REG_TIM_SYNC, 32'h1);
@@ -393,8 +394,8 @@ module timer_pwm_tb;
             bus_write(REG_PWM_CTRL, 32'h1); // SYNCED_START_TEST's cleanup left this disabled
 
             #PWM_SETTLE_NS;
-            `ASSERT_EQ(pm_out, 4'b1010, "0b%04b", "Initial PM levels mismatch before TIM_SYNC");
-            `ASSERT_EQ(ot_out, 8'b11001100, "0b%08b", "Initial OT levels mismatch before TIM_SYNC");
+            `ASSERT_EQ(pm_out, 4'b0101, "0b%04b", "Initial PM levels mismatch before TIM_SYNC");
+            `ASSERT_EQ(ot_out, 8'b00110011, "0b%08b", "Initial OT levels mismatch before TIM_SYNC");
 
             // Start every timer AND arm the shared prescaler in the same
             // write - both fields live in TIM_SYNC.

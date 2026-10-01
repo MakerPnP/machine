@@ -73,11 +73,13 @@ localparam PWM_GLOBAL_OUTPUT_ENABLE_BIT = 0;
 //   [0]   ENABLE     1 = this channel drives its pin from its timer's
 //                     comparator; 0 = pin forced LOW regardless of
 //                     polarity
-//   [1]   POLARITY   1 = pin HIGH while CNT < CMP, LOW once CNT >= CMP
-//                     0 = pin LOW while CNT < CMP, HIGH once CNT >= CMP
-//                     Either way the pin returns to its "before compare"
-//                     level the instant the timer's counter resets to 0
-//                     (natural ARR wrap or an explicit TIMx_CTRL.RESET).
+//   [1]   POLARITY   1 (inverted) = pin LOW while CNT < CMP, HIGH once
+//                     CNT >= CMP; 0 (normal) = pin HIGH while CNT < CMP,
+//                     LOW once CNT >= CMP. Either way the active phase is
+//                     the FIRST CMP ticks of the period, and the pin
+//                     returns to that active level the instant the
+//                     timer's counter resets to 0 (natural ARR wrap or
+//                     an explicit TIMx_CTRL.RESET).
 //   [3:2] reserved
 //   [5:4] TIMER_SRC  which of the 4 timers this channel compares
 //                     against - TIMER_SRC_TIM1..TIMER_SRC_TIM4 below

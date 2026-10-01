@@ -52,14 +52,17 @@
 //   OT outputs can share one timer's frequency while each keeps its
 //   own duty cycle), since PM1-4/OT1-8 may drive identical or entirely
 //   different hardware (see the module header comment in core_top.v).
-// - Per channel: pin = (CNT < CMP) ? initial_level : other_level, where
-//   initial_level is HIGH for POLARITY=1 and LOW for POLARITY=0 - a
-//   pure function of the channel's own timer's CNT, its own CMP, and
-//   its own POLARITY. This already produces the right behaviour "when a
+// - Per channel: pin = (CNT < CMP) ? active_level : idle_level, where
+//   active_level is HIGH for POLARITY=0 (normal) and LOW for POLARITY=1
+//   (inverted) - a pure function of the channel's own timer's CNT, its
+//   own CMP, and its own POLARITY. The active phase is therefore the
+//   FIRST CMP cycles of the period (conventional PWM mode-1 shape):
+//   CMP directly sets the active (duty) width, and that width always
+//   starts at CNT=0. This already produces the right behaviour "when a
 //   timer resets" (natural ARR wrap or an explicit TIMx_CTRL.RESET): the
-//   instant CNT reads 0 again (assuming CMP != 0), the same comparison
-//   re-evaluates to initial_level with no separate reset-handling logic
-//   needed.
+//   instant CNT reads 0 again, the same comparison re-evaluates to
+//   active_level (assuming CMP != 0) with no separate reset-handling
+//   logic needed.
 // - PWM_CTRL (global, offset 0x00) is the "disable ALL outputs" master
 //   switch required for OT1-8's electrical safety: OUTPUT_ENABLE=0 (the
 //   reset default) forces every one of the 12 pins LOW regardless of
@@ -422,7 +425,7 @@ module timer_pwm (
             // ========================================================
             if (pwm_scan_valid_d) begin
                 cmp_active = pwm_output_enable && pwm_rd_enable;
-                cmp_level  = (tim_cnt[pwm_rd_timer_src] < pwm_rd_cmp) ? pwm_rd_polarity : !pwm_rd_polarity;
+                cmp_level  = (tim_cnt[pwm_rd_timer_src] < pwm_rd_cmp) ? !pwm_rd_polarity : pwm_rd_polarity;
                 pwm_level[pwm_scan_addr_d] <= cmp_active ? cmp_level : 1'b0;
             end
         end

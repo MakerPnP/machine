@@ -10,9 +10,9 @@
 //! then picks `G` and each timer's `P`/`N` so every timer has the maximum number of steps.
 //!
 //! Duty is the fraction of the period the output is *active*: HIGH for [`Polarity::Normal`], LOW
-//! for [`Polarity::Inverted`].  With the FPGA's comparator (`pin = CNT < CMP ? polarity :
-//! !polarity`) the active phase is the end of the period for both polarities, so
-//! `CMP = N - active_steps` regardless of polarity.
+//! for [`Polarity::Inverted`].  With the FPGA's comparator (`pin = CNT < CMP ? !polarity :
+//! polarity`) the active phase is the first `CMP` cycles of the period for both polarities
+//! (conventional PWM mode-1 shape), so `CMP = active_steps` directly, regardless of polarity.
 
 use alloc::vec::Vec;
 
@@ -24,9 +24,9 @@ pub const CHANNEL_COUNT: usize = 12;
 pub const GLOBAL_PRESCALER_MAX: u32 = 64;
 pub const TIMER_PRESCALER_MAX: u32 = 256;
 pub const TIMER_STEPS_MAX: u32 = 256;
-/// CMP is 8 bits, so `CMP = N` (output permanently inactive) is only possible when `N <= 255`.
-/// Timers that need it (an inverted output, which must be held inactive when stopped, or a 0%
-/// minimum duty) are limited to this many steps.
+/// CMP is 8 bits, so `CMP = N` (output permanently active - CNT < N is true for every valid CNT)
+/// is only possible when `N <= 255`. Timers that need a 100% maximum duty are limited to this
+/// many steps; a 0% (fully idle) duty needs no such limit, since that's always `CMP = 0`.
 pub const TIMER_STEPS_MAX_WITH_IDLE: u32 = 255;
 
 /// Default permitted error between requested and actual frequency, in parts-per-million (0.1%).
@@ -253,15 +253,16 @@ impl ChannelPlan {
 
     /// Value for `PWM_CMPn` producing `active_steps`, which must already have been checked.
     pub const fn compare_for_active_steps(&self, active_steps: u16) -> u8 {
-        (self.steps - active_steps) as u8
+        active_steps as u8
     }
 
     /// Value for `PWM_CMPn` holding the output permanently at its idle (inactive) level.
     ///
-    /// Only valid for channels whose timer is limited to [`TIMER_STEPS_MAX_WITH_IDLE`], which
-    /// the resolver guarantees for inverted outputs.
+    /// Always `0` (`CNT < 0` is never true), so unlike [`Self::compare_for_active_steps`] at
+    /// `active_steps = steps()`, this needs no [`TIMER_STEPS_MAX_WITH_IDLE`] headroom - it works
+    /// for any step count.
     pub const fn idle_compare(&self) -> u8 {
-        self.steps as u8
+        0
     }
 }
 
@@ -318,8 +319,8 @@ pub fn try_resolve_with_tolerance<R: Into<PwmRequest> + Copy>(
     let mut groups: Vec<Group> = Vec::new();
     let mut request_groups: Vec<usize> = Vec::with_capacity(requests.len());
     for request in requests.iter() {
-        let needs_idle = request.min_duty_percent == 0 || request.polarity == Polarity::Inverted;
-        let max_steps = if needs_idle {
+        let needs_full_duty = request.max_duty_percent == 100;
+        let max_steps = if needs_full_duty {
             TIMER_STEPS_MAX_WITH_IDLE
         } else {
             TIMER_STEPS_MAX
@@ -526,7 +527,8 @@ mod tests {
         ]);
 
         // 20kHz/40kHz are exact with G=5 and 250 steps; 200Hz gets the full 255 steps
-        // (5 * 196 * 255 = 249900 cycles, 200.08Hz, 400ppm) - 256 isn't allowed, as OT2 is inverted.
+        // (5 * 196 * 255 = 249900 cycles, 200.08Hz, 400ppm) - 256 isn't allowed, as PM_OUT1
+        // requests a 100% maximum duty.
         assert_eq!(plan.global_prescaler, 5);
         assert_eq!(plan.timers[0], Some(TimerPlan { frequency_hz: 200, prescaler: 196, steps: 255 }));
         assert_eq!(plan.timers[1], Some(TimerPlan { frequency_hz: 20_000, prescaler: 2, steps: 250 }));
@@ -556,7 +558,9 @@ mod tests {
     #[test]
     fn exact_full_resolution() {
         // 50MHz / (G * P * 256): G=1, P=1 -> 195312.5Hz, so use a frequency that divides exactly.
-        let plan = plan_ok(&[(PM_OUT1, 50_000_000 / (256 * 4), 1, 100, POLARITY_NORMAL)]);
+        // max=99, not 100: a 100% maximum duty needs CMP=256 (unrepresentable in 8 bits), which
+        // would cap this at 255 steps instead of the full 256 this test is about.
+        let plan = plan_ok(&[(PM_OUT1, 50_000_000 / (256 * 4), 1, 99, POLARITY_NORMAL)]);
         let timer = plan.timers[0].unwrap();
         assert_eq!(timer.steps, 256);
         assert_eq!(plan.global_prescaler as u16 * timer.prescaler, 4);
@@ -564,13 +568,25 @@ mod tests {
     }
 
     #[test]
-    fn zero_min_duty_and_inverted_limit_steps() {
+    fn full_max_duty_limits_steps_regardless_of_polarity() {
         let frequency = 50_000_000 / (256 * 4);
-        for (min, polarity) in [(0, POLARITY_NORMAL), (1, POLARITY_INVERTED)] {
-            let plan = plan_ok(&[(PM_OUT1, frequency, min, 100, polarity)]);
+        for polarity in [POLARITY_NORMAL, POLARITY_INVERTED] {
+            let plan = plan_ok(&[(PM_OUT1, frequency, 0, 100, polarity)]);
             let timer = plan.timers[0].unwrap();
             assert!(timer.steps <= 255);
-            assert_eq!(plan.channels[0].idle_compare() as u16, timer.steps);
+        }
+    }
+
+    #[test]
+    fn zero_min_duty_needs_no_step_limit() {
+        // A 0% minimum (but < 100% maximum) duty is always CMP = 0, so it doesn't need the
+        // TIMER_STEPS_MAX_WITH_IDLE headroom a 100% maximum does - full 256 steps stays available.
+        let frequency = 50_000_000 / (256 * 4);
+        for polarity in [POLARITY_NORMAL, POLARITY_INVERTED] {
+            let plan = plan_ok(&[(PM_OUT1, frequency, 0, 99, polarity)]);
+            let timer = plan.timers[0].unwrap();
+            assert_eq!(timer.steps, 256);
+            assert_eq!(plan.channels[0].idle_compare(), 0);
         }
     }
 
@@ -736,7 +752,7 @@ mod tests {
         assert_eq!(channel.check_active_steps(189), Err(DutyError::OutOfRange));
 
         assert_eq!(channel.compare_for_active_steps(125), 125);
-        assert_eq!(channel.compare_for_active_steps(188), 62);
+        assert_eq!(channel.compare_for_active_steps(188), 188);
     }
 
     #[test]
@@ -744,7 +760,7 @@ mod tests {
         let plan = plan_ok(&[(PM_OUT1, 200, 0, 100, POLARITY_NORMAL)]);
         let channel = &plan.channels[0];
         let steps = channel.steps();
-        assert_eq!(channel.compare_for_active_steps(steps), 0); // 100%: CNT < 0 never true -> always active
-        assert_eq!(channel.compare_for_active_steps(0) as u16, steps); // 0%: CNT < N always true -> always idle
+        assert_eq!(channel.compare_for_active_steps(steps) as u16, steps); // 100%: CNT < N always true -> always active
+        assert_eq!(channel.compare_for_active_steps(0), 0); // 0%: CNT < 0 never true -> always idle
     }
 }

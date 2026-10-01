@@ -108,14 +108,14 @@ module timer_tb;
         end
     endfunction
 
-    // Mirrors timer_pwm.v's per-channel comparator: pin = polarity while
-    // CNT < CMP, else the opposite level.
+    // Mirrors timer_pwm.v's per-channel comparator: pin = !polarity
+    // (active) while CNT < CMP, else polarity (idle).
     function automatic level_for;
         input integer cnt;
         input integer cmp;
         input         polarity;
         begin
-            level_for = (cnt < cmp) ? polarity : !polarity;
+            level_for = (cnt < cmp) ? !polarity : polarity;
         end
     endfunction
 
@@ -320,15 +320,21 @@ module timer_tb;
             end
 
             // Global output enable, still not sync'd - every timer must
-            // be frozen at its configured initial value.
+            // be frozen at its configured initial value. Settle first so
+            // the shared, round-robin comparator (see timer_pwm.v) has
+            // revisited every channel at least once since OUTPUT_ENABLE
+            // changed - otherwise a channel not yet rescanned could still
+            // show its prior (forced-LOW, output-disabled) level instead
+            // of its true active one.
             bus_write(REG_PWM_CTRL, 32'h1);
+            #(13 * NS_PER_SYS_CYCLE);
 
             for (t = 0; t < 4; t = t + 1) begin
                 `ASSERT_EQ(dut.tim_cnt[t], cnt_init_tbl[t][7:0], "%0d",
                            $sformatf("TIM%0d frozen CNT mismatch before TIM_SYNC", t + 1));
             end
-            `ASSERT_EQ(pm_out, 4'b0000, "0b%04b",
-                       "PM outputs should all read their pre-compare (LOW, normal polarity) level before TIM_SYNC");
+            `ASSERT_EQ(pm_out, 4'b1111, "0b%04b",
+                       "PM outputs should all read their pre-compare (HIGH, normal polarity) active level before TIM_SYNC");
 
             // Start every timer together.
             bus_write(REG_TIM_SYNC, 32'h1);
@@ -436,14 +442,16 @@ module timer_tb;
                 bus_write(pwm_cmp_reg(t[3:0]), cmp_tbl[t][7:0]);
             end
 
+            // Settle first - see FUNCTIONAL_TIMING_TEST above for why.
             bus_write(REG_PWM_CTRL, 32'h1);
+            #(13 * NS_PER_SYS_CYCLE);
 
             for (t = 0; t < 4; t = t + 1) begin
                 `ASSERT_EQ(dut.tim_cnt[t], cnt_init_tbl[t][7:0], "%0d",
                            $sformatf("TIM%0d frozen CNT mismatch before TIM_SYNC", t + 1));
             end
-            `ASSERT_EQ(pm_out, 4'b0000, "0b%04b",
-                       "PM outputs should all read their pre-compare (LOW, normal polarity) level before TIM_SYNC");
+            `ASSERT_EQ(pm_out, 4'b1111, "0b%04b",
+                       "PM outputs should all read their pre-compare (HIGH, normal polarity) active level before TIM_SYNC");
 
             // Start every timer AND arm the shared prescaler in the same
             // write - both fields live in TIM_SYNC.

@@ -2323,7 +2323,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -2423,7 +2423,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -2523,7 +2523,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -2623,7 +2623,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -2723,7 +2723,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -2823,7 +2823,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -2923,7 +2923,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -3023,7 +3023,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -3123,7 +3123,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -3223,7 +3223,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -3323,7 +3323,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -3423,7 +3423,7 @@
 
             <field>
               <name>polarity</name>
-              <description>1 = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare; 0 = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
+              <description>1 (inverted) = pin LOW while counter &lt; compare, HIGH once counter &gt;= compare; 0 (normal) = pin HIGH while counter &lt; compare, LOW once counter &gt;= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
             </field>

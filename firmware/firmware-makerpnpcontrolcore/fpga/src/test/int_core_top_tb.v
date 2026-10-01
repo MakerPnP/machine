@@ -559,6 +559,7 @@ module int_core_top_tb;
                 if (pwm_capture_active && pwm_capture_count[gpc + 4] < PWM_CAPTURE_DEPTH) begin
                     pwm_capture_time[gpc + 4][pwm_capture_count[gpc + 4]]  = $time;
                     pwm_capture_value[gpc + 4][pwm_capture_count[gpc + 4]] = OT_OUT[gpc];
+                    pwm_capture_count[gpc + 4] = pwm_capture_count[gpc + 4] + 1;
                     $display("[PWM_CAPTURE_DIAG] t=%0t OT channel %0d edge %0d -> %0d",
                              $time, gpc + 4, pwm_capture_count[gpc + 4]-1, OT_OUT[gpc]);
                 end
@@ -1422,28 +1423,31 @@ module int_core_top_tb;
                        "[TIMER_PWM SCENARIO] OT4's PWM_CMP readback mismatch");
 
             // ---- global output enable, then verify every configured
-            // channel is frozen at its pre-compare level before TIM_SYNC
-            // (CNT=0 on every timer, every CMP>0, so normal-polarity
-            // channels read LOW and inverted-polarity channels read
-            // HIGH) - settled >=12 sys_clk cycles so the shared, round-
-            // robin comparator (see timer_pwm.v) has revisited every
-            // channel at least once since configuration.
+            // channel is frozen at its pre-compare, ACTIVE level before
+            // TIM_SYNC (CNT=0 on every timer, every CMP>0, so CNT<CMP
+            // everywhere: normal-polarity channels read HIGH and
+            // inverted-polarity channels read LOW - see timer_pwm.v) -
+            // settled >=12 sys_clk cycles so the shared, round-robin
+            // comparator has revisited every channel at least once since
+            // configuration.
             qspi_bus_write(TIMER_PWM_BASE + REG_PWM_CTRL, 32'h1);
             repeat (13) @(posedge uut.sys_clk);
-            `ASSERT_EQ(PM_OUT, 4'b0000, "0b%04b",
-                       "[TIMER_PWM SCENARIO] PM outputs should all be LOW before TIM_SYNC");
-            `ASSERT_EQ(OT_OUT, 8'b00001010, "0b%08b",
-                       "[TIMER_PWM SCENARIO] OT outputs mismatch before TIM_SYNC (OT4/OT2 inverted -> HIGH)");
+            `ASSERT_EQ(PM_OUT, 4'b1111, "0b%04b",
+                       "[TIMER_PWM SCENARIO] PM outputs should all be HIGH (active, normal polarity) before TIM_SYNC");
+            `ASSERT_EQ(OT_OUT, 8'b11110101, "0b%08b",
+                       "[TIMER_PWM SCENARIO] OT outputs mismatch before TIM_SYNC (OT4/OT2 inverted -> LOW)");
 
             // ---- pre-compute the expected waveform (4 transitions per
             // channel) from the register-level semantics alone: a timer
             // ticks once every (global divide * its own divide) sys_clk
             // cycles, counts 0..ARR then wraps, and each channel's pin
-            // goes to !POLARITY the instant its own timer's CNT reaches
-            // its CMP, back to POLARITY the instant CNT wraps to 0. So
-            // for one period P (cycles) and crossing point C (cycles
-            // into the period), the 4 transitions land at C, P, P+C,
-            // 2P, alternating !POLARITY/POLARITY/!POLARITY/POLARITY.
+            // is !POLARITY (active) for the FIRST CMP ticks of the
+            // period, then POLARITY (idle) until it wraps back to
+            // !POLARITY. So for one period P (cycles) and crossing point
+            // C (cycles into the period), the 4 transitions land at C,
+            // P, P+C, 2P, alternating POLARITY/!POLARITY/POLARITY/
+            // !POLARITY (the first transition is active->idle, since
+            // capture starts already in the active state from CNT=0).
             for (t = 0; t < 4; t = t + 1) begin
                 divide_per_tick[t] = (GLOBAL_PRESCALER_REG + 1) * (prescaler_reg_tbl[t] + 1);
                 period_cycles[t]   = divide_per_tick[t] * (arr_reg_tbl[t] + 1);
@@ -1455,10 +1459,10 @@ module int_core_top_tb;
                 expected_offset_ns[ch][1] = period_cycles[t] * NS_PER_SYS_CYCLE;
                 expected_offset_ns[ch][2] = (period_cycles[t] + cross_cycles) * NS_PER_SYS_CYCLE;
                 expected_offset_ns[ch][3] = (2 * period_cycles[t]) * NS_PER_SYS_CYCLE;
-                expected_value[ch][0] = !channel_polarity[ch];
-                expected_value[ch][1] = channel_polarity[ch];
-                expected_value[ch][2] = !channel_polarity[ch];
-                expected_value[ch][3] = channel_polarity[ch];
+                expected_value[ch][0] = channel_polarity[ch];
+                expected_value[ch][1] = !channel_polarity[ch];
+                expected_value[ch][2] = channel_polarity[ch];
+                expected_value[ch][3] = !channel_polarity[ch];
             end
 
             for (ch = 0; ch < PWM_CAPTURE_CHANNELS; ch = ch + 1) pwm_capture_count[ch] = 0;
