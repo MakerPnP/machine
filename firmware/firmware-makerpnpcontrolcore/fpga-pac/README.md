@@ -18,13 +18,13 @@ The process is:
 * apply patches to the generated code.
 
 ```
-./generate.sh
+./rebuild.sh
 ```
 
 There are a set of patches in the `patches` directory that are applied to the generated code.
 The patches themselves are generated from commits to this repository in such a way that the generated and patched code
 results in the same code as the repository.
-Patches are creating using `git format-patch` and then added to the `patches` directory and the `generate.sh` script
+Patches are creating using `git format-patch` and then added to the `patches` directory and the `rebuild.sh` script
 is updated to include them.
 
 ## Using
