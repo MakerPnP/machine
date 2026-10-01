@@ -1,4 +1,4 @@
-From 8dc618fc00d1e068053b50eaed89a3274e8ff0b9 Mon Sep 17 00:00:00 2001
+From 0624b9df8f5e9a31daf4ed5495c69781f74485fc Mon Sep 17 00:00:00 2001
 From: Dominic Clifton <me@dominicclifton.name>
 Date: Thu, 18 Jun 2026 12:19:11 +0200
 Subject: [PATCH 2/3] delete-rt-block
@@ -8,7 +8,7 @@ Subject: [PATCH 2/3] delete-rt-block
  1 file changed, 11 deletions(-)
 
 diff --git a/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs b/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
-index ae90b98..c20d45f 100644
+index 5d995cb..9d0d64c 100644
 --- a/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
 +++ b/firmware/firmware-makerpnpcontrolcore/fpga-pac/src/lib.rs
 @@ -3,17 +3,6 @@
