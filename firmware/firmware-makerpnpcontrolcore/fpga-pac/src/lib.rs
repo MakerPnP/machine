@@ -4626,14 +4626,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -4716,14 +4716,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -4806,14 +4806,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -4896,14 +4896,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -4986,14 +4986,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -5076,14 +5076,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -5166,14 +5166,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -5256,14 +5256,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -5346,14 +5346,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -5436,14 +5436,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -5526,14 +5526,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
@@ -5616,14 +5616,14 @@ pub mod timer_pwm {
             pub const fn set_enable(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 0usize)) | (((val as u32) & 0x01) << 0usize);
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[must_use]
             #[inline(always)]
             pub const fn polarity(&self) -> bool {
                 let val = (self.0 >> 1usize) & 0x01;
                 val != 0
             }
-            #[doc = "1 = pin HIGH while counter < compare, LOW once counter >= compare; 0 = pin LOW while counter < compare, HIGH once counter >= compare. Either way the pin returns to its pre-compare level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
+            #[doc = "1 (inverted) = pin LOW while counter < compare, HIGH once counter >= compare; 0 (normal) = pin HIGH while counter < compare, LOW once counter >= compare. Either way the active phase is the first `compare` ticks of the period, and the pin returns to that active level the instant the timer's counter resets to 0 (auto-reload wrap or an explicit timN_ctrl.reset)."]
             #[inline(always)]
             pub const fn set_polarity(&mut self, val: bool) {
                 self.0 = (self.0 & !(0x01 << 1usize)) | (((val as u32) & 0x01) << 1usize);
