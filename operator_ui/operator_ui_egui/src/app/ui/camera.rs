@@ -5,7 +5,7 @@ use eframe::epaint::textures::TextureOptions;
 use egui::{Frame, Id, Popup, RichText, Ui, UiBuilder, Widget};
 use egui_i18n::tr;
 use egui_mobius::Value;
-use egui_tool_windows::ToolWindows;
+use egui_tool_windows::{ToolWindowAction, ToolWindows};
 use tokio::sync::watch::Receiver;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -144,9 +144,10 @@ impl CameraUi {
                 ui.id()
                     .with("camera-toolwindow-fps-stats"),
             );
-            ToolWindows::new().windows(ui, |builder| {
+            let action_map = ToolWindows::new().windows(ui, |builder| {
                 builder
                     .add_window(fps_stats_id)
+                    .closable(true)
                     .default_pos([10.0, 10.0])
                     .default_size([400.0, 150.0])
                     .show(tr!("camera-toolwindow-fps-stats-title"), {
@@ -176,6 +177,18 @@ impl CameraUi {
                         }
                     });
             });
+
+            for (id, actions) in action_map {
+                if id.eq(&fps_stats_id) {
+                    for action in actions {
+                        match action {
+                            ToolWindowAction::CloseRequested => {
+                                self.show_stats = false;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
