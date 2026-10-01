@@ -40,9 +40,26 @@ pub const TIMER_STEPS_MAX_WITH_IDLE: u32 = 255;
 /// cycles) resolves to 260 cycles, 192.3kHz.
 pub const DEFAULT_FREQUENCY_TOLERANCE_PPM: u32 = 1_000;
 
-/// The FPGA shares one comparator round-robin between all 12 channels, so a pin is only updated
-/// every 12 sysclk cycles.  Periods shorter than two updates can't be reproduced on the pin.
-pub const MIN_PERIOD_CYCLES: u32 = 2 * 12;
+/// The FPGA shares one comparator round-robin between all 12 channels (one channel serviced per
+/// sysclk cycle), so any one channel's pin is only revisited every `PWM_SCAN_ROTATION_CYCLES`
+/// sysclk cycles, and can lag the true CNT/CMP crossing by anywhere up to that long.
+pub const PWM_SCAN_ROTATION_CYCLES: u32 = 12;
+
+/// Periods shorter than two full scan rotations can't be reproduced on the pin at all.  This is
+/// necessary but NOT sufficient: see [`MIN_SAFE_PHASE_CYCLES`] for the per-phase (not just
+/// per-period) bound that actually guarantees glitch-free output.
+pub const MIN_PERIOD_CYCLES: u32 = 2 * PWM_SCAN_ROTATION_CYCLES;
+
+/// Minimum safe length, in sysclk cycles, for a channel's shorter phase (its active time for a
+/// near-0% duty, or its idle time for a near-100% duty) - two full scan rotations of margin, so
+/// the round-robin scanner is guaranteed to catch the transition into AND out of that phase
+/// before the next one is due. A phase shorter than this risks the scanner missing its window
+/// entirely, carrying the previous level over into (or through) the next period - observed in
+/// practice as pulses that are intermittently stretched to roughly double width, or pulses from
+/// an adjacent channel in the scan order merging across what should have been two periods.
+/// Exact 0% or exact 100% duty are always safe regardless (no transition to miss), since there's
+/// no "short phase" to catch at all at that extreme.
+pub const MIN_SAFE_PHASE_CYCLES: u32 = 2 * PWM_SCAN_ROTATION_CYCLES;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -137,6 +154,12 @@ pub enum ResolveError {
     /// Each frequency can be generated on its own, but not all together with one shared global
     /// prescaler.
     NoCommonPrescaler,
+    /// At this frequency, some duty in the requested (possibly widened) range would leave this
+    /// channel's active or idle phase shorter than [`MIN_SAFE_PHASE_CYCLES`] - the shared
+    /// round-robin comparator isn't guaranteed to catch the transition in time, risking
+    /// intermittently stretched or merged pulses. Narrow the duty range away from that extreme,
+    /// or lower the frequency.
+    DutyPhaseTooShort(PwmOutput),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -216,6 +239,23 @@ impl ChannelPlan {
 
     pub fn actual_frequency_hz(&self) -> f32 {
         SYSCLK as f32 / self.period_cycles as f32
+    }
+
+    /// Sysclk cycles per tick (one CNT increment) - `period_cycles() / steps()`.
+    const fn divide_per_tick(&self) -> u32 {
+        self.period_cycles / self.steps as u32
+    }
+
+    /// `Some(output)` if this channel's requested (possibly widened) duty range would allow an
+    /// active or idle phase shorter than [`MIN_SAFE_PHASE_CYCLES`] - see that constant's docs.
+    /// Exact 0%/100% duty is exempt (nothing for the scanner to catch at that extreme).
+    fn unsafe_phase_output(&self) -> Option<PwmOutput> {
+        let divide_per_tick = self.divide_per_tick();
+        let min_active_cycles = self.min_active_steps as u32 * divide_per_tick;
+        let max_idle_cycles = (self.steps as u32 - self.max_active_steps as u32) * divide_per_tick;
+        let active_unsafe = self.min_active_steps > 0 && min_active_cycles < MIN_SAFE_PHASE_CYCLES;
+        let idle_unsafe = (self.max_active_steps as u32) < self.steps as u32 && max_idle_cycles < MIN_SAFE_PHASE_CYCLES;
+        (active_unsafe || idle_unsafe).then_some(self.request.output)
     }
 
     /// Usable range of active steps (inclusive), always at least as wide as the requested duty range.
@@ -394,11 +434,17 @@ pub fn try_resolve_with_tolerance<R: Into<PwmRequest> + Copy>(
         });
     }
 
-    let channels = requests
+    let channels: Vec<ChannelPlan> = requests
         .iter()
         .zip(request_groups.iter())
         .map(|(request, &timer)| ChannelPlan::new(*request, timer as u8, global_prescaler, timers[timer].as_ref().unwrap()))
         .collect();
+
+    for channel in channels.iter() {
+        if let Some(output) = channel.unsafe_phase_output() {
+            return Err(ResolveError::DutyPhaseTooShort(output));
+        }
+    }
 
     Ok(PwmPlan {
         global_prescaler,
@@ -558,9 +604,10 @@ mod tests {
     #[test]
     fn exact_full_resolution() {
         // 50MHz / (G * P * 256): G=1, P=1 -> 195312.5Hz, so use a frequency that divides exactly.
-        // max=99, not 100: a 100% maximum duty needs CMP=256 (unrepresentable in 8 bits), which
-        // would cap this at 255 steps instead of the full 256 this test is about.
-        let plan = plan_ok(&[(PM_OUT1, 50_000_000 / (256 * 4), 1, 99, POLARITY_NORMAL)]);
+        // min=10/max=90, not 0/100: a 100% maximum duty needs CMP=256 (unrepresentable in 8
+        // bits, capping at 255 steps), and either extreme would also leave a too-short phase for
+        // MIN_SAFE_PHASE_CYCLES - neither is what this test (full 256-step resolution) is about.
+        let plan = plan_ok(&[(PM_OUT1, 50_000_000 / (256 * 4), 10, 90, POLARITY_NORMAL)]);
         let timer = plan.timers[0].unwrap();
         assert_eq!(timer.steps, 256);
         assert_eq!(plan.global_prescaler as u16 * timer.prescaler, 4);
@@ -579,11 +626,13 @@ mod tests {
 
     #[test]
     fn zero_min_duty_needs_no_step_limit() {
-        // A 0% minimum (but < 100% maximum) duty is always CMP = 0, so it doesn't need the
-        // TIMER_STEPS_MAX_WITH_IDLE headroom a 100% maximum does - full 256 steps stays available.
+        // A 0% minimum (but comfortably < 100% maximum) duty is always CMP = 0, so it doesn't
+        // need the TIMER_STEPS_MAX_WITH_IDLE headroom a 100% maximum does - full 256 steps stays
+        // available. max=90, not 99: 99% would leave only a 2-step (8-cycle) idle phase, well
+        // under MIN_SAFE_PHASE_CYCLES, which isn't what this test is about.
         let frequency = 50_000_000 / (256 * 4);
         for polarity in [POLARITY_NORMAL, POLARITY_INVERTED] {
-            let plan = plan_ok(&[(PM_OUT1, frequency, 0, 99, polarity)]);
+            let plan = plan_ok(&[(PM_OUT1, frequency, 0, 90, polarity)]);
             let timer = plan.timers[0].unwrap();
             assert_eq!(timer.steps, 256);
             assert_eq!(plan.channels[0].idle_compare(), 0);
@@ -718,10 +767,19 @@ mod tests {
 
     #[test]
     fn widened_duty_range_is_never_narrower() {
+        // Some (frequency, min, max) combinations here are now correctly rejected with
+        // DutyPhaseTooShort (e.g. 1MHz with a duty extreme close to 0% or 100%) - this test is
+        // about widening behaviour for configs that DO resolve, so skip those rather than assert
+        // on them; full_max_duty_limits_steps_regardless_of_polarity and friends cover the
+        // rejection path itself.
         for frequency in [13, 200, 1_234, 20_000, 40_000, 192_000, 1_000_000] {
             for min in (0..=100u8).step_by(7) {
                 for max in (min..=100u8).step_by(5) {
-                    let plan = plan_ok(&[(OT_OUT1, frequency, min, max, POLARITY_INVERTED)]);
+                    let plan = match try_resolve(&[(OT_OUT1, frequency, min, max, POLARITY_INVERTED)]) {
+                        Ok(plan) => plan,
+                        Err(ResolveError::DutyPhaseTooShort(_)) => continue,
+                        Err(e) => panic!("{} {}..{} -> unexpected error {:?}", frequency, min, max, e),
+                    };
                     let channel = &plan.channels[0];
                     let (lo, hi) = channel.duty_range_percent();
                     assert!(lo <= min as f32 && hi >= max as f32, "{} {}..{} -> {}..{}", frequency, min, max, lo, hi);
@@ -762,5 +820,28 @@ mod tests {
         let steps = channel.steps();
         assert_eq!(channel.compare_for_active_steps(steps) as u16, steps); // 100%: CNT < N always true -> always active
         assert_eq!(channel.compare_for_active_steps(0), 0); // 0%: CNT < 0 never true -> always idle
+    }
+
+    #[test]
+    fn too_short_phase_rejected_at_1mhz() {
+        // Real-world regression case: two 1MHz outputs on one timer resolve to only steps=10
+        // (period=50 sysclk cycles). 25%/75% duty each land within MIN_SAFE_PHASE_CYCLES of one
+        // extreme (OT7's active phase, OT8's idle phase), which in practice produced
+        // intermittent stretched/merged pulses on real hardware - this must now be rejected
+        // rather than silently accepted.
+        let result = try_resolve(&[
+            (OT_OUT7, 1_000_000, 25, 25, POLARITY_NORMAL),
+            (OT_OUT8, 1_000_000, 75, 75, POLARITY_NORMAL),
+        ]);
+        assert!(
+            matches!(result, Err(ResolveError::DutyPhaseTooShort(_))),
+            "{:?}",
+            result
+        );
+
+        // The same frequency with a comfortably central duty (and no other channel sharing the
+        // timer, so the resolver isn't forced to as few steps) is fine.
+        let plan = try_resolve(&[(OT_OUT7, 1_000_000, 50, 50, POLARITY_NORMAL)]);
+        assert!(plan.is_ok(), "{:?}", plan);
     }
 }

@@ -172,10 +172,30 @@ module timer_pwm (
     // delayed copies of "who drove RADDR last cycle", used to correctly
     // attribute the RAM's current output once it arrives - the same
     // shared-port-arbitration shape steppers.v uses for its segment
-    // table (see that file's "SEGMENT READBACK" comment), except here
-    // losing the odd cycle to the bus just means the scanner revisits
-    // that channel on its next pass ~12 cycles later, utterly
-    // negligible against any realistic PWM period.
+    // table (see that file's "SEGMENT READBACK" comment).
+    //
+    // KNOWN TRADE-OFF, confirmed on real hardware: losing the odd cycle
+    // to the bus means the scanner can revisit a given channel as late
+    // as ~12 cycles (PWM_SCAN_ROTATION_CYCLES, see fpga-config's pwm.rs)
+    // after its true CNT/CMP crossing. This is genuinely negligible for
+    // the PWM periods this peripheral is primarily aimed at (tens of
+    // kHz and below), but is NOT negligible once a channel's active or
+    // idle phase gets down into double-digit sysclk cycles (e.g. two
+    // outputs sharing one 1MHz timer at 25%/75% duty resolve to only 10
+    // steps per period, and one phase can land under 12 cycles) - there
+    // the scanner can miss a transition's window entirely, carrying the
+    // previous level over into (or through) the next period, observed
+    // as intermittently stretched/merged pulses. fpga-config's resolver
+    // now rejects configurations that would hit this
+    // (MIN_SAFE_PHASE_CYCLES / ResolveError::DutyPhaseTooShort) rather
+    // than silently producing glitchy output, but the underlying
+    // single-round-robin architecture isn't changed by that - it's a
+    // real headroom limit of this design, not just a software gap.
+    // Should high-frequency, tight-margin PWM become a real requirement,
+    // the documented fix is to split the 12-channel round-robin into
+    // two independent 6-channel ones (two SB_RAM40_4K instead of one -
+    // the device has spare EBRs, 21/32 used as of this writing), halving
+    // the worst-case latency; not done here since it wasn't needed.
     // ------------------------------------------------------------------
     wire        pwm_ch_sel    = bus_stb && (bus_addr >= REG_PWM_CTRL1) && (bus_addr <= REG_PWM_CMP12);
     wire [3:0]  pwm_ch_idx    = (bus_addr - REG_PWM_CTRL1) >> 3; // 0..11, 8 bytes/channel
