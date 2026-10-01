@@ -10,7 +10,13 @@ FAMILY   := ice40
 TYPE     := hx8k
 PACKAGE  := ct256
 #NEXTPNR_EXTRA_ARGS :=  --placer sa
-NEXTPNR_EXTRA_ARGS :=
+# Design sits at ~91% LC utilisation (see memory/notes on timer_pwm's block-
+# RAM optimization), so placement is sensitive to the default seed - the
+# default (--seed 1, implicit) fails to legalise one carry chain after
+# pins.pcf moved OT_OUT[0] from B8 to B6; --seed 2 (and 3/4/5, tested) places
+# cleanly with the identical design/LC count, so pin it rather than leaving
+# this to chance.
+NEXTPNR_EXTRA_ARGS := --seed 2
 FREQ     := 50
 BUILD := build
 SRC_MAIN := src/main
