@@ -313,7 +313,8 @@ impl PwmChannel {
         match self.polarity() {
             // the FPGA forces a disabled channel LOW
             Polarity::Normal => self.write_ctrl(false),
-            // LOW is active, so instead keep it enabled with CNT < CMP for the whole period.
+            // LOW is active, so instead keep it enabled with CMP=0 (CNT < 0 never true, so the
+            // pin stays at the idle/HIGH level for the whole period).
             Polarity::Inverted => {
                 pwm_cmp(self.channel()).write(|w| w.set_value(self.plan.idle_compare()));
                 self.write_ctrl(true);
