@@ -18,6 +18,7 @@ tracepin = [
 
 [dependencies]
 fpga-pac           = { path = "../fpga-pac" }
+fpga-config        = { path = "../fpga-config", features = ["defmt"] }
 
 ioboard_main       = { path = "../../../ioboard/ioboard_main" }
 ioboard_net        = { path = "../../../ioboard/ioboard_net" }

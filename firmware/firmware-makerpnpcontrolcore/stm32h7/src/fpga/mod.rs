@@ -8,6 +8,8 @@ use embassy_stm32::ospi::enums::DummyCycles;
 use defmt::*;
 use fpga_pac::steppers::vals::cmd;
 
+pub use fpga_config::SYSCLK;
+
 mod commands {
     pub const CMD_READ_U32_BE: u8 = 0x10;
     pub const CMD_READ_U32_LE: u8 = 0x11;
@@ -33,6 +35,7 @@ pub mod loadcell;
 pub mod steppers;
 pub mod ws2812;
 pub mod adc;
+pub mod pwm;
 
 pub struct FpgaCore<I: Instance> {
     ospi: Ospi<'static, I, Blocking>,

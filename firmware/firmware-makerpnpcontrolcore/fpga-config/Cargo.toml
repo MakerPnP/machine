@@ -1,0 +1,16 @@
+[package]
+name = "fpga-config"
+version = "0.1.0"
+edition = "2024"
+description = "Host-testable configuration resolvers for the makerpnp control core FPGA peripherals"
+
+[features]
+default = []
+
+defmt = [
+    "dep:defmt",
+    "defmt/alloc",
+]
+
+[dependencies]
+defmt              = { version = "1.0.1", optional = true }
