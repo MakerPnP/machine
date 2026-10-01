@@ -91,7 +91,7 @@ module leds (
 
             activity_flag <= ~activity_flag;
 
-            //debug <= 16'hffff;
+`ifdef DEBUG_LEDS
             debug <= {
                 led_ctrl[7:0],
                 reset,
@@ -103,6 +103,7 @@ module leds (
                 strobe_update,
                 activity_flag
             };
+`endif
         end
     end
 

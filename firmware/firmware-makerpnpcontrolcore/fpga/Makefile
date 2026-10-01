@@ -22,6 +22,19 @@ BUILD := build
 SRC_MAIN := src/main
 SRC_TEST := src/test
 
+# Select which peripheral's debug bus is routed to LA_IO (via la.v, see
+# core_top.v), e.g.: make DEBUG_PERIPHERAL=leds synth
+# Valid values: leds, buzzer, io, encoders. Leave unset to compile out all
+# peripheral debug logic (saves LCs - see memory/notes on LC optimization).
+# Changing this doesn't touch any source file mtimes, so run `make clean`
+# first if a stale build gets reused.
+DEBUG_PERIPHERAL :=
+ifneq ($(DEBUG_PERIPHERAL),)
+VERILOG_DEFS := -D DEBUG_$(shell echo $(DEBUG_PERIPHERAL) | tr '[:lower:]' '[:upper:]')
+else
+VERILOG_DEFS :=
+endif
+
 VERILOGS := $(shell find $(SRC_MAIN) -type f -name "*.v" ! -name "*_tb.v")
 
 # Gather testbench paths
@@ -91,7 +104,7 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 $(BUILD)/$(PROJECT)-design.json: $(VERILOGS) $(BUILD) Makefile
-	yosys -q -l $(BUILD)/yosys.log -p 'synth_${FAMILY} -top $(TOP) -json $(BUILD)/$(PROJECT)-design.json; share' $(VERILOGS)
+	yosys -q -l $(BUILD)/yosys.log $(VERILOG_DEFS) -p 'synth_${FAMILY} -top $(TOP) -json $(BUILD)/$(PROJECT)-design.json; share' $(VERILOGS)
 
 $(BUILD)/$(PROJECT).asc: $(BUILD)/$(PROJECT)-design.json pins.pcf
 	nextpnr-${FAMILY} -q -l $(BUILD)/nextpnr.log --${TYPE} --package ${PACKAGE} --top $(TOP) --json $(BUILD)/$(PROJECT)-design.json --write $(BUILD)/$(PROJECT)-place.json --report $(BUILD)/$(PROJECT)-report.json --pcf pins.pcf --asc $(BUILD)/$(PROJECT).asc --placed-svg $(BUILD)/$(PROJECT)-placed.svg --freq $(FREQ) -v $(NEXTPNR_EXTRA_ARGS)
@@ -113,7 +126,7 @@ synth: $(BUILD)/$(PROJECT).bin
 ## sim/<path_to_testbench>: Run a specific testbench preserving relative path layout, e.g. sim/test/bar1/foo
 sim/%:
 	@mkdir -p $(BUILD)/$(dir $*)
-	iverilog -D SIM -g2012 -o $(BUILD)/$*_tb.vvp $(call TB_SRCS,$*)
+	iverilog -D SIM $(VERILOG_DEFS) -g2012 -o $(BUILD)/$*_tb.vvp $(call TB_SRCS,$*)
 	cd $(BUILD)/$(dir $*) && vvp -n $(notdir $*_tb.vvp)
 	@echo ""
 

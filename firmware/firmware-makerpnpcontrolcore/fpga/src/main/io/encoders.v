@@ -212,7 +212,7 @@ module encoders(
 
             activity_flag <= ~activity_flag;
 
-            //debug <= 16'hffff;
+`ifdef DEBUG_ENCODERS
             debug <= {
                 enc_ctrl[7:0],
                 reset,
@@ -223,6 +223,7 @@ module encoders(
                 strobe_update,
                 activity_flag
             };
+`endif
         end
     end
 

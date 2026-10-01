@@ -155,7 +155,7 @@ module io (
 
             activity_flag <= ~activity_flag;
 
-            //debug <= 16'hffff;
+`ifdef DEBUG_IO
             debug <= {
 //                io_ctrl[7:0],
                 8'd0,
@@ -167,6 +167,7 @@ module io (
                 strobe_update,
                 activity_flag
             };
+`endif
         end
     end
 

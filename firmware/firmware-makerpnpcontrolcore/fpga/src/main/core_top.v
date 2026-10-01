@@ -147,8 +147,22 @@ module core_top (
     wire [15:0] encoder_debug;
 
     reg [7:0] la_src = 2;
-    //wire [15:0] la_in = buzzer_debug;
+
+    // Select which peripheral's debug bus is routed to LA_IO at build time via
+    // `make DEBUG_PERIPHERAL=<leds|buzzer|io|encoders> ...` (see Makefile). Only
+    // the selected peripheral's debug logic is synthesized (see DEBUG_* ifdefs
+    // in leds.v/buzzer.v/io.v/encoders.v) so unused debug busses cost no LCs.
+`ifdef DEBUG_LEDS
+    wire [15:0] la_in = led_debug;
+`elsif DEBUG_BUZZER
+    wire [15:0] la_in = buzzer_debug;
+`elsif DEBUG_IO
+    wire [15:0] la_in = io_debug;
+`elsif DEBUG_ENCODERS
+    wire [15:0] la_in = encoder_debug;
+`else
     wire [15:0] la_in = 16'h0F0F;
+`endif
 
 
     wire global_motor_en;

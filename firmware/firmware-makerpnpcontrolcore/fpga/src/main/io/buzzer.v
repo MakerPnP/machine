@@ -86,7 +86,7 @@ module buzzer (
 
             activity_flag <= ~activity_flag;
 
-            //debug <= 16'hffff;
+`ifdef DEBUG_BUZZER
             debug <= {
                 buzzer_ctrl[7:0],
                 reset,
@@ -98,6 +98,7 @@ module buzzer (
                 strobe_update,
                 activity_flag
             };
+`endif
         end
     end
 
