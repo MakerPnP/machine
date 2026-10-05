@@ -2,16 +2,18 @@
 
 use std::collections::HashSet;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::time::Duration;
 
 use ergot::toolkits::tokio_udp::{RouterStack, register_router_interface};
 use ioboard_shared::discovery::{
     self, DISCOVERY_FRAME_SIZE_MAX, DISCOVERY_PORT, DecodeError, Endpoint, IoBoardAdvertisement,
-    IoBoardAdvertisementTopic, IoBoardClaim, IoBoardClaimTopic, SerialNumber,
+    IoBoardAdvertisementTopic, IoBoardClaim, IoBoardClaimTopic, IoBoardRelease, IoBoardReleaseTopic, SerialNumber,
 };
 use log::{debug, error, info, warn};
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::broadcast::Receiver;
+use tokio::time::{Instant, timeout_at};
 
 use crate::AppEvent;
 use crate::config::{ConnectionKind, DiscoveredIoBoard, IO_BOARD_LOCAL_PORT_BASE, IoBoardDefinition};
@@ -26,7 +28,14 @@ struct ConnectedIoBoard {
     local_endpoint: Endpoint,
     /// The endpoint the board is claimed by, when it is not ours, used to avoid repeated warnings.
     claimed_elsewhere: Option<Endpoint>,
+    /// The board's discovery endpoint, the source of its most recent advertisement.
+    discovery_address: SocketAddrV4,
 }
+
+/// How many times a release is sent to a board that hasn't confirmed it, when shutting down.
+const RELEASE_ATTEMPTS: u32 = 4;
+/// How long to wait for boards to confirm a release, before sending it again.
+const RELEASE_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 
 pub async fn io_board_discovery(
     stack: RouterStack,
@@ -92,6 +101,9 @@ pub async fn io_board_discovery(
             .handle_advertisement(&socket, from, advertisement)
             .await;
     }
+
+    // so the boards can be claimed by another server, or this server with a different config, without being reset.
+    discovery.release_all(&socket).await;
 
     info!("io board discovery stopped");
 }
@@ -179,7 +191,7 @@ impl IoBoardDiscovery {
                     .local_port_base
                     .map(|base| base + index as u16)
                     .unwrap_or(0);
-                match connect(&self.stack, serial_number, address, local_port).await {
+                match connect(&self.stack, serial_number, address, local_port, from).await {
                     Ok(board) => {
                         info!(
                             "Connected to io board. name: {}, serial_number: {}, address: {}, local_address: {}",
@@ -203,6 +215,7 @@ impl IoBoardDiscovery {
         };
         let name = &self.definitions[index].name;
         let board = self.connected[index].as_mut().unwrap();
+        board.discovery_address = from;
 
         if board.address.ip() != from.ip() || board.address.port() != advertisement.ergot_port {
             // FUTURE handle this by replacing the ergot interface
@@ -256,6 +269,86 @@ impl IoBoardDiscovery {
             }
         }
     }
+
+    /// Release the claims on all connected boards, waiting for the boards to confirm.
+    ///
+    /// Boards claimed by another endpoint ignore the release, so they are skipped.
+    async fn release_all(&self, socket: &UdpSocket) {
+        let mut pending: Vec<usize> = self
+            .connected
+            .iter()
+            .enumerate()
+            .filter_map(|(index, connected)| match connected {
+                Some(board) if board.claimed_elsewhere.is_none() => Some(index),
+                _ => None,
+            })
+            .collect();
+
+        let mut buf = [0u8; 1500];
+        for _ in 0..RELEASE_ATTEMPTS {
+            if pending.is_empty() {
+                break;
+            }
+
+            for &index in &pending {
+                let board = self.connected[index].as_ref().unwrap();
+                info!(
+                    "Releasing io board. name: {}, serial_number: {}",
+                    self.definitions[index].name, board.serial_number
+                );
+                let release = IoBoardRelease {
+                    serial_number: board.serial_number,
+                    server: board.local_endpoint,
+                };
+                let mut frame_buf = [0u8; DISCOVERY_FRAME_SIZE_MAX];
+                let frame =
+                    discovery::encode::<IoBoardReleaseTopic>(&mut frame_buf, &release).expect("buffer large enough");
+                if let Err(e) = socket
+                    .send_to(frame, board.discovery_address)
+                    .await
+                {
+                    warn!(
+                        "Unable to send release to io board. name: {}, serial_number: {}, address: {}, error: {}",
+                        self.definitions[index].name, board.serial_number, board.discovery_address, e
+                    );
+                }
+            }
+
+            // wait for advertisements that show the boards are no longer claimed by us
+            let deadline = Instant::now() + RELEASE_RETRY_INTERVAL;
+            while !pending.is_empty() {
+                let Ok(result) = timeout_at(deadline, socket.recv_from(&mut buf)).await else {
+                    break;
+                };
+                let Ok((len, _from)) = result else {
+                    continue;
+                };
+                let Ok(advertisement) = discovery::decode::<IoBoardAdvertisementTopic>(&buf[..len]) else {
+                    continue;
+                };
+                pending.retain(|&index| {
+                    let board = self.connected[index].as_ref().unwrap();
+                    let released = board.serial_number == advertisement.serial_number
+                        && advertisement.claimed_by != Some(board.local_endpoint);
+                    if released {
+                        info!(
+                            "Released io board. name: {}, serial_number: {}",
+                            self.definitions[index].name, board.serial_number
+                        );
+                    }
+                    !released
+                });
+            }
+        }
+
+        for index in pending {
+            let board = self.connected[index].as_ref().unwrap();
+            warn!(
+                "Io board did not confirm release, it may need to be reset before another server can use it. name: {}, serial_number: {}",
+                self.definitions[index].name, board.serial_number
+            );
+        }
+    }
 }
 
 async fn connect(
@@ -263,6 +356,7 @@ async fn connect(
     serial_number: SerialNumber,
     address: SocketAddrV4,
     local_port: u16,
+    discovery_address: SocketAddrV4,
 ) -> anyhow::Result<ConnectedIoBoard> {
     let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, local_port)).await?;
     socket.connect(address).await?;
@@ -285,6 +379,7 @@ async fn connect(
         address,
         local_endpoint: local_address.into(),
         claimed_elsewhere: None,
+        discovery_address,
     })
 }
 
@@ -356,6 +451,25 @@ mod tests {
                 .ok()?
                 .unwrap();
             Some(discovery::decode::<IoBoardClaimTopic>(&buf[..len]).unwrap())
+        }
+
+        async fn try_recv_release(&self, wait: Duration) -> Option<IoBoardRelease> {
+            let mut buf = [0u8; DISCOVERY_FRAME_SIZE_MAX];
+            let (len, _) = timeout(wait, self.discovery.recv_from(&mut buf))
+                .await
+                .ok()?
+                .unwrap();
+            Some(discovery::decode::<IoBoardReleaseTopic>(&buf[..len]).unwrap())
+        }
+
+        async fn send_advertisement(&self, to: SocketAddr, claimed_by: Option<Endpoint>) {
+            let mut buf = [0u8; DISCOVERY_FRAME_SIZE_MAX];
+            let frame =
+                discovery::encode::<IoBoardAdvertisementTopic>(&mut buf, &self.advertisement(claimed_by)).unwrap();
+            self.discovery
+                .send_to(frame, to)
+                .await
+                .unwrap();
         }
     }
 
@@ -519,6 +633,91 @@ mod tests {
                 .server
                 .port,
             BASE + 1
+        );
+    }
+
+    #[tokio::test]
+    async fn release_all_releases_claimed_boards() {
+        let mut fixture = Fixture::new(vec![first()]).await;
+        let board_1 = FakeBoard::new(SERIAL_1).await;
+        fixture.advertise(&board_1, None).await;
+        let claim = board_1.try_recv_claim().await.unwrap();
+        fixture
+            .advertise(&board_1, Some(claim.server))
+            .await;
+
+        let server_address = fixture.socket.local_addr().unwrap();
+        let started_at = Instant::now();
+        let ((), release) = tokio::join!(
+            fixture
+                .discovery
+                .release_all(&fixture.socket),
+            async {
+                let release = board_1
+                    .try_recv_release(Duration::from_secs(1))
+                    .await
+                    .unwrap();
+                // the board confirms by advertising that it's unclaimed
+                board_1
+                    .send_advertisement(server_address, None)
+                    .await;
+                release
+            }
+        );
+
+        assert_eq!(release, IoBoardRelease {
+            serial_number: SERIAL_1,
+            server: claim.server,
+        });
+        // confirmed, so no retries
+        assert!(started_at.elapsed() < RELEASE_RETRY_INTERVAL);
+    }
+
+    #[tokio::test]
+    async fn release_all_retries_then_gives_up_when_unconfirmed() {
+        let mut fixture = Fixture::new(vec![first()]).await;
+        let board_1 = FakeBoard::new(SERIAL_1).await;
+        fixture.advertise(&board_1, None).await;
+        board_1.try_recv_claim().await.unwrap();
+
+        fixture
+            .discovery
+            .release_all(&fixture.socket)
+            .await;
+
+        let mut releases = 0;
+        while board_1
+            .try_recv_release(Duration::from_millis(10))
+            .await
+            .is_some()
+        {
+            releases += 1;
+        }
+        assert_eq!(releases, RELEASE_ATTEMPTS);
+    }
+
+    #[tokio::test]
+    async fn release_all_skips_boards_claimed_elsewhere() {
+        let mut fixture = Fixture::new(vec![first()]).await;
+        let board_1 = FakeBoard::new(SERIAL_1).await;
+        let elsewhere = Endpoint {
+            ip: [127, 0, 0, 1],
+            port: 1,
+        };
+        fixture
+            .advertise(&board_1, Some(elsewhere))
+            .await;
+
+        fixture
+            .discovery
+            .release_all(&fixture.socket)
+            .await;
+
+        assert!(
+            board_1
+                .try_recv_release(Duration::from_millis(100))
+                .await
+                .is_none()
         );
     }
 

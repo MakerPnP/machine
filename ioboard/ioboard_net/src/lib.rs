@@ -8,7 +8,7 @@ use core::pin::pin;
 use embassy_executor::Spawner;
 use embassy_net::driver::Driver;
 use embassy_net::tcp::client::{TcpClient, TcpClientState};
-use embassy_net::udp::{PacketMetadata, UdpSocket};
+use embassy_net::udp::{PacketMetadata, RecvError, SendError, UdpSocket};
 use embassy_net::{IpEndpoint, Ipv4Address, Runner, StackResources};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
@@ -19,18 +19,19 @@ use embedded_io_async::Write;
 use embedded_nal_async::TcpConnect;
 use ergot::exports::bbqueue::traits::coordination::cas::AtomicCoord;
 use ergot::interface_manager::transports::embassy_net_udp::{
-    RxTxWorker, UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX,
+    UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX,
 };
 use ergot::logging::log_v0_4::LogSink;
 use ergot::toolkits::embassy_net_v0_7 as kit;
 use ergot::well_known::{DeviceInfo, ErgotPingEndpoint};
 use ergot::{Address, topic};
 use ergot::interface_manager::InterfaceState;
+use ergot::interface_manager::transports::packet::{PacketReceiver, PacketRxTxWorker, PacketSender};
 use ergot::prelude::{EdgeFrameProcessor, CENTRAL_NODE_ID};
 use ioboard_shared::commands::IoBoardCommand;
 use ioboard_shared::discovery::{
     self, ADVERTISEMENT_INTERVAL_MS, DISCOVERY_FRAME_SIZE_MAX, DISCOVERY_PORT, DecodeError, Endpoint, IoBoardAdvertisement,
-    IoBoardAdvertisementTopic, IoBoardClaimTopic,
+    IoBoardAdvertisementTopic, IoBoardClaim, IoBoardClaimTopic, IoBoardRelease, IoBoardReleaseTopic,
 };
 pub use ioboard_shared::discovery::SerialNumber;
 use ioboard_shared::yeet::Yeet;
@@ -243,17 +244,30 @@ async fn networking_task(
 /// The UDP port of the board's ergot interface.
 const ERGOT_PORT: u16 = 8000;
 
-/// The server ergot endpoint, signalled when the board is claimed by a server.
-static SERVER_ENDPOINT: Signal<ThreadModeRawMutex, Endpoint> = Signal::new();
+/// The server ergot endpoint, signalled with `Some` when the board is claimed and `None` when it's released.
+static SERVER_ENDPOINT: Signal<ThreadModeRawMutex, Option<Endpoint>> = Signal::new();
 
 fn ip_endpoint(endpoint: Endpoint) -> IpEndpoint {
     IpEndpoint::new(Ipv4Address::from(endpoint.ip).into(), endpoint.port)
 }
 
-/// Broadcasts advertisements and handles claims from servers.
+enum DiscoveryMessage {
+    Claim(IoBoardClaim),
+    Release(IoBoardRelease),
+}
+
+fn decode_discovery_message(data: &[u8]) -> Result<DiscoveryMessage, DecodeError> {
+    match discovery::decode::<IoBoardClaimTopic>(data) {
+        Ok(claim) => Ok(DiscoveryMessage::Claim(claim)),
+        Err(DecodeError::UnknownKey) => discovery::decode::<IoBoardReleaseTopic>(data).map(DiscoveryMessage::Release),
+        Err(e) => Err(e),
+    }
+}
+
+/// Broadcasts advertisements and handles claims and releases from servers.
 ///
-/// Only the first claim is accepted, the board stays claimed by that server until the board is reset.  Servers use
-/// a fixed ergot endpoint per board, so a restarted server re-uses the endpoint the board is already claimed by.
+/// A claim is only accepted when the board is unclaimed, the board stays claimed by that server endpoint until the
+/// server releases it, or the board is reset.
 #[embassy_executor::task]
 async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber) -> ! {
     defmt::info!("Discovery started, serial number: {}", serial_number);
@@ -271,13 +285,13 @@ async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber)
         let reply_to = match select(ticker.next(), socket.recv_from(&mut rx_buf)).await {
             Either::First(_) => broadcast_endpoint,
             Either::Second(Ok((len, metadata))) => {
-                match discovery::decode::<IoBoardClaimTopic>(&rx_buf[..len]) {
-                    Ok(claim) if claim.serial_number == serial_number => {
+                match decode_discovery_message(&rx_buf[..len]) {
+                    Ok(DiscoveryMessage::Claim(claim)) if claim.serial_number == serial_number => {
                         match advertisement.claimed_by {
                             None => {
                                 defmt::info!("Claimed by server, endpoint: {}", claim.server);
                                 advertisement.claimed_by = Some(claim.server);
-                                SERVER_ENDPOINT.signal(claim.server);
+                                SERVER_ENDPOINT.signal(Some(claim.server));
                             }
                             Some(claimed_by) if claimed_by == claim.server => {}
                             Some(claimed_by) => {
@@ -291,8 +305,28 @@ async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber)
                         // reply immediately, so the server knows who the board is claimed by
                         metadata.endpoint
                     }
-                    Ok(claim) => {
-                        defmt::warn!("Ignoring claim for another board, serial number: {}", claim.serial_number);
+                    Ok(DiscoveryMessage::Release(release)) if release.serial_number == serial_number => {
+                        match advertisement.claimed_by {
+                            Some(claimed_by) if claimed_by == release.server => {
+                                defmt::info!("Released by server, endpoint: {}", release.server);
+                                advertisement.claimed_by = None;
+                                SERVER_ENDPOINT.signal(None);
+                            }
+                            // already released, e.g. a retry after our reply was lost
+                            None => {}
+                            Some(claimed_by) => {
+                                defmt::warn!(
+                                    "Ignoring release, claimed by another server. claimed_by: {}, release: {}",
+                                    claimed_by,
+                                    release.server
+                                );
+                            }
+                        }
+                        // reply immediately, so the server knows the board was released
+                        metadata.endpoint
+                    }
+                    Ok(_) => {
+                        defmt::warn!("Ignoring discovery message for another board");
                         continue;
                     }
                     // advertisements from other boards, ignore
@@ -320,22 +354,100 @@ async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber)
     }
 }
 
+/// Receives ergot frames from the server the board is claimed by, frames from any other source are dropped.
+struct ServerReceiver<'a> {
+    socket: &'a UdpSocket<'static>,
+    server: IpEndpoint,
+}
+
+impl PacketReceiver for ServerReceiver<'_> {
+    type Error = RecvError;
+
+    // cancel-safe, each `recv_from` either consumes a whole datagram or nothing.
+    async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        loop {
+            match self.socket.recv_from(buf).await {
+                Ok((len, metadata)) if metadata.endpoint == self.server => return Ok(len),
+                Ok(_) => {}
+                // dropping one oversized datagram must not take the interface down
+                Err(RecvError::Truncated) => defmt::warn!("Dropping oversized ergot datagram"),
+            }
+        }
+    }
+}
+
+/// Sends ergot frames to the server the board is claimed by.
+struct ServerSender<'a> {
+    socket: &'a UdpSocket<'static>,
+    server: IpEndpoint,
+}
+
+impl PacketSender for ServerSender<'_> {
+    type Error = SendError;
+
+    async fn send(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        self.socket
+            .send_to(data, self.server)
+            .await
+    }
+}
+
+/// Runs the ergot interface while the board is claimed.
+///
+/// A new worker, and frame processor, is created for each claim, so the net_id assigned by a previous server's router
+/// is not re-used.  While unclaimed, the interface is down.
 #[embassy_executor::task]
 async fn run_socket(socket: UdpSocket<'static>, scratch_buf: &'static mut [u8]) {
-    defmt::info!("Waiting for a server to claim this board");
-    let endpoint = SERVER_ENDPOINT.wait().await;
-
-    let consumer = OUTQ.framed_consumer();
-    let mut rxtx = RxTxWorker::new(&STACK, socket, EdgeFrameProcessor::new(), (), consumer, ip_endpoint(endpoint));
+    let mut server_endpoint = None;
 
     loop {
+        let endpoint = match server_endpoint {
+            Some(endpoint) => endpoint,
+            None => {
+                defmt::info!("Waiting for a server to claim this board");
+                server_endpoint = SERVER_ENDPOINT.wait().await;
+                continue;
+            }
+        };
+
+        // discard frames queued for a previous server, they are addressed using the previous server's net_id.
+        let consumer = OUTQ.framed_consumer();
+        while let Ok(grant) = consumer.read() {
+            grant.release();
+        }
+
+        let server = ip_endpoint(endpoint);
+        let mut worker = PacketRxTxWorker::new(
+            &STACK,
+            ServerReceiver {
+                socket: &socket,
+                server,
+            },
+            ServerSender {
+                socket: &socket,
+                server,
+            },
+            EdgeFrameProcessor::new(),
+            (),
+            consumer,
+        );
+
         // The net_id is assigned by the server's router, it's learnt from the first frame addressed to us.
-        if let Err(_e) = rxtx
-            .run(InterfaceState::edge_link_local(), scratch_buf)
-            .await
-        {
-            defmt::warn!("ergot socket error, restarting");
-            Timer::after(Duration::from_millis(100)).await;
+        let result = select(
+            worker.run(InterfaceState::edge_link_local(), scratch_buf),
+            SERVER_ENDPOINT.wait(),
+        )
+        .await;
+        // the interface goes down when the worker is dropped
+        drop(worker);
+
+        match result {
+            Either::First(Ok(())) => {}
+            Either::First(Err(_e)) => {
+                defmt::warn!("ergot socket error, restarting");
+                Timer::after(Duration::from_millis(100)).await;
+            }
+            Either::Second(endpoint) => server_endpoint = endpoint,
         }
     }
 }

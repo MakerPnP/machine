@@ -5,10 +5,11 @@
 //! and then sends a unicast [`IoBoardClaim`] back to the board's discovery socket telling the board where the server's
 //! ergot interface is.  The board then points its own ergot interface at that endpoint.
 //!
-//! A board only accepts the first claim, it stays claimed by that server endpoint until the board is reset.  Servers
-//! must therefore use a fixed ergot endpoint per board, so that a restarted server is still the endpoint the board
-//! is claimed by.  Boards keep advertising after being claimed (with `claimed_by` set), so a server can tell whether
-//! a board is unclaimed (e.g. after the board is reset), claimed by it, or claimed by another endpoint.
+//! A board only accepts a claim when it is unclaimed, it stays claimed by that server endpoint until the server sends
+//! an [`IoBoardRelease`] (e.g. when the server shuts down), or the board is reset.  Servers use a fixed ergot endpoint
+//! per board, so that a server that restarts without releasing (e.g. after a crash) is still the endpoint the board is
+//! claimed by.  Boards keep advertising after being claimed (with `claimed_by` set), so a server can tell whether
+//! a board is unclaimed, claimed by it, or claimed by another endpoint.
 //!
 //! Messages are encoded as ergot topic frames (header + topic key + postcard body) but are sent over a plain UDP socket,
 //! outside of any ergot net stack, so that the receiver can learn the sender's IP address from the datagram.  Since the
@@ -135,6 +136,20 @@ topic!(
     "ioboard/discovery/advertisement"
 );
 topic!(IoBoardClaimTopic, IoBoardClaim, "ioboard/discovery/claim");
+
+/// Sent by a server, to the board's discovery socket, to release a claim, e.g. when the server shuts down.
+///
+/// The board replies with an advertisement, which has `claimed_by` set to `None` once the board is released.
+#[derive(Schema, Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct IoBoardRelease {
+    /// Must match the board's serial number, otherwise the release is ignored.
+    pub serial_number: SerialNumber,
+    /// Must match the endpoint the board is claimed by, otherwise the release is ignored.
+    pub server: Endpoint,
+}
+
+topic!(IoBoardReleaseTopic, IoBoardRelease, "ioboard/discovery/release");
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
