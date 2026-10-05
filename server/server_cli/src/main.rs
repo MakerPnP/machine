@@ -58,6 +58,9 @@ async fn main() -> anyhow::Result<()> {
     let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
     drop(app_event_rx);
 
+    // first, so the server fails to start if another server is already running on this machine.
+    let io_board_discovery_socket = ioboard::discovery::bind_discovery_socket().await?;
+
     let stack: RouterStack = RouterStack::new();
 
     // Not connected, the operator UI's address is learnt from the first packet it sends.
@@ -95,6 +98,7 @@ async fn main() -> anyhow::Result<()> {
         .spawn(ioboard::discovery::io_board_discovery(
             stack.clone(),
             config.io_boards.clone(),
+            io_board_discovery_socket,
             app_event_tx.subscribe(),
         ))?;
 

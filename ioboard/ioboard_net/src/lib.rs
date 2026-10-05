@@ -186,9 +186,9 @@ async fn networking_task(
 
     let mut udp_socket = UdpSocket::new(stack, rx_meta, rx_buffer, tx_meta, tx_buffer);
 
-    let local_endpoint = IpEndpoint::new(config.address.address().into(), ERGOT_PORT);
+    // bound to the port only, not the address, so the socket keeps working if the DHCP address changes.
     udp_socket
-        .bind(local_endpoint)
+        .bind(ERGOT_PORT)
         .expect("bound");
 
     defmt::info!(
