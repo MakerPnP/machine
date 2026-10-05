@@ -12,6 +12,8 @@ use ratatui::widgets::{
 };
 use ratatui::{Frame, Terminal};
 
+#[cfg(feature = "machine-vision")]
+use crate::camera::status::{CameraSourceStatus, CameraState, CameraStatus};
 use crate::ioboard::discovery::{ClaimStatus, IoBoardState, IoBoardStatus};
 use crate::logging::store::LogEntry;
 use crate::tui::app::{App, LevelRow, LevelsMenu, Popup, TextInput, level_rows};
@@ -35,9 +37,39 @@ struct Areas {
     help: Rect,
 }
 
-fn layout(area: Rect, io_board_count: usize) -> Areas {
-    // borders, host line, table header and a row per board
-    let status_height = 2 + 1 + 1 + io_board_count.max(1) as u16;
+/// The io boards and cameras, copied so the channels aren't borrowed while rendering.
+struct StatusSnapshot {
+    io_boards: Vec<IoBoardStatus>,
+    #[cfg(feature = "machine-vision")]
+    cameras: Vec<CameraStatus>,
+}
+
+impl StatusSnapshot {
+    fn io_boards_height(&self) -> u16 {
+        // header and at least one row
+        1 + self.io_boards.len().max(1) as u16
+    }
+
+    #[cfg(feature = "machine-vision")]
+    fn cameras_height(&self) -> u16 {
+        // a blank line separating them from the io boards, a header and at least one row
+        1 + 1 + self.cameras.len().max(1) as u16
+    }
+
+    #[cfg(not(feature = "machine-vision"))]
+    fn cameras_height(&self) -> u16 {
+        0
+    }
+
+    /// The height of the status panel's contents.
+    fn height(&self) -> u16 {
+        // the host line, then the tables
+        1 + self.io_boards_height() + self.cameras_height()
+    }
+}
+
+fn layout(area: Rect, status: &StatusSnapshot) -> Areas {
+    let status_height = 2 + status.height();
     let [status, log, help] = Layout::vertical([
         Constraint::Length(status_height),
         Constraint::Min(3),
@@ -48,10 +80,14 @@ fn layout(area: Rect, io_board_count: usize) -> Areas {
 }
 
 pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), B::Error> {
-    let io_boards = app.io_boards.borrow().clone();
+    let status = StatusSnapshot {
+        io_boards: app.io_boards.borrow().clone(),
+        #[cfg(feature = "machine-vision")]
+        cameras: app.cameras.borrow().clone(),
+    };
 
     let size = terminal.size()?;
-    let areas = layout(Rect::new(0, 0, size.width, size.height), io_boards.len());
+    let areas = layout(Rect::new(0, 0, size.width, size.height), &status);
     app.log_view
         .set_height(areas.log.height.saturating_sub(2) as usize);
 
@@ -73,8 +109,8 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(),
     };
 
     terminal.draw(|frame| {
-        let areas = layout(frame.area(), io_boards.len());
-        render_status(frame, areas.status, app, &io_boards);
+        let areas = layout(frame.area(), &status);
+        render_status(frame, areas.status, app, &status);
         render_log(frame, areas.log, app, &snapshot);
         frame.render_widget(Paragraph::new(HELP).reversed(), areas.help);
 
@@ -99,12 +135,17 @@ pub fn draw<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(),
     Ok(())
 }
 
-fn render_status(frame: &mut Frame, area: Rect, app: &App, io_boards: &[IoBoardStatus]) {
+fn render_status(frame: &mut Frame, area: Rect, app: &App, status: &StatusSnapshot) {
     let block = Block::bordered().title(" Status ");
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let [host_area, table_area] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
+    let [host_area, io_boards_area, cameras_area] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(status.io_boards_height()),
+        Constraint::Length(status.cameras_height()),
+    ])
+    .areas(inner);
 
     let mut host = vec![Span::from("Host: ").bold()];
     if app.host_addresses.is_empty() {
@@ -138,10 +179,11 @@ fn render_status(frame: &mut Frame, area: Rect, app: &App, io_boards: &[IoBoardS
         "Last seen",
     ])
     .bold();
-    let rows: Vec<Row> = if io_boards.is_empty() {
+    let rows: Vec<Row> = if status.io_boards.is_empty() {
         vec![Row::new([Cell::from("no io boards configured").dim()])]
     } else {
-        io_boards
+        status
+            .io_boards
             .iter()
             .map(io_board_row)
             .collect()
@@ -155,7 +197,74 @@ fn render_status(frame: &mut Frame, area: Rect, app: &App, io_boards: &[IoBoardS
         Constraint::Length(15),
         Constraint::Length(10),
     ];
-    frame.render_widget(Table::new(rows, widths).header(header), table_area);
+    frame.render_widget(Table::new(rows, widths).header(header), io_boards_area);
+
+    #[cfg(feature = "machine-vision")]
+    render_cameras(frame, cameras_area, &status.cameras);
+    #[cfg(not(feature = "machine-vision"))]
+    let _ = cameras_area;
+}
+
+#[cfg(feature = "machine-vision")]
+fn render_cameras(frame: &mut Frame, area: Rect, cameras: &[CameraStatus]) {
+    // the first line separates the cameras from the io boards
+    let [_, area] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+    let header = Row::new(["Camera", "Name", "Source", "Device", "Width", "Height", "FPS", "Status"]).bold();
+    let rows: Vec<Row> = if cameras.is_empty() {
+        vec![Row::new([Cell::from("no cameras configured or detected").dim()])]
+    } else {
+        cameras.iter().map(camera_row).collect()
+    };
+    let widths = [
+        Constraint::Length(6),
+        Constraint::Length(24),
+        Constraint::Length(7),
+        Constraint::Min(20),
+        Constraint::Length(6),
+        Constraint::Length(6),
+        Constraint::Length(5),
+        Constraint::Length(9),
+    ];
+    frame.render_widget(Table::new(rows, widths).header(header), area);
+}
+
+#[cfg(feature = "machine-vision")]
+fn camera_row(status: &CameraStatus) -> Row<'static> {
+    let not_applicable = || Cell::from("N/A").dim();
+    let (identifier, name, width, height, fps) = match &status.configured {
+        Some(configured) => (
+            Cell::from(configured.identifier.to_string()),
+            Cell::from(configured.name.clone()),
+            Cell::from(configured.width.to_string()),
+            Cell::from(configured.height.to_string()),
+            Cell::from(configured.fps.to_string()),
+        ),
+        None => (
+            Cell::from("-").dim(),
+            not_applicable(),
+            not_applicable(),
+            not_applicable(),
+            not_applicable(),
+        ),
+    };
+    let (source, device) = match &status.source {
+        Some(CameraSourceStatus::OpenCV { index }) => (Cell::from("OpenCV"), Cell::from(format!("index {}", index))),
+        Some(CameraSourceStatus::MediaRS { device_id, name }) => {
+            let mut device = vec![Span::from(device_id.clone())];
+            if let Some(name) = name {
+                device.push(Span::from(format!(" ({})", name)).dim());
+            }
+            (Cell::from("MediaRS"), Cell::from(Line::from(device)))
+        }
+        None => (Cell::from("-").dim(), Cell::from("no supported source").dim()),
+    };
+    let state = match status.state {
+        CameraState::New => Cell::from("new").cyan(),
+        CameraState::Matched => Cell::from("matched").green(),
+        CameraState::Missing => Cell::from("missing").red(),
+        CameraState::Streaming => Cell::from("streaming").magenta().bold(),
+    };
+    Row::new([identifier, name, source, device, width, height, fps, state])
 }
 
 fn io_board_row(status: &IoBoardStatus) -> Row<'static> {
@@ -387,10 +496,14 @@ mod tests {
     use tokio::sync::{broadcast, watch};
 
     use super::*;
+    #[cfg(feature = "machine-vision")]
+    use crate::camera::status::ConfiguredCamera;
     use crate::ioboard::discovery::IoBoardDetails;
     use crate::logging::rules::LevelRules;
     use crate::logging::store::LogStore;
     use crate::logging::store::tests::push;
+    #[cfg(feature = "machine-vision")]
+    use operator_shared::camera::CameraIdentifier;
 
     fn screen(terminal: &Terminal<TestBackend>) -> String {
         let buffer = terminal.backend().buffer();
@@ -441,12 +554,48 @@ mod tests {
                 board: None,
             },
         ]);
+        #[cfg(feature = "machine-vision")]
+        let (_cameras_tx, cameras_rx) = watch::channel(vec![
+            CameraStatus {
+                configured: Some(ConfiguredCamera {
+                    identifier: CameraIdentifier::new(0),
+                    name: "Top camera".to_string(),
+                    width: 800,
+                    height: 600,
+                    fps: 30.0,
+                }),
+                source: Some(CameraSourceStatus::OpenCV { index: 0 }),
+                state: CameraState::Streaming,
+            },
+            CameraStatus {
+                configured: None,
+                source: Some(CameraSourceStatus::MediaRS {
+                    device_id: "usb-1.3".to_string(),
+                    name: Some("USB2.0 Camera".to_string()),
+                }),
+                state: CameraState::New,
+            },
+        ]);
         let (app_event_tx, _) = broadcast::channel(4);
-        let mut app = App::new(store, status_rx, app_event_tx, Some("message 4".to_string()));
-        let mut terminal = Terminal::new(TestBackend::new(140, 24)).unwrap();
+        let mut app = App::new(
+            store,
+            status_rx,
+            #[cfg(feature = "machine-vision")]
+            cameras_rx,
+            app_event_tx,
+            Some("message 4".to_string()),
+        );
+        let mut terminal = Terminal::new(TestBackend::new(140, 30)).unwrap();
 
         draw(&mut terminal, &mut app).unwrap();
         let screen_text = screen(&terminal);
+        #[cfg(feature = "machine-vision")]
+        {
+            assert!(screen_text.contains("Top camera"), "{}", screen_text);
+            assert!(screen_text.contains("streaming"), "{}", screen_text);
+            assert!(screen_text.contains("usb-1.3 (USB2.0 Camera)"), "{}", screen_text);
+            assert!(screen_text.contains("N/A"), "{}", screen_text);
+        }
         assert!(screen_text.contains("ABABABABABABABABABABABAB"), "{}", screen_text);
         assert!(screen_text.contains("connected"), "{}", screen_text);
         assert!(screen_text.contains("waiting"), "{}", screen_text);

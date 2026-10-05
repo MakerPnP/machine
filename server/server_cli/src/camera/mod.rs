@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,6 +22,9 @@ use tokio::{select, time};
 use tokio_util::sync::CancellationToken;
 
 use crate::AppState;
+use crate::camera::status::{CaptureApis, camera_statuses};
+
+pub mod status;
 
 topic!(CameraFrameChunkTopic, CameraFrameChunk, "topic/camera_stream");
 
@@ -165,6 +169,19 @@ pub async fn camera_streamer(
     Ok(())
 }
 
+/// Publishes the status of the cameras, call when the cameras being streamed change.
+pub fn publish_camera_status(app_state: &AppState, camera_clients: &HashMap<CameraIdentifier, CameraHandle>) {
+    let streaming: HashSet<CameraIdentifier> = camera_clients.keys().copied().collect();
+    app_state
+        .camera_status_tx
+        .send_replace(camera_statuses(
+            &app_state.config.cameras,
+            &app_state.detected_cameras,
+            &streaming,
+            CaptureApis::ENABLED,
+        ));
+}
+
 pub fn camera_definition_for_identifier<'a>(
     definitions: &'a Vec<CameraDefinition>,
     identifier: &CameraIdentifier,
@@ -248,6 +265,7 @@ pub async fn camera_manager(
             address,
             shutdown_flag: shutdown_flag.clone(),
         });
+        publish_camera_status(&app_state, &camera_clients);
     }
 
     info!("Streaming started. identifier: {}, address: {}", identifier, address);
@@ -259,7 +277,9 @@ pub async fn camera_manager(
     let app_state = app_state.lock().await;
     let mut camera_clients = app_state.camera_clients.lock().await;
 
-    if let Some(client) = camera_clients.remove(&identifier) {
+    let client = camera_clients.remove(&identifier);
+    publish_camera_status(&app_state, &camera_clients);
+    if let Some(client) = client {
         // wait for the capture first, then the streamer
         let _ = client.capture_handle.await;
         let _ = client.streamer_handle.await;

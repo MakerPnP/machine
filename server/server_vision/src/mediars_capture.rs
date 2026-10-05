@@ -17,7 +17,7 @@ use opencv::imgproc::{
     COLOR_YUV2BGR_I420, COLOR_YUV2BGR_NV12, COLOR_YUV2BGR_UYVY, COLOR_YUV2BGR_YUY2, COLOR_YUV2BGR_YVYU,
 };
 use opencv::prelude::*;
-use server_common::camera::{CameraDefinition, CameraSource};
+use server_common::camera::{CameraDefinition, CameraSource, DetectedCamera};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
@@ -445,20 +445,28 @@ where
     f(bgr_mat);
 }
 
-#[cfg(feature = "mediars-capture")]
-pub fn dump_cameras_mediars() -> anyhow::Result<()> {
+pub fn detect_cameras_mediars() -> anyhow::Result<Vec<DetectedCamera>> {
     let mut cam_mgr = CameraManager::new_default()?;
 
-    for (index, device) in cam_mgr.iter_mut().enumerate() {
-        info!(
-            "MediaRS camera: {}, id: {:?}, formats: {:?}",
-            index,
-            device.id(),
-            device.formats()
-        );
-    }
+    let cameras = cam_mgr
+        .iter_mut()
+        .enumerate()
+        .map(|(index, device)| {
+            info!(
+                "MediaRS camera: {}, id: {:?}, name: {:?}, formats: {:?}",
+                index,
+                device.id(),
+                device.name(),
+                device.formats()
+            );
+            DetectedCamera::MediaRS {
+                device_id: device.id().to_string(),
+                name: device.name().to_string(),
+            }
+        })
+        .collect();
 
-    Ok(())
+    Ok(cameras)
 }
 
 // TODO it feels like this should be part of mediars, repeated code, needs to be kept in sync, DRY

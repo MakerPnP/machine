@@ -11,6 +11,8 @@ use regex::{Regex, RegexBuilder};
 use tokio::sync::{broadcast, watch};
 
 use crate::AppEvent;
+#[cfg(feature = "machine-vision")]
+use crate::camera::status::CameraStatus;
 use crate::ioboard::discovery::IoBoardStatus;
 use crate::logging::store::{LogStore, LogStoreInner};
 use crate::tui::log_view::LogView;
@@ -30,6 +32,8 @@ const LEVELS: [LevelFilter; 6] = [
 pub struct App {
     pub store: Arc<LogStore>,
     pub io_boards: watch::Receiver<Vec<IoBoardStatus>>,
+    #[cfg(feature = "machine-vision")]
+    pub cameras: watch::Receiver<Vec<CameraStatus>>,
     app_event_tx: broadcast::Sender<AppEvent>,
     app_event_rx: broadcast::Receiver<AppEvent>,
     pub shutting_down: bool,
@@ -152,12 +156,15 @@ impl App {
     pub fn new(
         store: Arc<LogStore>,
         io_boards: watch::Receiver<Vec<IoBoardStatus>>,
+        #[cfg(feature = "machine-vision")] cameras: watch::Receiver<Vec<CameraStatus>>,
         app_event_tx: broadcast::Sender<AppEvent>,
         filter: Option<String>,
     ) -> Self {
         let mut app = Self {
             store,
             io_boards,
+            #[cfg(feature = "machine-vision")]
+            cameras,
             app_event_rx: app_event_tx.subscribe(),
             app_event_tx,
             shutting_down: false,

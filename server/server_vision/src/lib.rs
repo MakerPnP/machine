@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use chrono::DateTime;
 use log::{debug, error, info};
 use opencv::{imgcodecs, imgcodecs::ImwriteFlags, prelude::*};
-use server_common::camera::{CameraDefinition, CameraSource};
+use server_common::camera::{CameraDefinition, CameraSource, DetectedCamera};
 use tokio::sync::broadcast;
 use tokio::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
@@ -20,15 +20,33 @@ pub struct CameraFrame {
     pub frame_timestamp: DateTime<chrono::Utc>,
 }
 
-pub fn dump_cameras() -> anyhow::Result<()> {
+/// Detects and logs the cameras.
+///
+/// MediaRS cameras are enumerated.  OpenCV doesn't support enumeration, so only the OpenCV cameras in `definitions` are
+/// checked, by briefly opening them.  Cameras must not be in use.
+#[allow(unused_variables)]
+pub fn detect_cameras(definitions: &[CameraDefinition]) -> Vec<DetectedCamera> {
+    #[allow(unused_mut)]
+    let mut cameras = Vec::new();
+
     #[cfg(feature = "mediars-capture")]
-    let _ =
-        mediars_capture::dump_cameras_mediars().inspect_err(|e| error!("MediaRS camera error: {:?}", e.to_string()));
+    match mediars_capture::detect_cameras_mediars() {
+        Ok(detected) => cameras.extend(detected),
+        Err(e) => error!("MediaRS camera error: {:?}", e.to_string()),
+    }
 
     #[cfg(feature = "opencv-capture")]
-    let _ = opencv_capture::dump_cameras_opencv().inspect_err(|e| error!("OpenCV cameras error: {:?}", e.to_string()));
+    cameras.extend(opencv_capture::detect_cameras_opencv(
+        definitions
+            .iter()
+            .flat_map(|definition| definition.sources.iter())
+            .filter_map(|source| match source {
+                CameraSource::OpenCV(config) => Some(config.index),
+                _ => None,
+            }),
+    ));
 
-    Ok::<(), anyhow::Error>(())
+    cameras
 }
 
 pub async fn capture_loop(

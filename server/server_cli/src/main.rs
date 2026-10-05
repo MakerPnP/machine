@@ -1,3 +1,4 @@
+#[cfg(feature = "machine-vision")]
 use std::collections::HashMap;
 use std::fs;
 use std::io::IsTerminal;
@@ -12,7 +13,10 @@ use ergot::toolkits::tokio_udp::{RouterStack, register_router_interface};
 use log::info;
 use networking::UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX;
 use operator::OPERATOR_TX_BUFFER_SIZE;
+#[cfg(feature = "machine-vision")]
 use operator_shared::camera::CameraIdentifier;
+#[cfg(feature = "machine-vision")]
+use server_common::camera::DetectedCamera;
 use tokio::sync::broadcast::Receiver;
 use tokio::select;
 use tokio::sync::{Mutex, broadcast, watch};
@@ -58,9 +62,6 @@ async fn main() -> anyhow::Result<()> {
 
 /// Runs the server until shutdown, with the tui if `log_store` is given.
 async fn run(args: cli::Args, log_store: Option<(Arc<LogStore>, Option<String>)>) -> anyhow::Result<()> {
-    #[cfg(feature = "machine-vision")]
-    let _ = server_vision::dump_cameras().inspect_err(|e| info!("Error dumping cameras: {:?}", e));
-
     let confile_filename = args.config;
     let Ok(config_content) = fs::read_to_string(&confile_filename) else {
         bail!(
@@ -82,6 +83,14 @@ async fn run(args: cli::Args, log_store: Option<(Arc<LogStore>, Option<String>)>
 
     // first, so the server fails to start if another server is already running on this machine.
     let io_board_discovery_socket = ioboard::discovery::bind_discovery_socket().await?;
+
+    // after the discovery socket is bound, so cameras that another server is using are not opened.
+    #[cfg(feature = "machine-vision")]
+    let detected_cameras = {
+        let definitions = config.cameras.clone();
+        // opening OpenCV cameras blocks
+        tokio::task::spawn_blocking(move || server_vision::detect_cameras(&definitions)).await?
+    };
 
     let stack: RouterStack = RouterStack::new();
 
@@ -115,6 +124,14 @@ async fn run(args: cli::Args, log_store: Option<(Arc<LogStore>, Option<String>)>
     let yeet_listener_handle = tokio::task::Builder::new()
         .name("ergot/yeet-listener")
         .spawn(networking::yeet_listener(stack.clone(), app_event_tx.subscribe()))?;
+    #[cfg(feature = "machine-vision")]
+    let (camera_status_tx, camera_status_rx) = watch::channel(camera::status::camera_statuses(
+        &config.cameras,
+        &detected_cameras,
+        &std::collections::HashSet::new(),
+        camera::status::CaptureApis::ENABLED,
+    ));
+
     let (io_board_status_tx, io_board_status_rx) = watch::channel(Vec::new());
     let io_board_discovery_handle = tokio::task::Builder::new()
         .name("io-board/discovery")
@@ -131,6 +148,10 @@ async fn run(args: cli::Args, log_store: Option<(Arc<LogStore>, Option<String>)>
         event_tx: app_event_tx.clone(),
         #[cfg(feature = "machine-vision")]
         camera_clients: Arc::new(Mutex::new(HashMap::new())),
+        #[cfg(feature = "machine-vision")]
+        detected_cameras,
+        #[cfg(feature = "machine-vision")]
+        camera_status_tx,
     }));
 
     // TODO give the app_state to these tasks
@@ -150,6 +171,8 @@ async fn run(args: cli::Args, log_store: Option<(Arc<LogStore>, Option<String>)>
         Some((store, filter)) => Some(Tui::spawn(App::new(
             store,
             io_board_status_rx,
+            #[cfg(feature = "machine-vision")]
+            camera_status_rx,
             app_event_tx.clone(),
             filter,
         ))?),
@@ -181,6 +204,11 @@ pub struct AppState {
     event_tx: broadcast::Sender<AppEvent>,
     #[cfg(feature = "machine-vision")]
     camera_clients: Arc<Mutex<HashMap<CameraIdentifier, CameraHandle>>>,
+    /// Detected at startup.
+    #[cfg(feature = "machine-vision")]
+    detected_cameras: Vec<DetectedCamera>,
+    #[cfg(feature = "machine-vision")]
+    camera_status_tx: watch::Sender<Vec<camera::status::CameraStatus>>,
 }
 
 async fn app_shutdown_handler(mut receiver: Receiver<AppEvent>) {

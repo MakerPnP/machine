@@ -41,3 +41,19 @@ pub struct MediaRSCameraConfig {
     /// See https://fourcc.org
     pub four_cc: Option<[char; 4]>,
 }
+
+/// A camera found when the server started.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum DetectedCamera {
+    /// OpenCV doesn't support enumeration, so only the configured indices are checked, by opening them.
+    OpenCV {
+        /// See [`OpenCVCameraConfig::index`].
+        index: i32,
+    },
+    MediaRS {
+        /// See [`MediaRSCameraConfig::device_id`].
+        device_id: String,
+        name: String,
+    },
+}

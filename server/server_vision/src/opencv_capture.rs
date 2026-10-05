@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 use chrono::DateTime;
@@ -5,7 +6,7 @@ use log::{error, info};
 use opencv::core::Mat;
 use opencv::videoio::{VideoCapture, VideoWriter};
 use opencv::{prelude::*, videoio};
-use server_common::camera::{CameraDefinition, CameraSource};
+use server_common::camera::{CameraDefinition, CameraSource, DetectedCamera};
 use tokio::time;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
@@ -129,7 +130,40 @@ impl VideoCaptureLoop for OpenCVCameraLoop {
     }
 }
 
-#[cfg(feature = "opencv-capture")]
-pub fn dump_cameras_opencv() -> anyhow::Result<()> {
-    anyhow::bail!("Unsupported for OpenCV");
+/// Opens and closes each of the `indices`, returning the cameras that opened.  OpenCV doesn't support enumeration, so
+/// no other indices are opened.
+pub fn detect_cameras_opencv(indices: impl IntoIterator<Item = i32>) -> Vec<DetectedCamera> {
+    let indices: BTreeSet<i32> = indices.into_iter().collect();
+    indices
+        .into_iter()
+        .filter(|&index| {
+            let result = VideoCapture::new(index, videoio::CAP_ANY).and_then(|mut cam| {
+                if !cam.is_opened()? {
+                    return Ok(None);
+                }
+                let backend = cam
+                    .get_backend_name()
+                    .unwrap_or("Unknown".to_string());
+                cam.release()?;
+                Ok(Some(backend))
+            });
+            match result {
+                Ok(Some(backend)) => {
+                    info!("OpenCV camera: {}, backend: {}", index, backend);
+                    true
+                }
+                Ok(None) => {
+                    info!("OpenCV camera not found. index: {}", index);
+                    false
+                }
+                Err(e) => {
+                    error!("OpenCV camera error. index: {}, error: {:?}", index, e.to_string());
+                    false
+                }
+            }
+        })
+        .map(|index| DetectedCamera::OpenCV {
+            index,
+        })
+        .collect()
 }
