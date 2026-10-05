@@ -591,10 +591,12 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     rng.fill_bytes(&mut seed);
     let seed = u64::from_le_bytes(seed);
 
+    let serial_number = ioboard_net::SerialNumber(*embassy_stm32::uid::uid());
+    info!("Serial number: {}", serial_number);
+
     info!("Initializing ETH");
-    // TODO generate mac address from CPU ID
-    //      potentially using this algorythm (C): https://github.com/zephyrproject-rtos/zephyr/issues/59993#issuecomment-1644030438
-    let mac_addr = [0x00, 0x00, 0xC0, 0xDE, 0xC0, 0xDE];
+    let mac_addr = mac_address_from_uid(embassy_stm32::uid::uid());
+    info!("MAC address: {=[u8]:02X}", mac_addr);
 
     static PACKETS: StaticCell<PacketQueue<8, 8>> = StaticCell::new();
     let device = Ethernet::new(
@@ -1124,6 +1126,20 @@ async fn beep_and_flash(fpga: &mut FpgaInstance, on: Duration, off: Duration) {
     Timer::after(off).await;
 }
 
+/// Derive a stable, locally-administered, unicast MAC address from the MCU's unique device ID, so that multiple boards
+/// can be on the same network.
+fn mac_address_from_uid(uid: &[u8; 12]) -> [u8; 6] {
+    // FNV-1a, 64-bit
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in uid {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    let hash = hash.to_le_bytes();
+
+    // first octet: locally administered (bit 1 set), unicast (bit 0 clear)
+    [0x02, hash[0], hash[1], hash[2], hash[3], hash[4]]
+}
 
 type Device = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
 
