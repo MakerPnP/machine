@@ -474,51 +474,65 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
     let loadcell = fpga.loadcell();
 
+    const PWM_FREQ: u32 = 25_000;
+    const DUTY_PERCENT_MIN: u8 = 0;
+    const DUTY_PERCENT_MAX: u8 = 100;
+
     let plan = pwm::try_resolve(&[
-        (pwm::PM_OUT1, 200, 0, 100, pwm::POLARITY_NORMAL),
-        (pwm::PM_OUT2, 200, 0, 100, pwm::POLARITY_INVERTED),
-        (pwm::PM_OUT3, 200, 0, 100, pwm::POLARITY_NORMAL),
-        (pwm::PM_OUT4, 200, 0, 100, pwm::POLARITY_INVERTED),
-        (pwm::OT_OUT1, 10_000, 0, 100, pwm::POLARITY_NORMAL),
-        (pwm::OT_OUT2, 10_000, 0, 100, pwm::POLARITY_NORMAL),
-        (pwm::OT_OUT3, 10_000, 0, 100, pwm::POLARITY_NORMAL),
-        (pwm::OT_OUT4, 10_000, 0, 100, pwm::POLARITY_NORMAL),
-        (pwm::OT_OUT5, 200_000, 0, 100, pwm::POLARITY_NORMAL),
-        (pwm::OT_OUT6, 200_000, 0, 100, pwm::POLARITY_NORMAL),
-        (pwm::OT_OUT7, 1_000_000, 0, 100, pwm::POLARITY_NORMAL),
-        (pwm::OT_OUT8, 1_000_000, 0, 100, pwm::POLARITY_NORMAL),
+        // blow pump
+        (pwm::PM_OUT1, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // vacuum pump
+        (pwm::PM_OUT2, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // N/C
+        (pwm::PM_OUT3, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // N/C
+        (pwm::PM_OUT4, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // drag pin solenoid
+        (pwm::OT_OUT1, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // head down-light (optional)
+        (pwm::OT_OUT2, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // Vacuum switch 1
+        (pwm::OT_OUT3, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // Vacuum switch 2
+        (pwm::OT_OUT4, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // Work light (on gantry)
+        (pwm::OT_OUT5, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // Up-light (around up-camera)
+        (pwm::OT_OUT6, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // N/C
+        (pwm::OT_OUT7, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
+        // N/C
+        (pwm::OT_OUT8, PWM_FREQ, DUTY_PERCENT_MIN, DUTY_PERCENT_MAX, pwm::POLARITY_NORMAL),
     ]).unwrap();
 
     let mut bank = pwm::allocate(&plan);
 
     bank.enable_outputs();
 
-    bank[0].set_duty(20).unwrap();
+    bank[0].set_duty(0).unwrap();
     bank[0].start();
-    bank[1].set_duty(20).unwrap();
+    bank[1].set_duty(0).unwrap();
     bank[1].start();
-    bank[2].set_duty(80).unwrap();
+    bank[2].set_duty(0).unwrap();
     bank[2].start();
-    bank[3].set_duty(80).unwrap();
+    bank[3].set_duty(0).unwrap();
     bank[3].start();
 
-    bank[4].set_duty(20).unwrap();
+    bank[4].set_duty(0).unwrap();
     bank[4].start();
-    bank[5].set_duty(40).unwrap();
+    bank[5].set_duty(100).unwrap();
     bank[5].start();
-    bank[6].set_duty(60).unwrap();
+    bank[6].set_duty(0).unwrap();
     bank[6].start();
-    bank[7].set_duty(80).unwrap();
+    bank[7].set_duty(0).unwrap();
     bank[7].start();
-
-    bank[8].set_duty(25).unwrap();
+    bank[8].set_duty(100).unwrap();
     bank[8].start();
-    bank[9].set_duty(75).unwrap();
+    bank[9].set_duty(100).unwrap();
     bank[9].start();
-
-    bank[10].set_duty(25).unwrap();
+    bank[10].set_duty(0).unwrap();
     bank[10].start();
-    bank[11].set_duty(75).unwrap();
+    bank[11].set_duty(0).unwrap();
     bank[11].start();
 
     bank.start_synced();
