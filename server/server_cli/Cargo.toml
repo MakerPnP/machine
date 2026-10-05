@@ -40,6 +40,9 @@ server_common      = { path = "../server_common" }
 # logging
 env_logger         = { workspace = true }
 log                = { workspace = true }
+regex              = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 # errors
 anyhow             = { workspace = true }
@@ -65,6 +68,10 @@ serde              = { workspace = true }
 clap               = { workspace = true, features = ["derive"] }
 
 rand               = { workspace = true }
+
+# tui
+ratatui            = { workspace = true }
+if-addrs           = { workspace = true }
 
 [build-dependencies]
 rustc_version = "0.4.1"

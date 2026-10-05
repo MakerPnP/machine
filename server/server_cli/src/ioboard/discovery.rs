@@ -25,6 +25,7 @@ use log::{debug, error, info, warn};
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::broadcast::Receiver;
+use tokio::sync::watch;
 use tokio::time::{Instant, timeout_at};
 
 use crate::AppEvent;
@@ -58,6 +59,7 @@ pub async fn io_board_discovery(
     definitions: Vec<IoBoardDefinition>,
     socket: UdpSocket,
     app_event_rx: Receiver<AppEvent>,
+    status_tx: watch::Sender<Vec<IoBoardStatus>>,
 ) {
     let mut app_shutdown_handler = Box::pin(crate::app_shutdown_handler(app_event_rx));
 
@@ -67,6 +69,8 @@ pub async fn io_board_discovery(
     );
 
     let mut discovery = IoBoardDiscovery::new(stack, definitions, Some(IO_BOARD_LOCAL_PORT_BASE));
+    discovery.status_tx = status_tx;
+    discovery.publish_status();
     let mut incompatible: HashSet<SocketAddr> = HashSet::new();
 
     let mut buf = [0u8; 1500];
@@ -106,12 +110,57 @@ pub async fn io_board_discovery(
         discovery
             .handle_advertisement(&socket, from, advertisement)
             .await;
+        discovery.publish_status();
     }
 
     // so the boards can be claimed by another server, or this server with a different config, without being reset.
     discovery.release_all(&socket).await;
 
     info!("io board discovery stopped");
+}
+
+/// The status of an io board definition's entry, for display.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IoBoardStatus {
+    pub name: String,
+    /// The serial number of the board the definition is for, `None` for the first available board.
+    pub expected_serial_number: Option<SerialNumber>,
+    pub state: IoBoardState,
+    /// The board selected for the entry, if any.
+    pub board: Option<IoBoardDetails>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum IoBoardState {
+    /// No board has been selected yet.
+    Waiting,
+    /// A board has been selected and is being claimed.
+    Claiming,
+    /// A board has been selected, a stale claim left by a previous instance of this server is being released.
+    ReleasingStale,
+    Connected,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IoBoardDetails {
+    pub serial_number: SerialNumber,
+    /// The board's ergot endpoint.
+    pub address: SocketAddrV4,
+    /// Our ergot endpoint for the board.
+    pub local_address: SocketAddrV4,
+    /// From the board's most recent advertisement.
+    pub claim: ClaimStatus,
+    pub last_seen: std::time::Instant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ClaimStatus {
+    Unclaimed,
+    Us,
+    /// Claimed by a previous instance of this server.
+    Stale(SocketAddrV4),
+    /// Claimed by another server.
+    Other(SocketAddrV4),
 }
 
 /// What an advertisement's `claimed_by` means to this server.
@@ -160,6 +209,8 @@ struct IoBoard {
     claimed_by: Option<Endpoint>,
     /// The other server the board is claimed by, used to avoid repeated warnings.
     claimed_by_other: Option<Endpoint>,
+    /// When the board's most recent advertisement was received.
+    last_seen: Instant,
 }
 
 enum Entry {
@@ -215,6 +266,7 @@ struct IoBoardDiscovery {
     skipped: HashMap<SerialNumber, Endpoint>,
     /// `None` to use ephemeral ports, for tests.
     local_port_base: Option<u16>,
+    status_tx: watch::Sender<Vec<IoBoardStatus>>,
 }
 
 impl IoBoardDiscovery {
@@ -222,6 +274,7 @@ impl IoBoardDiscovery {
         Self {
             stack,
             local_port_base,
+            status_tx: watch::Sender::new(Vec::new()),
             entries: definitions
                 .iter()
                 .map(|_| Entry::Empty)
@@ -230,6 +283,47 @@ impl IoBoardDiscovery {
             discovered: HashSet::new(),
             skipped: HashMap::new(),
         }
+    }
+
+    /// Publishes the status of every entry.
+    fn publish_status(&self) {
+        let status = self
+            .definitions
+            .iter()
+            .zip(self.entries.iter())
+            .map(|(definition, entry)| IoBoardStatus {
+                name: definition.name.clone(),
+                expected_serial_number: match &definition.connection {
+                    ConnectionKind::Discovered(DiscoveredIoBoard::Id(id)) => Some(id.0),
+                    ConnectionKind::Discovered(DiscoveredIoBoard::First) => None,
+                },
+                state: match entry {
+                    Entry::Empty => IoBoardState::Waiting,
+                    Entry::Pending {
+                        releasing_stale: true, ..
+                    } => IoBoardState::ReleasingStale,
+                    Entry::Pending { .. } => IoBoardState::Claiming,
+                    Entry::Connected { .. } => IoBoardState::Connected,
+                },
+                board: entry.board().map(|board| IoBoardDetails {
+                    serial_number: board.serial_number,
+                    address: board.address,
+                    local_address: board.local_endpoint.into(),
+                    claim: match classify(
+                        board.claimed_by,
+                        Some(board.local_endpoint),
+                        Some(board.local_endpoint.ip.into()),
+                    ) {
+                        ClaimedBy::Unclaimed => ClaimStatus::Unclaimed,
+                        ClaimedBy::Us => ClaimStatus::Us,
+                        ClaimedBy::Stale(endpoint) => ClaimStatus::Stale(endpoint.into()),
+                        ClaimedBy::Other(endpoint) => ClaimStatus::Other(endpoint.into()),
+                    },
+                    last_seen: board.last_seen.into_std(),
+                }),
+            })
+            .collect();
+        self.status_tx.send_replace(status);
     }
 
     /// Returns the index of the entry the unassigned board should be assigned to, if any.
@@ -328,6 +422,7 @@ impl IoBoardDiscovery {
                 discovery_address: from,
                 claimed_by: advertisement.claimed_by,
                 claimed_by_other: None,
+                last_seen: Instant::now(),
             },
             socket,
             releasing_stale: false,
@@ -404,6 +499,7 @@ impl IoBoardDiscovery {
 
         let board = self.entries[index].board_mut().unwrap();
         board.discovery_address = from;
+        board.last_seen = Instant::now();
         board.claimed_by = advertisement.claimed_by;
         let local_endpoint = board.local_endpoint;
         let claimed_by = classify(

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::IsTerminal;
 use std::sync::Arc;
 
 use anyhow::bail;
@@ -13,16 +14,22 @@ use networking::UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX;
 use operator::OPERATOR_TX_BUFFER_SIZE;
 use operator_shared::camera::CameraIdentifier;
 use tokio::sync::broadcast::Receiver;
-use tokio::sync::{Mutex, broadcast};
+use tokio::select;
+use tokio::sync::{Mutex, broadcast, watch};
 use tokio::{net::UdpSocket, signal};
 
 use crate::config::Config;
+use crate::logging::store::LogStore;
+use crate::tui::Tui;
+use crate::tui::app::App;
 
 #[cfg(feature = "machine-vision")]
 pub mod camera;
 pub mod ioboard;
+pub mod logging;
 pub mod networking;
 pub mod operator;
+pub mod tui;
 
 pub mod cli;
 pub mod config;
@@ -31,10 +38,26 @@ pub mod config;
 async fn main() -> anyhow::Result<()> {
     let args = cli::Args::parse();
 
-    init_logging(args.verbosity_level);
+    let use_tui = !args.no_tui && std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    let log_store = if use_tui {
+        Some(logging::init_collector(args.verbosity_level, args.log_capacity))
+    } else {
+        logging::init_plain(args.verbosity_level);
+        None
+    };
 
-    console_subscriber::init();
+    let result = run(args, log_store.clone()).await;
 
+    // the log was only visible in the tui, which is gone
+    if let Some((store, _)) = log_store {
+        let _ = store.write_tail(tui::EXIT_LOG_ENTRIES, &mut std::io::stderr());
+    }
+
+    result
+}
+
+/// Runs the server until shutdown, with the tui if `log_store` is given.
+async fn run(args: cli::Args, log_store: Option<(Arc<LogStore>, Option<String>)>) -> anyhow::Result<()> {
     #[cfg(feature = "machine-vision")]
     let _ = server_vision::dump_cameras().inspect_err(|e| info!("Error dumping cameras: {:?}", e));
 
@@ -55,8 +78,7 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::format_err!("Invalid config. filename: {:?}, error: {}", confile_filename, e))?;
 
     // Create event channel
-    let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
-    drop(app_event_rx);
+    let (app_event_tx, app_shutdown_rx) = broadcast::channel::<AppEvent>(16);
 
     // first, so the server fails to start if another server is already running on this machine.
     let io_board_discovery_socket = ioboard::discovery::bind_discovery_socket().await?;
@@ -93,6 +115,7 @@ async fn main() -> anyhow::Result<()> {
     let yeet_listener_handle = tokio::task::Builder::new()
         .name("ergot/yeet-listener")
         .spawn(networking::yeet_listener(stack.clone(), app_event_tx.subscribe()))?;
+    let (io_board_status_tx, io_board_status_rx) = watch::channel(Vec::new());
     let io_board_discovery_handle = tokio::task::Builder::new()
         .name("io-board/discovery")
         .spawn(ioboard::discovery::io_board_discovery(
@@ -100,6 +123,7 @@ async fn main() -> anyhow::Result<()> {
             config.io_boards.clone(),
             io_board_discovery_socket,
             app_event_tx.subscribe(),
+            io_board_status_tx,
         ))?;
 
     let app_state = Arc::new(Mutex::new(AppState {
@@ -121,12 +145,24 @@ async fn main() -> anyhow::Result<()> {
         .name("operator/command-listener")
         .spawn(operator::operator_listener(stack.clone(), app_state))?;
 
-    // Wait for Ctrl+C
-    let _ = signal::ctrl_c().await;
+    // dropped after shutdown completes, so the shutdown can be seen in the tui
+    let _tui = match log_store {
+        Some((store, filter)) => Some(Tui::spawn(App::new(
+            store,
+            io_board_status_rx,
+            app_event_tx.clone(),
+            filter,
+        ))?),
+        None => None,
+    };
 
-    app_event_tx
-        .send(AppEvent::Shutdown)
-        .unwrap();
+    // Wait for Ctrl+C, or for the tui to request shutdown, the tui receives Ctrl+C as a key press.
+    select! {
+        _ = signal::ctrl_c() => {
+            let _ = app_event_tx.send(AppEvent::Shutdown);
+        },
+        _ = app_shutdown_handler(app_shutdown_rx) => {},
+    }
 
     info!("Shut down requested, exiting");
 
@@ -162,22 +198,4 @@ async fn app_shutdown_handler(mut receiver: Receiver<AppEvent>) {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AppEvent {
     Shutdown,
-}
-
-fn init_logging(verbosity_level: u8) {
-    let mut builder = env_logger::Builder::from_default_env();
-
-    // Only override the default filter if RUST_LOG is NOT set
-    if std::env::var_os("RUST_LOG").is_none() {
-        let level = match verbosity_level {
-            0 => log::LevelFilter::Warn,
-            1 => log::LevelFilter::Info,
-            2 => log::LevelFilter::Debug,
-            _ => log::LevelFilter::Trace,
-        };
-
-        builder.filter_level(level);
-    }
-
-    builder.init();
 }
