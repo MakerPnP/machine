@@ -59,6 +59,14 @@ Config (
             fps: 30.0,
         ),
     ],
+    // each definition is one physical io board.
     io_boards: [
+        IoBoardDefinition(
+            name: "main",
+            // the first io board discovered on the network, use only when there is a single io board.
+            connection: Discovered(First),
+            // or, the io board with this serial number (shown in the server log when discovered).
+            // connection: Discovered(Id("2C0024000851333234363838")),
+        ),
     ],
 )

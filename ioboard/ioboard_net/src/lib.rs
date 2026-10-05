@@ -12,6 +12,8 @@ use embassy_net::udp::{PacketMetadata, UdpSocket};
 use embassy_net::{IpEndpoint, Ipv4Address, Runner, StackResources};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
+use embassy_sync::signal::Signal;
+use embassy_futures::select::{select, Either};
 use embassy_time::{Duration, Ticker, Timer, WithTimeout};
 use embedded_io_async::Write;
 use embedded_nal_async::TcpConnect;
@@ -24,8 +26,13 @@ use ergot::toolkits::embassy_net_v0_7 as kit;
 use ergot::well_known::{DeviceInfo, ErgotPingEndpoint};
 use ergot::{Address, topic};
 use ergot::interface_manager::InterfaceState;
-use ergot::prelude::{EdgeFrameProcessor, EDGE_NODE_ID};
+use ergot::prelude::{EdgeFrameProcessor, CENTRAL_NODE_ID};
 use ioboard_shared::commands::IoBoardCommand;
+use ioboard_shared::discovery::{
+    self, ADVERTISEMENT_INTERVAL_MS, DISCOVERY_FRAME_SIZE_MAX, DISCOVERY_PORT, DecodeError, Endpoint, IoBoardAdvertisement,
+    IoBoardAdvertisementTopic, IoBoardClaimTopic,
+};
+pub use ioboard_shared::discovery::SerialNumber;
 use ioboard_shared::yeet::Yeet;
 use ioboard_trace::tracepin;
 use log::{error, info};
@@ -104,7 +111,8 @@ impl<CLIENT: TcpConnect> IoConnection<CLIENT> {
     }
 }
 
-pub fn init<'d, D: Driver>(driver: D, random_seed: u64, spawner: Spawner) -> Runner<'d, D> {
+/// `serial_number` must be unique per board, it is advertised so that a server can find and identify the board.
+pub fn init<'d, D: Driver>(driver: D, random_seed: u64, serial_number: SerialNumber, spawner: Spawner) -> Runner<'d, D> {
     let config = embassy_net::Config::dhcpv4(Default::default());
     //let config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
     //    address: Ipv4Cidr::new(Ipv4Address::new(10, 42, 0, 61), 24),
@@ -113,19 +121,24 @@ pub fn init<'d, D: Driver>(driver: D, random_seed: u64, spawner: Spawner) -> Run
     //});
 
     // Init network stack
-    static RESOURCES: StaticCell<StackResources<5>> = StaticCell::new();
+    static RESOURCES: StaticCell<StackResources<6>> = StaticCell::new();
     let (stack, runner) = embassy_net::new(driver, config, RESOURCES.init(StackResources::new()), random_seed);
 
     defmt::info!("Hardware address: {}", stack.hardware_address());
 
     spawner
-        .spawn(unwrap!(networking_task(stack, spawner.clone(), SCRATCH_BUF.take())));
+        .spawn(unwrap!(networking_task(stack, spawner.clone(), SCRATCH_BUF.take(), serial_number)));
 
     runner
 }
 
 #[embassy_executor::task]
-async fn networking_task(stack: embassy_net::Stack<'static>, spawner: Spawner, scratch_buf: &'static mut [u8]) -> ! {
+async fn networking_task(
+    stack: embassy_net::Stack<'static>,
+    spawner: Spawner,
+    scratch_buf: &'static mut [u8],
+    serial_number: SerialNumber,
+) -> ! {
     defmt::info!("Network task initialized");
 
     // Ensure DHCP configuration is up before trying connect
@@ -171,9 +184,7 @@ async fn networking_task(stack: embassy_net::Stack<'static>, spawner: Spawner, s
 
     let mut udp_socket = UdpSocket::new(stack, rx_meta, rx_buffer, tx_meta, tx_buffer);
 
-    let port = 8000_u16;
-    let remote_endpoint = IpEndpoint::new(Ipv4Address::new(192, 168, 18, 60).into(), port);
-    let local_endpoint = IpEndpoint::new(config.address.address().into(), port);
+    let local_endpoint = IpEndpoint::new(config.address.address().into(), ERGOT_PORT);
     udp_socket
         .bind(local_endpoint)
         .expect("bound");
@@ -184,8 +195,20 @@ async fn networking_task(stack: embassy_net::Stack<'static>, spawner: Spawner, s
         udp_socket.packet_send_capacity()
     );
 
+    let mut discovery_socket = UdpSocket::new(
+        stack,
+        Box::leak(Box::new([PacketMetadata::EMPTY; 4])),
+        Box::leak(Box::new([0; 4 * DISCOVERY_FRAME_SIZE_MAX])),
+        Box::leak(Box::new([PacketMetadata::EMPTY; 2])),
+        Box::leak(Box::new([0; 2 * DISCOVERY_FRAME_SIZE_MAX])),
+    );
+    discovery_socket
+        .bind(DISCOVERY_PORT)
+        .expect("bound");
+
     // Spawn I/O worker tasks
-    spawner.spawn(unwrap!(run_socket(udp_socket, scratch_buf, remote_endpoint)));
+    spawner.spawn(unwrap!(discovery_task(discovery_socket, serial_number)));
+    spawner.spawn(unwrap!(run_socket(udp_socket, scratch_buf)));
 
     // Spawn socket using tasks
     spawner.spawn(unwrap!(pingserver()));
@@ -217,13 +240,103 @@ async fn networking_task(stack: embassy_net::Stack<'static>, spawner: Spawner, s
     }
 }
 
+/// The UDP port of the board's ergot interface.
+const ERGOT_PORT: u16 = 8000;
+
+/// The server ergot endpoint, signalled when the board is claimed by a server.
+static SERVER_ENDPOINT: Signal<ThreadModeRawMutex, Endpoint> = Signal::new();
+
+fn ip_endpoint(endpoint: Endpoint) -> IpEndpoint {
+    IpEndpoint::new(Ipv4Address::from(endpoint.ip).into(), endpoint.port)
+}
+
+/// Broadcasts advertisements and handles claims from servers.
+///
+/// Only the first claim is accepted, the board stays claimed by that server until the board is reset.  Servers use
+/// a fixed ergot endpoint per board, so a restarted server re-uses the endpoint the board is already claimed by.
 #[embassy_executor::task]
-async fn run_socket(socket: UdpSocket<'static>, scratch_buf: &'static mut [u8], endpoint: IpEndpoint) {
-    let consumer = OUTQ.framed_consumer();
-    let mut rxtx = RxTxWorker::new(&STACK, socket, EdgeFrameProcessor::new(), (), consumer, endpoint);
+async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber) -> ! {
+    defmt::info!("Discovery started, serial number: {}", serial_number);
+
+    let broadcast_endpoint = IpEndpoint::new(Ipv4Address::BROADCAST.into(), DISCOVERY_PORT);
+    let mut ticker = Ticker::every(Duration::from_millis(ADVERTISEMENT_INTERVAL_MS));
+    let mut rx_buf = [0u8; DISCOVERY_FRAME_SIZE_MAX];
+    let mut advertisement = IoBoardAdvertisement {
+        serial_number,
+        ergot_port: ERGOT_PORT,
+        claimed_by: None,
+    };
 
     loop {
-        _ = rxtx.run(InterfaceState::Active { net_id: 1, node_id: EDGE_NODE_ID }, scratch_buf).await;
+        let reply_to = match select(ticker.next(), socket.recv_from(&mut rx_buf)).await {
+            Either::First(_) => broadcast_endpoint,
+            Either::Second(Ok((len, metadata))) => {
+                match discovery::decode::<IoBoardClaimTopic>(&rx_buf[..len]) {
+                    Ok(claim) if claim.serial_number == serial_number => {
+                        match advertisement.claimed_by {
+                            None => {
+                                defmt::info!("Claimed by server, endpoint: {}", claim.server);
+                                advertisement.claimed_by = Some(claim.server);
+                                SERVER_ENDPOINT.signal(claim.server);
+                            }
+                            Some(claimed_by) if claimed_by == claim.server => {}
+                            Some(claimed_by) => {
+                                defmt::warn!(
+                                    "Ignoring claim, already claimed. claimed_by: {}, claim: {}",
+                                    claimed_by,
+                                    claim.server
+                                );
+                            }
+                        }
+                        // reply immediately, so the server knows who the board is claimed by
+                        metadata.endpoint
+                    }
+                    Ok(claim) => {
+                        defmt::warn!("Ignoring claim for another board, serial number: {}", claim.serial_number);
+                        continue;
+                    }
+                    // advertisements from other boards, ignore
+                    Err(DecodeError::UnknownKey) => continue,
+                    Err(e) => {
+                        defmt::warn!("Invalid discovery packet, error: {}", e);
+                        continue;
+                    }
+                }
+            }
+            Either::Second(Err(_)) => {
+                defmt::warn!("Discovery packet too large, ignoring");
+                continue;
+            }
+        };
+
+        let mut tx_buf = [0u8; DISCOVERY_FRAME_SIZE_MAX];
+        let Ok(frame) = discovery::encode::<IoBoardAdvertisementTopic>(&mut tx_buf, &advertisement) else {
+            defmt::error!("Unable to encode advertisement");
+            continue;
+        };
+        if let Err(e) = socket.send_to(frame, reply_to).await {
+            defmt::warn!("Unable to send advertisement, error: {}", e);
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn run_socket(socket: UdpSocket<'static>, scratch_buf: &'static mut [u8]) {
+    defmt::info!("Waiting for a server to claim this board");
+    let endpoint = SERVER_ENDPOINT.wait().await;
+
+    let consumer = OUTQ.framed_consumer();
+    let mut rxtx = RxTxWorker::new(&STACK, socket, EdgeFrameProcessor::new(), (), consumer, ip_endpoint(endpoint));
+
+    loop {
+        // The net_id is assigned by the server's router, it's learnt from the first frame addressed to us.
+        if let Err(_e) = rxtx
+            .run(InterfaceState::edge_link_local(), scratch_buf)
+            .await
+        {
+            defmt::warn!("ergot socket error, restarting");
+            Timer::after(Duration::from_millis(100)).await;
+        }
     }
 }
 
@@ -234,9 +347,10 @@ async fn pinger() {
     let client = STACK
         .endpoints()
         .client::<ErgotPingEndpoint>(
+            // link-local address of the server's router, the router rewrites it to our assigned net_id.
             Address {
-                network_id: 1,
-                node_id: 1,
+                network_id: 0,
+                node_id: CENTRAL_NODE_ID,
                 port_id: 0,
             },
             None,

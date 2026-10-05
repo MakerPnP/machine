@@ -1268,6 +1268,7 @@ name = "ioboard_shared"
 version = "0.1.0"
 dependencies = [
  "ergot",
+ "postcard",
  "postcard-schema",
  "serde",
 ]

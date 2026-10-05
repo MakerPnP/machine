@@ -8,6 +8,8 @@ use tokio::time::Duration;
 
 use crate::AppEvent;
 
+pub mod discovery;
+
 pub const IOBOARD_TX_BUFFER_SIZE: usize = 4096;
 
 topic!(IoBoardCommandTopic, IoBoardCommand, "topic/ioboard/command");

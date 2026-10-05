@@ -20,7 +20,7 @@ use crate::net::commands::{OperatorCommandEndpoint, heartbeat_sender};
 use crate::net::services::basic_services;
 use crate::net::shutdown::app_shutdown_handler;
 use crate::workspace::{ToggleDefinition, WorkspaceError, Workspaces};
-use crate::{LOCAL_ADDR, REMOTE_ADDR, SCHEDULED_FPS_MAX, TARGET_FPS};
+use crate::{DEFAULT_SERVER_ADDR, LOCAL_ADDR, SCHEDULED_FPS_MAX, SERVER_ADDR_ENV_VAR, TARGET_FPS};
 
 pub mod camera;
 pub mod commands;
@@ -32,7 +32,8 @@ pub async fn ergot_task(
     workspaces: Value<Workspaces>,
     app_event_tx: broadcast::Sender<AppEvent>,
 ) -> anyhow::Result<()> {
-    info!("Starting networking on: {}", LOCAL_ADDR);
+    let server_addr = std::env::var(SERVER_ADDR_ENV_VAR).unwrap_or_else(|_| DEFAULT_SERVER_ADDR.to_string());
+    info!("Starting networking on: {}, server: {}", LOCAL_ADDR, server_addr);
 
     let mut app_event_rx = app_event_tx.subscribe();
 
@@ -44,7 +45,7 @@ pub async fn ergot_task(
 
     // FIXME show a message in the UI if this fails instead of panicking when the port is already in use
     udp_socket
-        .connect(REMOTE_ADDR)
+        .connect(&server_addr)
         .await
         .unwrap();
 

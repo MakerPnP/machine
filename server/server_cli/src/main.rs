@@ -6,9 +6,8 @@ use anyhow::bail;
 #[cfg(feature = "machine-vision")]
 use camera::CameraHandle;
 use clap::Parser;
-use config::{IO_BOARD_LOCAL_ADDR, IO_BOARD_REMOTE_ADDR, OPERATOR_LOCAL_ADDR, OPERATOR_REMOTE_ADDR};
+use config::OPERATOR_LOCAL_ADDR;
 use ergot::toolkits::tokio_udp::{RouterStack, register_router_interface};
-use ioboard::IOBOARD_TX_BUFFER_SIZE;
 use log::info;
 use networking::UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX;
 use operator::OPERATOR_TX_BUFFER_SIZE;
@@ -51,6 +50,9 @@ async fn main() -> anyhow::Result<()> {
     else {
         bail!("Unable to load config. filename: {:?}", confile_filename)
     };
+    config
+        .validate()
+        .map_err(|e| anyhow::format_err!("Invalid config. filename: {:?}, error: {}", confile_filename, e))?;
 
     // Create event channel
     let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(16);
@@ -58,51 +60,13 @@ async fn main() -> anyhow::Result<()> {
 
     let stack: RouterStack = RouterStack::new();
 
-    let io_board_udp_socket = UdpSocket::bind(IO_BOARD_LOCAL_ADDR)
-        .await
-        .map_err(|e| {
-            anyhow::format_err!(
-                "Unable to create local UDP socket for io boards. address: {}, error: {}",
-                IO_BOARD_LOCAL_ADDR,
-                e
-            )
-        })?;
-    io_board_udp_socket
-        .connect(IO_BOARD_REMOTE_ADDR)
-        .await
-        .map_err(|e| {
-            anyhow::format_err!(
-                "Unable to create remote UDP socket for io boards. address: {}, error: {}",
-                IO_BOARD_REMOTE_ADDR,
-                e
-            )
-        })?;
-
-    register_router_interface(
-        &stack,
-        io_board_udp_socket,
-        UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX as _,
-        IOBOARD_TX_BUFFER_SIZE,
-    )
-    .await
-    .unwrap();
-
+    // Not connected, the operator UI's address is learnt from the first packet it sends.
     let operator_udp_socket = UdpSocket::bind(OPERATOR_LOCAL_ADDR)
         .await
         .map_err(|e| {
             anyhow::format_err!(
                 "Unable to create local UDP socket for operator UI. address: {}, error: {}",
-                IO_BOARD_LOCAL_ADDR,
-                e
-            )
-        })?;
-    operator_udp_socket
-        .connect(OPERATOR_REMOTE_ADDR)
-        .await
-        .map_err(|e| {
-            anyhow::format_err!(
-                "Unable to create UDP socket for operator UI. address: {}, error: {}",
-                OPERATOR_REMOTE_ADDR,
+                OPERATOR_LOCAL_ADDR,
                 e
             )
         })?;
@@ -126,6 +90,13 @@ async fn main() -> anyhow::Result<()> {
     let yeet_listener_handle = tokio::task::Builder::new()
         .name("ergot/yeet-listener")
         .spawn(networking::yeet_listener(stack.clone(), app_event_tx.subscribe()))?;
+    let io_board_discovery_handle = tokio::task::Builder::new()
+        .name("io-board/discovery")
+        .spawn(ioboard::discovery::io_board_discovery(
+            stack.clone(),
+            config.io_boards.clone(),
+            app_event_tx.subscribe(),
+        ))?;
 
     let app_state = Arc::new(Mutex::new(AppState {
         config,
@@ -159,6 +130,7 @@ async fn main() -> anyhow::Result<()> {
     let _ = operator_listener_handle.await;
     let _ = basic_services_handle.await;
     let _ = yeet_listener_handle.await;
+    let _ = io_board_discovery_handle.await;
 
     info!("Shutdown complete");
     Ok(())

@@ -1,12 +1,11 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
-// TODO replace these with dynamic configuration
-//const LOCAL_ADDR: &str = "0.0.0.0:5001";
 const LOCAL_ADDR: &str = "0.0.0.0:8002";
 
-//const REMOTE_ADDR: &str = "127.0.0.1:8001";
-const REMOTE_ADDR: &str = "192.168.18.60:8001";
-// const REMOTE_ADDR: &str = "192.168.18.63:8001";
+/// The server address, normally the server runs on the same machine.
+/// Override with the `MAKERPNP_SERVER_ADDR` environment variable, e.g. `MAKERPNP_SERVER_ADDR=192.168.18.60:8001`.
+const DEFAULT_SERVER_ADDR: &str = "127.0.0.1:8001";
+const SERVER_ADDR_ENV_VAR: &str = "MAKERPNP_SERVER_ADDR";
 
 // TODO remove `TARGET_FPS` it's value should come from the per-camera FPS configuration on the
 //      server via camera discovery

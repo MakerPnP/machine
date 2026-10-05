@@ -590,7 +590,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     let mut seed = [0; 8];
     rng.fill_bytes(&mut seed);
     let seed = u64::from_le_bytes(seed);
-
+    
     let serial_number = ioboard_net::SerialNumber(*embassy_stm32::uid::uid());
     info!("Serial number: {}", serial_number);
 
@@ -616,7 +616,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         p.PC1,  // eth_mdc
     );
 
-    let runner = ioboard_net::init(device, seed, lp_spawner.clone());
+    let runner = ioboard_net::init(device, seed, serial_number, lp_spawner.clone());
 
     // Launch network task
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
