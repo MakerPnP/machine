@@ -232,14 +232,19 @@ impl IoBoardDiscovery {
 
         match advertisement.claimed_by {
             Some(claimed_by) if claimed_by == board.local_endpoint => {
+                // Renew the claim, otherwise the board releases itself after `MISSED_RENEWALS_MAX` advertisements.
+                debug!(
+                    "Renewing io board claim. name: {}, serial_number: {}",
+                    name, serial_number
+                );
                 board.claimed_elsewhere = None;
-                return;
             }
             Some(claimed_by) => {
-                // boards only accept the first claim, until they are reset.
+                // boards only accept a claim when unclaimed, i.e. after the other server releases it, or its claim
+                // expires.
                 if board.claimed_elsewhere != Some(claimed_by) {
                     warn!(
-                        "Io board is claimed by another endpoint, reset the io board to connect. name: {}, serial_number: {}, claimed_by: {}, local_address: {}",
+                        "Io board is claimed by another endpoint, it will be claimed when released. name: {}, serial_number: {}, claimed_by: {}, local_address: {}",
                         name,
                         serial_number,
                         SocketAddrV4::from(claimed_by),
@@ -249,12 +254,13 @@ impl IoBoardDiscovery {
                 }
                 return;
             }
-            None => {}
+            None => {
+                // e.g. after we connect, after the board restarts, or after the claim expired.
+                info!("Claiming io board. name: {}, serial_number: {}", name, serial_number);
+            }
         }
 
-        // Claim the unclaimed board, e.g. after we connect, or after the board restarts.
         {
-            info!("Claiming io board. name: {}, serial_number: {}", name, serial_number);
             let claim = IoBoardClaim {
                 serial_number,
                 server: board.local_endpoint,
@@ -525,11 +531,11 @@ mod tests {
         );
         assert_eq!(claim.server.ip, [127, 0, 0, 1]);
 
-        // already claimed by us, no new claim
+        // already claimed by us, the claim is renewed
         fixture
             .advertise(&board_1, Some(claim.server))
             .await;
-        assert!(board_1.try_recv_claim().await.is_none());
+        assert_eq!(board_1.try_recv_claim().await, Some(claim));
 
         // board restarted, it's re-claimed
         fixture.advertise(&board_1, None).await;
@@ -608,10 +614,11 @@ mod tests {
         fixture
             .advertise(&board_1, Some(elsewhere))
             .await;
+        // not claimed, or renewed
         assert!(board_1.try_recv_claim().await.is_none());
         assert_eq!(fixture.connected_serial_numbers(), vec![Some(SERIAL_1)]);
 
-        // board was reset, it's now unclaimed
+        // the other server released it, or its claim expired
         fixture.advertise(&board_1, None).await;
         assert!(board_1.try_recv_claim().await.is_some());
     }
@@ -645,6 +652,8 @@ mod tests {
         fixture
             .advertise(&board_1, Some(claim.server))
             .await;
+        // renewal
+        board_1.try_recv_claim().await.unwrap();
 
         let server_address = fixture.socket.local_addr().unwrap();
         let started_at = Instant::now();

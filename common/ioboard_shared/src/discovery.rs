@@ -6,10 +6,16 @@
 //! ergot interface is.  The board then points its own ergot interface at that endpoint.
 //!
 //! A board only accepts a claim when it is unclaimed, it stays claimed by that server endpoint until the server sends
-//! an [`IoBoardRelease`] (e.g. when the server shuts down), or the board is reset.  Servers use a fixed ergot endpoint
-//! per board, so that a server that restarts without releasing (e.g. after a crash) is still the endpoint the board is
-//! claimed by.  Boards keep advertising after being claimed (with `claimed_by` set), so a server can tell whether
-//! a board is unclaimed, claimed by it, or claimed by another endpoint.
+//! an [`IoBoardRelease`] (e.g. when the server shuts down), the claim expires, or the board is reset.  Boards keep
+//! advertising after being claimed (with `claimed_by` set), so a server can tell whether a board is unclaimed, claimed
+//! by it, or claimed by another endpoint.
+//!
+//! The server renews its claim by sending the claim again in reply to each advertisement that shows the board is
+//! claimed by it.  When [`MISSED_RENEWALS_MAX`] advertisements in a row are not answered by a renewal, e.g. because the
+//! server crashed, the claim expires and the board releases itself.  See [`ClaimState`].
+//!
+//! Servers use a fixed ergot endpoint per board, so that a server that restarts before the claim expires is still the
+//! endpoint the board is claimed by.
 //!
 //! Messages are encoded as ergot topic frames (header + topic key + postcard body) but are sent over a plain UDP socket,
 //! outside of any ergot net stack, so that the receiver can learn the sender's IP address from the datagram.  Since the
@@ -216,9 +222,160 @@ where
     postcard::from_bytes(body).map_err(|_| DecodeError::InvalidBody)
 }
 
+/// The number of advertisements in a row, sent while claimed, that are not answered by a renewal, after which the
+/// claim expires.
+///
+/// Counted in advertisements, rather than time, so that [`ADVERTISEMENT_INTERVAL_MS`] can be changed without
+/// affecting how many lost packets are tolerated.
+pub const MISSED_RENEWALS_MAX: u8 = 5;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ClaimResult {
+    /// The board was unclaimed, it's now claimed.
+    Claimed,
+    /// The board was already claimed by the same endpoint, the claim has been renewed.
+    Renewed,
+    /// The board is claimed by another endpoint, the claim was ignored.
+    ClaimedByOther(Endpoint),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ReleaseResult {
+    Released,
+    /// The board was not claimed, e.g. a retry after the reply to an earlier release was lost.
+    NotClaimed,
+    /// The board is claimed by another endpoint, the release was ignored.
+    ClaimedByOther(Endpoint),
+}
+
+/// The board side of the claim protocol.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct ClaimState {
+    claimed_by: Option<Endpoint>,
+    missed_renewals: u8,
+}
+
+impl ClaimState {
+    pub const fn new() -> Self {
+        Self {
+            claimed_by: None,
+            missed_renewals: 0,
+        }
+    }
+
+    pub fn claimed_by(&self) -> Option<Endpoint> {
+        self.claimed_by
+    }
+
+    pub fn claim(&mut self, server: Endpoint) -> ClaimResult {
+        match self.claimed_by {
+            None => {
+                self.claimed_by = Some(server);
+                self.missed_renewals = 0;
+                ClaimResult::Claimed
+            }
+            Some(claimed_by) if claimed_by == server => {
+                self.missed_renewals = 0;
+                ClaimResult::Renewed
+            }
+            Some(claimed_by) => ClaimResult::ClaimedByOther(claimed_by),
+        }
+    }
+
+    pub fn release(&mut self, server: Endpoint) -> ReleaseResult {
+        match self.claimed_by {
+            Some(claimed_by) if claimed_by == server => {
+                self.claimed_by = None;
+                ReleaseResult::Released
+            }
+            None => ReleaseResult::NotClaimed,
+            Some(claimed_by) => ReleaseResult::ClaimedByOther(claimed_by),
+        }
+    }
+
+    /// Call before sending each periodic advertisement.
+    ///
+    /// Returns the endpoint the board was claimed by, if the claim expired, in which case the board is now unclaimed.
+    pub fn advertising(&mut self) -> Option<Endpoint> {
+        let claimed_by = self.claimed_by?;
+
+        if self.missed_renewals >= MISSED_RENEWALS_MAX {
+            self.claimed_by = None;
+            return Some(claimed_by);
+        }
+
+        // reset by a renewal, in reply to this advertisement
+        self.missed_renewals += 1;
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const SERVER_1: Endpoint = Endpoint {
+        ip: [192, 168, 1, 2],
+        port: 8200,
+    };
+    const SERVER_2: Endpoint = Endpoint {
+        ip: [192, 168, 1, 3],
+        port: 8200,
+    };
+
+    #[test]
+    fn claim_and_release() {
+        let mut state = ClaimState::new();
+        assert_eq!(state.release(SERVER_1), ReleaseResult::NotClaimed);
+
+        assert_eq!(state.claim(SERVER_1), ClaimResult::Claimed);
+        assert_eq!(state.claimed_by(), Some(SERVER_1));
+        assert_eq!(state.claim(SERVER_1), ClaimResult::Renewed);
+
+        assert_eq!(state.claim(SERVER_2), ClaimResult::ClaimedByOther(SERVER_1));
+        assert_eq!(state.release(SERVER_2), ReleaseResult::ClaimedByOther(SERVER_1));
+        assert_eq!(state.claimed_by(), Some(SERVER_1));
+
+        assert_eq!(state.release(SERVER_1), ReleaseResult::Released);
+        assert_eq!(state.claimed_by(), None);
+
+        assert_eq!(state.claim(SERVER_2), ClaimResult::Claimed);
+    }
+
+    #[test]
+    fn claim_expires_after_missed_renewals() {
+        let mut state = ClaimState::new();
+        // unclaimed boards never expire
+        assert_eq!(state.advertising(), None);
+
+        state.claim(SERVER_1);
+        for _ in 0..MISSED_RENEWALS_MAX {
+            assert_eq!(state.advertising(), None);
+        }
+        assert_eq!(state.advertising(), Some(SERVER_1));
+        assert_eq!(state.claimed_by(), None);
+        assert_eq!(state.advertising(), None);
+    }
+
+    #[test]
+    fn renewal_resets_missed_renewals() {
+        let mut state = ClaimState::new();
+        state.claim(SERVER_1);
+
+        for _ in 0..3 * MISSED_RENEWALS_MAX {
+            assert_eq!(state.advertising(), None);
+            assert_eq!(state.claim(SERVER_1), ClaimResult::Renewed);
+        }
+
+        // a claim from another server is not a renewal
+        for _ in 0..MISSED_RENEWALS_MAX {
+            assert_eq!(state.advertising(), None);
+            state.claim(SERVER_2);
+        }
+        assert_eq!(state.advertising(), Some(SERVER_1));
+    }
 
     const SERIAL: SerialNumber = SerialNumber([0x2C, 0x00, 0x24, 0x00, 0x08, 0x51, 0x33, 0x32, 0x34, 0x36, 0x38, 0xFF]);
 

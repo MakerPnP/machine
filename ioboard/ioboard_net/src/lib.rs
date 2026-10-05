@@ -30,8 +30,9 @@ use ergot::interface_manager::transports::packet::{PacketReceiver, PacketRxTxWor
 use ergot::prelude::{EdgeFrameProcessor, CENTRAL_NODE_ID};
 use ioboard_shared::commands::IoBoardCommand;
 use ioboard_shared::discovery::{
-    self, ADVERTISEMENT_INTERVAL_MS, DISCOVERY_FRAME_SIZE_MAX, DISCOVERY_PORT, DecodeError, Endpoint, IoBoardAdvertisement,
-    IoBoardAdvertisementTopic, IoBoardClaim, IoBoardClaimTopic, IoBoardRelease, IoBoardReleaseTopic,
+    self, ADVERTISEMENT_INTERVAL_MS, ClaimResult, ClaimState, DISCOVERY_FRAME_SIZE_MAX, DISCOVERY_PORT, DecodeError,
+    Endpoint, IoBoardAdvertisement, IoBoardAdvertisementTopic, IoBoardClaim, IoBoardClaimTopic, IoBoardRelease,
+    IoBoardReleaseTopic, MISSED_RENEWALS_MAX, ReleaseResult,
 };
 pub use ioboard_shared::discovery::SerialNumber;
 use ioboard_shared::yeet::Yeet;
@@ -267,7 +268,7 @@ fn decode_discovery_message(data: &[u8]) -> Result<DiscoveryMessage, DecodeError
 /// Broadcasts advertisements and handles claims and releases from servers.
 ///
 /// A claim is only accepted when the board is unclaimed, the board stays claimed by that server endpoint until the
-/// server releases it, or the board is reset.
+/// server releases it, the claim expires, or the board is reset.  See [`ClaimState`].
 #[embassy_executor::task]
 async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber) -> ! {
     defmt::info!("Discovery started, serial number: {}", serial_number);
@@ -275,26 +276,32 @@ async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber)
     let broadcast_endpoint = IpEndpoint::new(Ipv4Address::BROADCAST.into(), DISCOVERY_PORT);
     let mut ticker = Ticker::every(Duration::from_millis(ADVERTISEMENT_INTERVAL_MS));
     let mut rx_buf = [0u8; DISCOVERY_FRAME_SIZE_MAX];
-    let mut advertisement = IoBoardAdvertisement {
-        serial_number,
-        ergot_port: ERGOT_PORT,
-        claimed_by: None,
-    };
+    let mut claim_state = ClaimState::new();
 
     loop {
         let reply_to = match select(ticker.next(), socket.recv_from(&mut rx_buf)).await {
-            Either::First(_) => broadcast_endpoint,
+            Either::First(_) => {
+                if let Some(claimed_by) = claim_state.advertising() {
+                    defmt::warn!(
+                        "Claim expired, no renewals from server. claimed_by: {}, missed renewals: {}",
+                        claimed_by,
+                        MISSED_RENEWALS_MAX
+                    );
+                    SERVER_ENDPOINT.signal(None);
+                }
+                broadcast_endpoint
+            }
             Either::Second(Ok((len, metadata))) => {
                 match decode_discovery_message(&rx_buf[..len]) {
                     Ok(DiscoveryMessage::Claim(claim)) if claim.serial_number == serial_number => {
-                        match advertisement.claimed_by {
-                            None => {
+                        match claim_state.claim(claim.server) {
+                            ClaimResult::Claimed => {
                                 defmt::info!("Claimed by server, endpoint: {}", claim.server);
-                                advertisement.claimed_by = Some(claim.server);
                                 SERVER_ENDPOINT.signal(Some(claim.server));
                             }
-                            Some(claimed_by) if claimed_by == claim.server => {}
-                            Some(claimed_by) => {
+                            // don't reply to renewals, they are sent in reply to our advertisements.
+                            ClaimResult::Renewed => continue,
+                            ClaimResult::ClaimedByOther(claimed_by) => {
                                 defmt::warn!(
                                     "Ignoring claim, already claimed. claimed_by: {}, claim: {}",
                                     claimed_by,
@@ -306,15 +313,13 @@ async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber)
                         metadata.endpoint
                     }
                     Ok(DiscoveryMessage::Release(release)) if release.serial_number == serial_number => {
-                        match advertisement.claimed_by {
-                            Some(claimed_by) if claimed_by == release.server => {
+                        match claim_state.release(release.server) {
+                            ReleaseResult::Released => {
                                 defmt::info!("Released by server, endpoint: {}", release.server);
-                                advertisement.claimed_by = None;
                                 SERVER_ENDPOINT.signal(None);
                             }
-                            // already released, e.g. a retry after our reply was lost
-                            None => {}
-                            Some(claimed_by) => {
+                            ReleaseResult::NotClaimed => {}
+                            ReleaseResult::ClaimedByOther(claimed_by) => {
                                 defmt::warn!(
                                     "Ignoring release, claimed by another server. claimed_by: {}, release: {}",
                                     claimed_by,
@@ -343,6 +348,11 @@ async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber)
             }
         };
 
+        let advertisement = IoBoardAdvertisement {
+            serial_number,
+            ergot_port: ERGOT_PORT,
+            claimed_by: claim_state.claimed_by(),
+        };
         let mut tx_buf = [0u8; DISCOVERY_FRAME_SIZE_MAX];
         let Ok(frame) = discovery::encode::<IoBoardAdvertisementTopic>(&mut tx_buf, &advertisement) else {
             defmt::error!("Unable to encode advertisement");
