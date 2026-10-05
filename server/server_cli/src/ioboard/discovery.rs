@@ -18,15 +18,16 @@ use std::time::Duration;
 use ergot::net_stack::NetStackHandle;
 use ergot::toolkits::tokio_udp::{RouterStack, register_router_interface};
 use ioboard_shared::discovery::{
-    self, DISCOVERY_FRAME_SIZE_MAX, DISCOVERY_PORT, DecodeError, Endpoint, IoBoardAdvertisement,
-    IoBoardAdvertisementTopic, IoBoardClaim, IoBoardClaimTopic, IoBoardRelease, IoBoardReleaseTopic, SerialNumber,
+    self, ADVERTISEMENT_INTERVAL_MS, DISCOVERY_FRAME_SIZE_MAX, DISCOVERY_PORT, DecodeError, Endpoint,
+    IoBoardAdvertisement, IoBoardAdvertisementTopic, IoBoardClaim, IoBoardClaimTopic, IoBoardRelease,
+    IoBoardReleaseTopic, MISSED_RENEWALS_MAX, SerialNumber,
 };
 use log::{debug, error, info, warn};
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::broadcast::Receiver;
-use tokio::sync::watch;
-use tokio::time::{Instant, timeout_at};
+use tokio::sync::{broadcast, watch};
+use tokio::time::{Instant, interval, timeout_at};
 
 use crate::AppEvent;
 use crate::config::{ConnectionKind, DiscoveredIoBoard, IO_BOARD_LOCAL_PORT_BASE, IoBoardDefinition};
@@ -37,6 +38,33 @@ use crate::networking::UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX;
 const RELEASE_ATTEMPTS: u32 = 4;
 /// How long to wait for boards to confirm a release, before sending it again.
 const RELEASE_RETRY_INTERVAL: Duration = Duration::from_millis(250);
+/// How long a board can go without advertising before it's considered offline.  The same as the board's claim expiry,
+/// so a board that comes back sooner is still claimed by us.
+const OFFLINE_TIMEOUT: Duration = Duration::from_millis(ADVERTISEMENT_INTERVAL_MS * MISSED_RENEWALS_MAX as u64);
+/// How often boards are checked for being offline.
+const OFFLINE_CHECK_INTERVAL: Duration = Duration::from_millis(ADVERTISEMENT_INTERVAL_MS);
+/// The capacity of the [`IoBoardEvent`] channel.
+pub const IO_BOARD_EVENT_CAPACITY: usize = 16;
+
+/// Published when a board assigned to an entry stops advertising, and when it advertises again.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IoBoardEvent {
+    /// The index of the board's definition in the config.
+    pub index: usize,
+    /// The definition's name, as used elsewhere in the system.
+    pub name: String,
+    pub serial_number: SerialNumber,
+    pub kind: IoBoardEventKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum IoBoardEventKind {
+    /// The board hasn't advertised for [`OFFLINE_TIMEOUT`], e.g. it was powered off or disconnected.  It stays
+    /// assigned to its entry.
+    Offline,
+    /// The offline board advertised again.  It may have been reset, so its outputs and position can't be assumed.
+    Online,
+}
 
 /// Binds the discovery port.
 ///
@@ -60,6 +88,7 @@ pub async fn io_board_discovery(
     socket: UdpSocket,
     app_event_rx: Receiver<AppEvent>,
     status_tx: watch::Sender<Vec<IoBoardStatus>>,
+    event_tx: broadcast::Sender<IoBoardEvent>,
 ) {
     let mut app_shutdown_handler = Box::pin(crate::app_shutdown_handler(app_event_rx));
 
@@ -70,12 +99,20 @@ pub async fn io_board_discovery(
 
     let mut discovery = IoBoardDiscovery::new(stack, definitions, Some(IO_BOARD_LOCAL_PORT_BASE));
     discovery.status_tx = status_tx;
+    discovery.event_tx = event_tx;
     discovery.publish_status();
     let mut incompatible: HashSet<SocketAddr> = HashSet::new();
+    let mut offline_check = interval(OFFLINE_CHECK_INTERVAL);
 
     let mut buf = [0u8; 1500];
     loop {
         let (len, from) = select! {
+            _ = offline_check.tick() => {
+                if discovery.check_offline(Instant::now()) {
+                    discovery.publish_status();
+                }
+                continue
+            },
             result = socket.recv_from(&mut buf) => match result {
                 Ok(result) => result,
                 Err(e) => {
@@ -151,6 +188,8 @@ pub struct IoBoardDetails {
     /// From the board's most recent advertisement.
     pub claim: ClaimStatus,
     pub last_seen: std::time::Instant,
+    /// The board is advertising, see [`IoBoardEventKind`].
+    pub online: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -211,6 +250,8 @@ struct IoBoard {
     claimed_by_other: Option<Endpoint>,
     /// When the board's most recent advertisement was received.
     last_seen: Instant,
+    /// An advertisement has been received within [`OFFLINE_TIMEOUT`].
+    online: bool,
 }
 
 enum Entry {
@@ -267,6 +308,7 @@ struct IoBoardDiscovery {
     /// `None` to use ephemeral ports, for tests.
     local_port_base: Option<u16>,
     status_tx: watch::Sender<Vec<IoBoardStatus>>,
+    event_tx: broadcast::Sender<IoBoardEvent>,
 }
 
 impl IoBoardDiscovery {
@@ -275,6 +317,7 @@ impl IoBoardDiscovery {
             stack,
             local_port_base,
             status_tx: watch::Sender::new(Vec::new()),
+            event_tx: broadcast::Sender::new(IO_BOARD_EVENT_CAPACITY),
             entries: definitions
                 .iter()
                 .map(|_| Entry::Empty)
@@ -320,10 +363,49 @@ impl IoBoardDiscovery {
                         ClaimedBy::Other(endpoint) => ClaimStatus::Other(endpoint.into()),
                     },
                     last_seen: board.last_seen.into_std(),
+                    online: board.online,
                 }),
             })
             .collect();
         self.status_tx.send_replace(status);
+    }
+
+    /// Marks boards that haven't advertised for [`OFFLINE_TIMEOUT`] as offline, returning whether any were.
+    ///
+    /// Offline boards stay assigned, so they are reconnected when they advertise again.
+    fn check_offline(&mut self, now: Instant) -> bool {
+        let mut changed = false;
+        for (index, (definition, entry)) in self
+            .definitions
+            .iter()
+            .zip(self.entries.iter_mut())
+            .enumerate()
+        {
+            let Some(board) = entry.board_mut() else {
+                continue;
+            };
+            let silent_for = now.duration_since(board.last_seen);
+            let went_offline = board.online && silent_for >= OFFLINE_TIMEOUT;
+            if !went_offline {
+                continue;
+            }
+
+            board.online = false;
+            changed = true;
+            warn!(
+                "Io board is offline, no advertisements received. name: {}, serial_number: {}, last_seen: {:.1}s ago",
+                definition.name,
+                board.serial_number,
+                silent_for.as_secs_f32()
+            );
+            let _ = self.event_tx.send(IoBoardEvent {
+                index,
+                name: definition.name.clone(),
+                serial_number: board.serial_number,
+                kind: IoBoardEventKind::Offline,
+            });
+        }
+        changed
     }
 
     /// Returns the index of the entry the unassigned board should be assigned to, if any.
@@ -423,6 +505,7 @@ impl IoBoardDiscovery {
                 claimed_by: advertisement.claimed_by,
                 claimed_by_other: None,
                 last_seen: Instant::now(),
+                online: true,
             },
             socket,
             releasing_stale: false,
@@ -471,6 +554,26 @@ impl IoBoardDiscovery {
             .entries
             .iter()
             .position(|entry| matches!(entry.board(), Some(board) if board.serial_number == serial_number));
+
+        // before any other handling, which may replace the entry's board, e.g. when the address changed.
+        if let Some(index) = existing {
+            let board = self.entries[index]
+                .board_mut()
+                .unwrap();
+            if !board.online {
+                board.online = true;
+                info!(
+                    "Io board is online. name: {}, serial_number: {}",
+                    self.definitions[index].name, serial_number
+                );
+                let _ = self.event_tx.send(IoBoardEvent {
+                    index,
+                    name: self.definitions[index].name.clone(),
+                    serial_number,
+                    kind: IoBoardEventKind::Online,
+                });
+            }
+        }
 
         // the board's address changed, e.g. a new DHCP lease, start over with the new address.
         if let Some(index) = existing {
@@ -688,7 +791,8 @@ impl IoBoardDiscovery {
 
     /// Release the claims on all pending and connected boards, waiting for the boards to confirm.
     ///
-    /// Boards claimed by another endpoint ignore the release, so they are skipped.
+    /// Boards claimed by another endpoint ignore the release, so they are skipped.  Offline boards can't confirm the
+    /// release, so they are skipped too, their claim expires.
     async fn release_all(&self, socket: &UdpSocket) {
         let mut pending: Vec<usize> = self
             .entries
@@ -696,10 +800,17 @@ impl IoBoardDiscovery {
             .enumerate()
             .filter_map(|(index, entry)| match entry.board() {
                 // a pending board may have accepted our claim, but we haven't seen its advertisement yet
-                Some(board) if board.claimed_by.is_none() || board.claimed_by == Some(board.local_endpoint) => {
-                    Some(index)
+                Some(board) if board.online => (board.claimed_by.is_none()
+                    || board.claimed_by == Some(board.local_endpoint))
+                .then_some(index),
+                Some(board) => {
+                    info!(
+                        "Io board is offline, not releasing, its claim will expire. name: {}, serial_number: {}",
+                        self.definitions[index].name, board.serial_number
+                    );
+                    None
                 }
-                _ => None,
+                None => None,
             })
             .collect();
 
@@ -1275,6 +1386,149 @@ mod tests {
         });
         // confirmed, so no retries
         assert!(started_at.elapsed() < RELEASE_RETRY_INTERVAL);
+    }
+
+    impl Fixture {
+        fn last_seen(&self, index: usize) -> Instant {
+            self.discovery.entries[index]
+                .board()
+                .unwrap()
+                .last_seen
+        }
+
+        fn online(&self) -> Vec<bool> {
+            self.discovery.publish_status();
+            self.discovery
+                .status_tx
+                .borrow()
+                .iter()
+                .map(|status| {
+                    status
+                        .board
+                        .as_ref()
+                        .is_some_and(|board| board.online)
+                })
+                .collect()
+        }
+    }
+
+    #[tokio::test]
+    async fn silent_board_goes_offline_and_back_online_without_reconnecting() {
+        let mut fixture = Fixture::new(vec![first()]).await;
+        let mut events = fixture.discovery.event_tx.subscribe();
+        let board_1 = FakeBoard::new(SERIAL_1).await;
+        let claim = fixture.connect(&board_1).await;
+        let last_seen = fixture.last_seen(0);
+
+        assert!(
+            !fixture
+                .discovery
+                .check_offline(last_seen + OFFLINE_TIMEOUT - Duration::from_millis(1))
+        );
+        assert!(events.try_recv().is_err());
+
+        assert!(
+            fixture
+                .discovery
+                .check_offline(last_seen + OFFLINE_TIMEOUT)
+        );
+        assert_eq!(events.try_recv().unwrap(), IoBoardEvent {
+            index: 0,
+            name: "first".to_string(),
+            serial_number: SERIAL_1,
+            kind: IoBoardEventKind::Offline,
+        });
+        assert_eq!(fixture.online(), vec![false]);
+        // still assigned, it's not replaced by another board
+        assert_eq!(fixture.states(), vec![State::Connected(SERIAL_1)]);
+        let board_2 = FakeBoard::new(SERIAL_2).await;
+        fixture.advertise(&board_2, None).await;
+        assert!(board_2.try_recv_claim().await.is_none());
+
+        // reported once
+        assert!(
+            !fixture
+                .discovery
+                .check_offline(last_seen + 2 * OFFLINE_TIMEOUT)
+        );
+        assert!(events.try_recv().is_err());
+
+        // back before the claim expired, e.g. a network outage
+        fixture
+            .advertise(&board_1, Some(claim.server))
+            .await;
+        assert_eq!(board_1.try_recv_claim().await, Some(claim));
+        assert_eq!(events.try_recv().unwrap(), IoBoardEvent {
+            index: 0,
+            name: "first".to_string(),
+            serial_number: SERIAL_1,
+            kind: IoBoardEventKind::Online,
+        });
+        assert_eq!(fixture.online(), vec![true]);
+        assert_eq!(fixture.states(), vec![State::Connected(SERIAL_1)]);
+    }
+
+    #[tokio::test]
+    async fn events_identify_the_board_by_its_definition() {
+        let mut fixture = Fixture::new(vec![id(SERIAL_2), first()]).await;
+        let mut events = fixture.discovery.event_tx.subscribe();
+        let board_1 = FakeBoard::new(SERIAL_1).await;
+        fixture.connect(&board_1).await;
+        assert_eq!(fixture.states(), vec![State::Empty, State::Connected(SERIAL_1)]);
+
+        let last_seen = fixture.last_seen(1);
+        fixture
+            .discovery
+            .check_offline(last_seen + OFFLINE_TIMEOUT);
+        assert_eq!(events.try_recv().unwrap(), IoBoardEvent {
+            index: 1,
+            name: "first".to_string(),
+            serial_number: SERIAL_1,
+            kind: IoBoardEventKind::Offline,
+        });
+    }
+
+    #[tokio::test]
+    async fn offline_board_that_was_reset_is_claimed_again() {
+        let mut fixture = Fixture::new(vec![first()]).await;
+        let mut events = fixture.discovery.event_tx.subscribe();
+        let board_1 = FakeBoard::new(SERIAL_1).await;
+        let claim = fixture.connect(&board_1).await;
+        let last_seen = fixture.last_seen(0);
+        fixture
+            .discovery
+            .check_offline(last_seen + OFFLINE_TIMEOUT);
+        events.try_recv().unwrap();
+
+        fixture.advertise(&board_1, None).await;
+        assert_eq!(events.try_recv().unwrap().kind, IoBoardEventKind::Online);
+        assert_eq!(board_1.try_recv_claim().await, Some(claim));
+        assert_eq!(fixture.states(), vec![State::Connected(SERIAL_1)]);
+    }
+
+    #[tokio::test]
+    async fn release_all_skips_offline_boards() {
+        let mut fixture = Fixture::new(vec![first()]).await;
+        let board_1 = FakeBoard::new(SERIAL_1).await;
+        fixture.connect(&board_1).await;
+        let last_seen = fixture.last_seen(0);
+        fixture
+            .discovery
+            .check_offline(last_seen + OFFLINE_TIMEOUT);
+
+        let started_at = Instant::now();
+        fixture
+            .discovery
+            .release_all(&fixture.socket)
+            .await;
+        // no retries waiting for a confirmation
+        assert!(started_at.elapsed() < RELEASE_RETRY_INTERVAL);
+        assert!(
+            board_1
+                .try_recv_release(Duration::from_millis(100))
+                .await
+                .is_none()
+        );
     }
 
     #[tokio::test]

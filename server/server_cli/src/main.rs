@@ -133,6 +133,8 @@ async fn run(args: cli::Args, log_store: Option<(Arc<LogStore>, Option<String>)>
     ));
 
     let (io_board_status_tx, io_board_status_rx) = watch::channel(Vec::new());
+    // when io boards go offline and come back online, for corrective action, e.g. pausing a job and re-homing.
+    let (io_board_event_tx, _) = broadcast::channel(ioboard::discovery::IO_BOARD_EVENT_CAPACITY);
     let io_board_discovery_handle = tokio::task::Builder::new()
         .name("io-board/discovery")
         .spawn(ioboard::discovery::io_board_discovery(
@@ -141,6 +143,7 @@ async fn run(args: cli::Args, log_store: Option<(Arc<LogStore>, Option<String>)>
             io_board_discovery_socket,
             app_event_tx.subscribe(),
             io_board_status_tx,
+            io_board_event_tx,
         ))?;
 
     let app_state = Arc::new(Mutex::new(AppState {

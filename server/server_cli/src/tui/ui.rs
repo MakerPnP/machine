@@ -273,11 +273,17 @@ fn io_board_row(status: &IoBoardStatus) -> Row<'static> {
         (None, Some(expected)) => Cell::from(expected.to_string()).dim(),
         (None, None) => Cell::from("any").dim(),
     };
-    let (state, color) = match status.state {
-        IoBoardState::Waiting => ("waiting", Color::Yellow),
-        IoBoardState::Claiming => ("claiming", Color::Cyan),
-        IoBoardState::ReleasingStale => ("releasing stale", Color::Magenta),
-        IoBoardState::Connected => ("connected", Color::Green),
+    // an entry without a board has nothing to be offline
+    let online = status
+        .board
+        .as_ref()
+        .is_none_or(|board| board.online);
+    let (state, color) = match (online, status.state) {
+        (true, IoBoardState::Waiting) => ("waiting", Color::Yellow),
+        (true, IoBoardState::Claiming) => ("claiming", Color::Cyan),
+        (true, IoBoardState::ReleasingStale) => ("releasing stale", Color::Magenta),
+        (true, IoBoardState::Connected) => ("connected", Color::Green),
+        (false, _) => ("offline", Color::Red),
     };
     let dash = || Cell::from("-").dim();
     match &status.board {
@@ -545,6 +551,7 @@ mod tests {
                         .unwrap(),
                     claim: ClaimStatus::Us,
                     last_seen: std::time::Instant::now(),
+                    online: true,
                 }),
             },
             IoBoardStatus {
