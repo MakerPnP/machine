@@ -24,7 +24,7 @@ use ergot::interface_manager::transports::embassy_net_udp::{
     UDP_OVER_ETH_ERGOT_FRAME_SIZE_MAX, UDP_OVER_ETH_ERGOT_PAYLOAD_SIZE_MAX,
 };
 use ergot::logging::log_v0_4::LogSink;
-use ergot::toolkits::embassy_net_v0_7 as kit;
+use ergot::toolkits::embassy_net_v0_10_preview as kit;
 use ergot::well_known::{DeviceInfo, ErgotPingEndpoint};
 use ergot::{Address, topic};
 use ergot::interface_manager::InterfaceState;

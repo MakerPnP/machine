@@ -17,7 +17,7 @@ embassy-executor   = { workspace = true }
 embassy-sync       = { workspace = true }
 embassy-futures    = { workspace = true }
 
-ergot              = { path = "../../libs/ergot/crates/ergot", features = ["embassy-net-v0_7"] }
+ergot              = { path = "../../libs/ergot/crates/ergot", features = ["embassy-net-v0_10-preview"] }
 mutex              = { workspace = true }
 bbqueue           = { version = "0.7.0", default-features = false, features = ["critical-section", "maitake-sync-0_3"] }
 heapless           = { version = "0.9", default-features = false }

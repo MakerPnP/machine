@@ -338,7 +338,7 @@ version = "0.6.0"
 dependencies = [
  "defmt",
  "embassy-futures 0.1.2",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "embassy-time",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0",
@@ -401,42 +401,19 @@ dependencies = [
 
 [[package]]
 name = "embassy-net"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0558a231a47e7d4a06a28b5278c92e860f1200f24821d2f365a2f40fe3f3c7b2"
-dependencies = [
- "document-features",
- "embassy-net-driver",
- "embassy-sync 0.7.2",
- "embassy-time",
- "embedded-io-async 0.6.1",
- "embedded-nal-async 0.8.0",
- "heapless 0.8.0",
- "managed",
- "smoltcp",
-]
-
-[[package]]
-name = "embassy-net"
 version = "0.9.1"
 dependencies = [
  "defmt",
  "document-features",
  "embassy-futures 0.1.2",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "embassy-time",
  "embedded-io-async 0.7.0",
- "embedded-nal-async 0.9.0",
+ "embedded-nal-async",
  "heapless 0.9.3",
  "xarxa",
  "xarxa-driver",
 ]
-
-[[package]]
-name = "embassy-net-driver"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "524eb3c489760508f71360112bca70f6e53173e6fe48fc5f0efd0f5ab217751d"
 
 [[package]]
 name = "embassy-ptp-driver"
@@ -465,7 +442,7 @@ dependencies = [
  "embassy-futures 0.1.2",
  "embassy-hal-internal",
  "embassy-ptp-driver",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "embassy-time",
  "embassy-time-driver",
  "embassy-time-queue-utils",
@@ -498,20 +475,6 @@ dependencies = [
  "trait-set",
  "vcell",
  "xarxa-driver",
-]
-
-[[package]]
-name = "embassy-sync"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73974a3edbd0bd286759b3d483540f0ebef705919a5f56f4fc7709066f71689b"
-dependencies = [
- "cfg-if",
- "critical-section",
- "embedded-io-async 0.6.1",
- "futures-core",
- "futures-sink",
- "heapless 0.8.0",
 ]
 
 [[package]]
@@ -572,7 +535,7 @@ version = "0.4.0"
 dependencies = [
  "defmt",
  "document-features",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "embassy-usb-driver",
  "portable-atomic",
 ]
@@ -678,16 +641,6 @@ dependencies = [
 
 [[package]]
 name = "embedded-nal-async"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76959917cd2b86f40a98c28dd5624eddd1fa69d746241c8257eac428d83cb211"
-dependencies = [
- "embedded-io-async 0.6.1",
- "embedded-nal",
-]
-
-[[package]]
-name = "embedded-nal-async"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb5a1bd585135d302f8f6d7de329310938093da6271b37a6c94b8798795c0c6d"
@@ -722,7 +675,7 @@ dependencies = [
  "cordyceps",
  "critical-section",
  "embassy-futures 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "embassy-net 0.7.1",
+ "embassy-net",
  "heapless 0.9.3",
  "log",
  "maitake-sync",
@@ -752,9 +705,9 @@ dependencies = [
  "defmt-rtt",
  "embassy-embedded-hal",
  "embassy-executor",
- "embassy-net 0.9.1",
+ "embassy-net",
  "embassy-stm32",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "embassy-time",
  "embedded-alloc",
  "embedded-hal 1.0.0",
@@ -871,16 +824,6 @@ dependencies = [
 
 [[package]]
 name = "heapless"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
-dependencies = [
- "hash32 0.3.1",
- "stable_deref_trait",
-]
-
-[[package]]
-name = "heapless"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
@@ -917,11 +860,11 @@ dependencies = [
  "defmt",
  "embassy-executor",
  "embassy-futures 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "embassy-net 0.9.1",
- "embassy-sync 0.8.0",
+ "embassy-net",
+ "embassy-sync",
  "embassy-time",
  "embedded-io-async 0.7.0",
- "embedded-nal-async 0.9.0",
+ "embedded-nal-async",
  "ergot",
  "heapless 0.9.3",
  "ioboard_shared",
@@ -1024,12 +967,6 @@ dependencies = [
  "portable-atomic",
  "tracing",
 ]
-
-[[package]]
-name = "managed"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ca88d725a0a943b096803bd34e73a4437208b6077654cc4ecb2947a5f91618d"
 
 [[package]]
 name = "matchers"
@@ -1454,19 +1391,6 @@ name = "smallvec"
 version = "1.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
-
-[[package]]
-name = "smoltcp"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dad095989c1533c1c266d9b1e8d70a1329dd3723c3edac6d03bbd67e7bf6f4bb"
-dependencies = [
- "bitflags 1.3.2",
- "byteorder",
- "cfg-if",
- "heapless 0.8.0",
- "managed",
-]
 
 [[package]]
 name = "spin"
