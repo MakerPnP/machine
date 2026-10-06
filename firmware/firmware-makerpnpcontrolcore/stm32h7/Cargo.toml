@@ -89,3 +89,4 @@ embassy-time = { path = "../../../libs/embassy/embassy-time" }
 embassy-sync = { path = "../../../libs/embassy/embassy-sync" }
 embassy-net = { path = "../../../libs/embassy/embassy-net" }
 embassy-embedded-hal = { path = "../../../libs/embassy/embassy-embedded-hal" }
+embassy-futures = { path = "../../../libs/embassy/embassy-futures" }
