@@ -27,7 +27,7 @@ use core::str::FromStr;
 
 use ergot::traits::{Schema, Topic};
 use ergot::wire_frames::{de_frame, encode_frame_ty};
-use ergot::{Address, AnyAllAppendix, FrameKind, HeaderSeq, Key, topic};
+use ergot::{Address, AnyAllAppendix, FrameKind, Header, Key, topic, TrafficClass};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -180,7 +180,7 @@ where
     T: Topic,
     T::Message: Serialize + Sized,
 {
-    let hdr = HeaderSeq {
+    let hdr = Header {
         src: Address::unknown(),
         dst: Address {
             network_id: 0,
@@ -191,8 +191,8 @@ where
             key: Key(T::TOPIC_KEY.to_bytes()),
             nash: None,
         }),
-        seq_no: 0,
         kind: FrameKind::TOPIC_MSG,
+        class: TrafficClass::Control,
         ttl: 1,
     };
 

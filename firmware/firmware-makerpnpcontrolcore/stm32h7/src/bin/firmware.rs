@@ -125,7 +125,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
     // wait for CDONE signal to be low from FPGA.
     loop {
-        let level = fpga_cdone.get_level();
+        let level = fpga_cdone.level();
 
         // check checking, and give the FPGA some time to settle.
         Timer::after(Duration::from_millis(50)).await;
@@ -258,7 +258,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
     // wait for CDONE signal to be low from FPGA.
     loop {
-        let level = fpga_cdone.get_level();
+        let level = fpga_cdone.level();
 
         // check checking, and give the FPGA some time to settle.
         Timer::after(Duration::from_millis(50)).await;
@@ -539,8 +539,8 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 
     lp_spawner.spawn(unwrap!(fpga_task(fpga)));
 
-    let adc1 = Adc::new(p.ADC1);
-    let adc3 = Adc::new(p.ADC3);
+    let adc1 = Adc::new_blocking(p.ADC1, Default::default());
+    let adc3 = Adc::new_blocking(p.ADC3, Default::default());
 
 
     let adc_mux = adc::Mux::new(
@@ -588,7 +588,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     info!("Initializing RNG");
     let mut rng = Rng::new(p.RNG, Irqs);
     let mut seed = [0; 8];
-    rng.fill_bytes(&mut seed);
+    rng.blocking_fill_bytes(&mut seed);
     let seed = u64::from_le_bytes(seed);
     
     let serial_number = ioboard_net::SerialNumber(*embassy_stm32::uid::uid());
@@ -602,7 +602,6 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     let device = Ethernet::new(
         PACKETS.init(PacketQueue::<8, 8>::new()),
         p.ETH,
-        Irqs,
         p.PA1,  // ref_clk
         p.PA7,  // CRS_DV: Carrier Sense
         p.PC4,  // RX_D0: Received Bit 0
@@ -614,9 +613,11 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         p.ETH_SMA,
         p.PA2,  // mdio
         p.PC1,  // eth_mdc
+        Irqs,
     );
 
-    let runner = ioboard_net::init(device, seed, serial_number, lp_spawner.clone());
+    static DEVICE: StaticCell<Device> = StaticCell::new();
+    let runner = ioboard_net::init(DEVICE.init(device), seed, serial_number, lp_spawner.clone());
 
     // Launch network task
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
@@ -963,7 +964,7 @@ type AdcMuxInstance = adc::Mux<
 #[embassy_executor::task]
 async fn adc_task(
     mut adc_mux: AdcMuxInstance,
-    mut adc: Adc<'static, ADC3>,
+    mut adc: Adc<'static, ADC3, Blocking>,
     mut ext1_in: Peri<'static, PC2_C>,
     mut ext2_in: Peri<'static, PC3_C>,
     mut vac1_in: Peri<'static, PC0>,
@@ -1144,7 +1145,7 @@ fn mac_address_from_uid(uid: &[u8; 12]) -> [u8; 6] {
 type Device = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
 
 #[embassy_executor::task]
-async fn embassy_net_task(mut runner: embassy_net::Runner<'static, Device>) -> ! {
+async fn embassy_net_task(mut runner: embassy_net::Runner<'static>) -> ! {
     runner.run().await
 }
 

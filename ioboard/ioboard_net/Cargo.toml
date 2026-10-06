@@ -11,7 +11,7 @@ ioboard_shared     = { path = "../../common/ioboard_shared", features = ["defmt"
 embedded-nal-async = { workspace = true }
 embedded-io-async  = { workspace = true }
 
-embassy-net        = { workspace = true, features = ["defmt", "tcp", "dhcpv4", "medium-ethernet"] }
+embassy-net        = { workspace = true, features = ["defmt", "tcp", "udp", "dhcpv4", "medium-ethernet", "ipv4", "embedded-nal"] }
 embassy-time       = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-executor   = { workspace = true }
 embassy-sync       = { workspace = true }

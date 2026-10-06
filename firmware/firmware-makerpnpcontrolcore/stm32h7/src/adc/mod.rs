@@ -1,5 +1,6 @@
 use embassy_stm32::adc;
 use embassy_stm32::adc::{Adc, AdcChannel, BasicAdcRegs, BasicInstance};
+use embassy_stm32::mode::Blocking;
 use crate::fpga::adc::adc::FpgaAdcMux;
 
 pub struct Mux<'a, ADC, IN1, IN2>
@@ -10,7 +11,7 @@ where
     IN2: AdcChannel<'a, ADC>,
 {
     fpga_adc_mux: FpgaAdcMux,
-    adc: Adc<'a, ADC>,
+    adc: Adc<'a, ADC, Blocking>,
     in1: IN1,
     in2: IN2,
     sample_time: <<ADC as BasicInstance>::Regs as BasicAdcRegs>::SampleTime,
@@ -19,7 +20,7 @@ where
 impl<'a, ADC: adc::Instance + adc::BasicInstance, IN1: AdcChannel<'a, ADC>, IN2: AdcChannel<'a, ADC>> Mux<'a, ADC, IN1, IN2> {
     pub fn new(
         fpga_adc_mux: FpgaAdcMux,
-        adc: Adc<'a, ADC>,
+        adc: Adc<'a, ADC, Blocking>,
         in1: IN1,
         in2: IN2,
         sample_time: <<ADC as BasicInstance>::Regs as BasicAdcRegs>::SampleTime,

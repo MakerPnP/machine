@@ -8,8 +8,10 @@ use core::pin::pin;
 use embassy_executor::Spawner;
 use embassy_net::driver::Driver;
 use embassy_net::tcp::client::{TcpClient, TcpClientState};
-use embassy_net::udp::{PacketMetadata, RecvError, SendError, UdpSocket};
-use embassy_net::{IpEndpoint, Ipv4Address, Runner, StackResources};
+use embassy_net::iface::Iface;
+use embassy_net::udp::{RecvError, SendError, UdpSocket};
+use embassy_net::wire::{ListenSocketAddr, SocketAddr as IpEndpoint};
+use embassy_net::{Runner, StackStorage};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_sync::signal::Signal;
@@ -114,29 +116,34 @@ impl<CLIENT: TcpConnect> IoConnection<CLIENT> {
 }
 
 /// `serial_number` must be unique per board, it is advertised so that a server can find and identify the board.
-pub fn init<'d, D: Driver>(driver: D, random_seed: u64, serial_number: SerialNumber, spawner: Spawner) -> Runner<'d, D> {
-    let config = embassy_net::Config::dhcpv4(Default::default());
-    //let config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
-    //    address: Ipv4Cidr::new(Ipv4Address::new(10, 42, 0, 61), 24),
-    //    dns_servers: Vec::new(),
-    //    gateway: Some(Ipv4Address::new(10, 42, 0, 1)),
-    //});
-
+///
+/// The network stack borrows `driver` for the rest of the program, so store it in a `StaticCell`.
+pub fn init(
+    driver: &'static mut dyn Driver,
+    random_seed: u64,
+    serial_number: SerialNumber,
+    spawner: Spawner,
+) -> Runner<'static> {
     // Init network stack
-    static RESOURCES: StaticCell<StackResources<6>> = StaticCell::new();
-    let (stack, runner) = embassy_net::new(driver, config, RESOURCES.init(StackResources::new()), random_seed);
+    static STORAGE: StaticCell<StackStorage<'static>> = StaticCell::new();
+    let (stack, runner) = embassy_net::Stack::new(STORAGE.init(StackStorage::new()), random_seed);
 
-    defmt::info!("Hardware address: {}", stack.hardware_address());
+    let iface = unwrap!(stack.add_iface_borrowed(driver));
+    unwrap!(iface.set_dhcpv4(Some(Default::default())));
+    // for a static address, instead of DHCP:
+    //unwrap!(iface.add_ip_addr(Ipv4Cidr::new(Ipv4Addr::new(10, 42, 0, 61), 24).into()));
+
+    defmt::info!("Hardware address: {}", iface.hardware_addr());
 
     spawner
-        .spawn(unwrap!(networking_task(stack, spawner.clone(), SCRATCH_BUF.take(), serial_number)));
+        .spawn(unwrap!(networking_task(iface, spawner.clone(), SCRATCH_BUF.take(), serial_number)));
 
     runner
 }
 
 #[embassy_executor::task]
 async fn networking_task(
-    stack: embassy_net::Stack<'static>,
+    iface: Iface<'static>,
     spawner: Spawner,
     scratch_buf: &'static mut [u8],
     serial_number: SerialNumber,
@@ -145,9 +152,9 @@ async fn networking_task(
 
     // Ensure DHCP configuration is up before trying connect
     let mut attempts: u32 = 0;
-    let config = loop {
-        if let Some(config) = stack.config_v4() {
-            break config;
+    let lease = loop {
+        if let Some(lease) = iface.dhcpv4_lease() {
+            break lease;
         }
 
         if attempts % 10 == 0 {
@@ -160,53 +167,22 @@ async fn networking_task(
 
     defmt::info!(
         "IP address: {}, gateway: {}, dns: {}",
-        config.address,
-        config.dns_servers,
-        config.gateway
+        lease.address,
+        lease.dns_servers.as_slice(),
+        lease.router
     );
 
-    let state: TcpClientState<1, 1024, 1024> = TcpClientState::new();
-    let tcp_client = TcpClient::new(stack, &state);
+    let stack = iface.stack();
 
-    let rx_meta = [PacketMetadata::EMPTY; 1];
-    let rx_buffer = [0; 4096];
-    let tx_meta = [PacketMetadata::EMPTY; 1];
-    let tx_buffer = [0; 4096];
-
-    // move the buffers into the heap, so they don't get dropped
-    let rx_meta = Box::new(rx_meta);
-    let rx_meta = Box::leak(rx_meta);
-    let tx_meta = Box::new(tx_meta);
-    let tx_meta = Box::leak(tx_meta);
-    let rx_buffer = Box::new(rx_buffer);
-    let rx_buffer = Box::leak(rx_buffer);
-    let tx_buffer = Box::new(tx_buffer);
-    let tx_buffer = Box::leak(tx_buffer);
-    // You need to start a server on the host machine, for example: `nc -lu 8000`
-
-    let mut udp_socket = UdpSocket::new(stack, rx_meta, rx_buffer, tx_meta, tx_buffer);
+    // UDP sockets have no buffers of their own, packets are held in the stack's global packet buffer pool, the number
+    // of UDP sockets is limited by xarxa's `udp-socket-count-N` feature.
+    let mut udp_socket = unwrap!(UdpSocket::new(stack));
 
     // bound to the port only, not the address, so the socket keeps working if the DHCP address changes.
-    udp_socket
-        .bind(ERGOT_PORT)
-        .expect("bound");
+    unwrap!(udp_socket.bind(ERGOT_PORT, ListenSocketAddr::UNSPECIFIED));
 
-    defmt::info!(
-        "capacity, receive: {}, send: {}",
-        udp_socket.packet_recv_capacity(),
-        udp_socket.packet_send_capacity()
-    );
-
-    let mut discovery_socket = UdpSocket::new(
-        stack,
-        Box::leak(Box::new([PacketMetadata::EMPTY; 4])),
-        Box::leak(Box::new([0; 4 * DISCOVERY_FRAME_SIZE_MAX])),
-        Box::leak(Box::new([PacketMetadata::EMPTY; 2])),
-        Box::leak(Box::new([0; 2 * DISCOVERY_FRAME_SIZE_MAX])),
-    );
-    discovery_socket
-        .bind(DISCOVERY_PORT)
-        .expect("bound");
+    let mut discovery_socket = unwrap!(UdpSocket::new(stack));
+    unwrap!(discovery_socket.bind(DISCOVERY_PORT, ListenSocketAddr::UNSPECIFIED));
 
     // Spawn I/O worker tasks
     spawner.spawn(unwrap!(discovery_task(discovery_socket, serial_number)));
@@ -226,7 +202,11 @@ async fn networking_task(
     LOGSINK.register_static(log::LevelFilter::Info);
 
     if false {
-        spawner.spawn(unwrap!(udp_spam_task(stack)));
+        spawner.spawn(unwrap!(udp_spam_task(iface)));
+
+        // the stack is borrowed for `'static`, so the client state must be too
+        let state: &'static TcpClientState<1, 1024, 1024> = Box::leak(Box::new(TcpClientState::new()));
+        let tcp_client = TcpClient::new(stack, state);
 
         crate::IoConnection::new(tcp_client)
             .run()
@@ -249,7 +229,7 @@ const ERGOT_PORT: u16 = 8000;
 static SERVER_ENDPOINT: Signal<ThreadModeRawMutex, Option<Endpoint>> = Signal::new();
 
 fn ip_endpoint(endpoint: Endpoint) -> IpEndpoint {
-    IpEndpoint::new(Ipv4Address::from(endpoint.ip).into(), endpoint.port)
+    IpEndpoint::new(Ipv4Addr::from(endpoint.ip).into(), endpoint.port)
 }
 
 enum DiscoveryMessage {
@@ -273,7 +253,7 @@ fn decode_discovery_message(data: &[u8]) -> Result<DiscoveryMessage, DecodeError
 async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber) -> ! {
     defmt::info!("Discovery started, serial number: {}", serial_number);
 
-    let broadcast_endpoint = IpEndpoint::new(Ipv4Address::BROADCAST.into(), DISCOVERY_PORT);
+    let broadcast_endpoint = IpEndpoint::new(Ipv4Addr::BROADCAST.into(), DISCOVERY_PORT);
     let mut ticker = Ticker::every(Duration::from_millis(ADVERTISEMENT_INTERVAL_MS));
     let mut rx_buf = [0u8; DISCOVERY_FRAME_SIZE_MAX];
     let mut claim_state = ClaimState::new();
@@ -310,7 +290,7 @@ async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber)
                             }
                         }
                         // reply immediately, so the server knows who the board is claimed by
-                        metadata.endpoint
+                        metadata.remote_addr
                     }
                     Ok(DiscoveryMessage::Release(release)) if release.serial_number == serial_number => {
                         match claim_state.release(release.server) {
@@ -328,7 +308,7 @@ async fn discovery_task(socket: UdpSocket<'static>, serial_number: SerialNumber)
                             }
                         }
                         // reply immediately, so the server knows the board was released
-                        metadata.endpoint
+                        metadata.remote_addr
                     }
                     Ok(_) => {
                         defmt::warn!("Ignoring discovery message for another board");
@@ -377,10 +357,11 @@ impl PacketReceiver for ServerReceiver<'_> {
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         loop {
             match self.socket.recv_from(buf).await {
-                Ok((len, metadata)) if metadata.endpoint == self.server => return Ok(len),
+                Ok((len, metadata)) if metadata.remote_addr == self.server => return Ok(len),
                 Ok(_) => {}
                 // dropping one oversized datagram must not take the interface down
                 Err(RecvError::Truncated) => defmt::warn!("Dropping oversized ergot datagram"),
+                Err(e) => return Err(e),
             }
         }
     }
@@ -644,27 +625,19 @@ async fn command_listener(yeet_command_sender: YeetCommandSender) {
 }
 
 #[embassy_executor::task]
-async fn udp_spam_task(stack: embassy_net::Stack<'static>) -> ! {
+async fn udp_spam_task(iface: Iface<'static>) -> ! {
     defmt::info!("UDP spam task initialized");
 
-    while stack.config_v4().is_none() {
-        Timer::after(Duration::from_millis(100)).await;
-    }
+    iface.wait_config_v4_up().await;
 
     defmt::info!("UDP spamming!");
-    let mut rx_meta = [PacketMetadata::EMPTY; 1];
-    let mut rx_buffer = [0; 4096];
-    let mut tx_meta = [PacketMetadata::EMPTY; 1];
-    let mut tx_buffer = [0; 4096];
 
     // You need to start a server on the host machine, for example: `nc -lu 8000`
 
-    let mut socket = UdpSocket::new(stack, &mut rx_meta, &mut rx_buffer, &mut tx_meta, &mut tx_buffer);
+    let mut socket = unwrap!(UdpSocket::new(iface.stack()));
 
-    let remote_endpoint = (Ipv4Address::new(192, 168, 18, 60), 8000);
-    socket
-        .bind(remote_endpoint)
-        .expect("bound");
+    let remote_endpoint = IpEndpoint::new(Ipv4Addr::new(192, 168, 18, 60).into(), 8000);
+    unwrap!(socket.bind(0, remote_endpoint));
 
     let cycle_period_us = 1_000_000 / 200;
     let mut ticker = Ticker::every(Duration::from_micros(cycle_period_us));
