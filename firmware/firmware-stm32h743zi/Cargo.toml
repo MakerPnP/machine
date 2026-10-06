@@ -20,7 +20,7 @@ embassy-stm32      = { version = "0.6.0", features = ["defmt", "stm32h743zi", "t
 embassy-executor   = { version = "0.10.0", features = ["defmt", "platform-cortex-m", "executor-thread", "executor-interrupt"] }
 embassy-time       = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime-us", "tick-hz-32_768"] }
 embassy-sync       = { version = "0.8.0", features = ["defmt"] }
-embassy-net        = { version = "0.9.1", features = ["defmt", "tcp", "udp", "dhcpv4", "medium-ethernet", "proto-ipv4", "proto-ipv6"] }
+embassy-net        = { version = "0.9.1", features = ["defmt", "tcp", "udp", "dhcpv4", "medium-ethernet", "ipv4", "ipv6", "embedded-nal"] }
 
 defmt              = "1.0.1"
 
@@ -64,4 +64,3 @@ embassy-executor = { path = "../../libs/embassy/embassy-executor" }
 embassy-time = { path = "../../libs/embassy/embassy-time" }
 embassy-sync = { path = "../../libs/embassy/embassy-sync" }
 embassy-net = { path = "../../libs/embassy/embassy-net" }
-embassy-net-driver = { path = "../../libs/embassy/embassy-net-driver" }
