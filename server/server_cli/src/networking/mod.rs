@@ -70,6 +70,8 @@ async fn do_device_discovery(stack: RouterStack) {
     let mut max = 16;
     let mut seen = HashSet::new();
     let mut ticker = interval(Duration::from_secs(10));
+    // the default (Burst) fires all missed ticks back-to-back, e.g. after the host resumes from sleep
+    ticker.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     loop {
         ticker.tick().await;
 

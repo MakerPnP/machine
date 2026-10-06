@@ -41,6 +41,7 @@ pub async fn camera_streamer(
     info!("camera streamer started. destination: {}", address);
 
     let mut interval = time::interval(Duration::from_secs(1));
+    interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     let mut next_frame_at = time::Instant::now();
     let target_fps_interval = Duration::from_secs_f32(1.0 / target_fps);
 

@@ -193,6 +193,8 @@ async fn yeet_listener(stack: EdgeStack, app_event_rx: broadcast::Receiver<AppEv
     let mut packets_this_interval = 0;
     let interval = Duration::from_secs(1);
     let mut ticker = time::interval(interval);
+    // the default (Burst) fires all missed ticks back-to-back, e.g. after the host resumes from sleep
+    ticker.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     loop {
         select! {
             _ = ticker.tick() => {

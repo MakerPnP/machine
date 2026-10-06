@@ -27,7 +27,7 @@ use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::{broadcast, watch};
-use tokio::time::{Instant, interval, timeout_at};
+use tokio::time::{Instant, MissedTickBehavior, interval, timeout_at};
 
 use crate::AppEvent;
 use crate::config::{ConnectionKind, DiscoveredIoBoard, IO_BOARD_LOCAL_PORT_BASE, IoBoardDefinition};
@@ -103,6 +103,7 @@ pub async fn io_board_discovery(
     discovery.publish_status();
     let mut incompatible: HashSet<SocketAddr> = HashSet::new();
     let mut offline_check = interval(OFFLINE_CHECK_INTERVAL);
+    offline_check.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
     let mut buf = [0u8; 1500];
     loop {

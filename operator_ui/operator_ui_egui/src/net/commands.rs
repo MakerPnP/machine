@@ -42,6 +42,8 @@ async fn heartbeat_loop(stack: EdgeStack, address: Address) {
     let heartbeat_timeout_duration = Duration::from_secs(10);
     let heartbeat_send_interval = heartbeat_timeout_duration / 2;
     let mut ticker = time::interval(heartbeat_send_interval);
+    // the default (Burst) fires all missed ticks back-to-back, e.g. after the host resumes from sleep
+    ticker.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
 
     loop {
         // Wait for tick

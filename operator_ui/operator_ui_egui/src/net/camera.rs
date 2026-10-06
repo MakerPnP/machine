@@ -64,6 +64,8 @@ pub async fn camera_frame_listener(
     let mut latest_request_at = None;
 
     let mut ticker = tokio::time::interval(Duration::from_millis(250));
+    // the default (Burst) fires all missed ticks back-to-back, e.g. after the host resumes from sleep
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
         select! {
@@ -71,7 +73,9 @@ pub async fn camera_frame_listener(
                 info!("Frame listener shutdown requested. identifier: {}", camera_identifier);
                 break
             }
-            now = ticker.tick() => {
+            _ = ticker.tick() => {
+                // not the instant returned by `tick()`, that's the scheduled time, which is stale after a missed tick
+                let now = Instant::now();
                 let have_recent_message = latest_msg_at
                     .map(|t| now.duration_since(t) <= STREAM_TIMEOUT)
                     .unwrap_or(false);
