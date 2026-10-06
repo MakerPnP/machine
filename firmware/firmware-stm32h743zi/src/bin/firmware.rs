@@ -14,7 +14,7 @@ use defmt::*;
 use embassy_executor::SendSpawner;
 use embassy_executor::{Executor, InterruptExecutor, Spawner};
 use embassy_stm32::Peripherals;
-use embassy_stm32::eth::{PacketQueue, Sma, StationManagement};
+use embassy_stm32::eth::{PacketQueue, Sma};
 use embassy_stm32::eth::{Ethernet, GenericPhy};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::interrupt::{InterruptExt, Priority};
@@ -63,7 +63,7 @@ enum CpuRevision {
 const CPU_REV: CpuRevision = CpuRevision::RevY;
 
 bind_interrupts!(struct Irqs {
-    ETH => eth::InterruptHandler;
+    ETH => eth::InterruptHandler<ETH>;
     RNG => rng::InterruptHandler<peripherals::RNG>;
 });
 
@@ -212,8 +212,11 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     info!("Initializing RNG");
     let mut rng = Rng::new(p.RNG, Irqs);
     let mut seed = [0; 8];
-    rng.fill_bytes(&mut seed);
+    rng.blocking_fill_bytes(&mut seed);
     let seed = u64::from_le_bytes(seed);
+
+    let serial_number = ioboard_net::SerialNumber(*embassy_stm32::uid::uid());
+    info!("Serial number: {}", serial_number);
 
     info!("Initializing ETH");
     // TODO generate mac address from CPU ID
@@ -226,7 +229,6 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
     let device = Ethernet::new(
         PACKETS.init(PacketQueue::<8, 8>::new()),
         p.ETH,
-        Irqs,
         p.PA1,  // ref_clk
         p.PA7,  // CRS_DV: Carrier Sense
         p.PC4,  // RX_D0: Received Bit 0
@@ -238,9 +240,11 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
         p.ETH_SMA,
         p.PA2,  // mdio
         p.PC1,  // eth_mdc
+        Irqs,
     );
 
-    let runner = ioboard_net::init(device, seed, lp_spawner.clone());
+    static DEVICE: StaticCell<Device> = StaticCell::new();
+    let runner = ioboard_net::init(DEVICE.init(device), seed, serial_number, lp_spawner.clone());
 
     // Launch network task
     lp_spawner.spawn(unwrap!(embassy_net_task(runner)));
@@ -275,7 +279,7 @@ async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals)
 type Device = Ethernet<'static, ETH, GenericPhy<Sma<'static, ETH_SMA>>>;
 
 #[embassy_executor::task]
-async fn embassy_net_task(mut runner: embassy_net::Runner<'static, Device>) -> ! {
+async fn embassy_net_task(mut runner: embassy_net::Runner<'static>) -> ! {
     runner.run().await
 }
 
@@ -319,7 +323,7 @@ impl<STEPPER: Stepper> StepperRunner<STEPPER> {
             stepper,
         } = self;
 
-        ioboard_main::run(stepper).await;
+        ioboard_main::tasks::stepper_test::run(stepper).await;
     }
 }
 
