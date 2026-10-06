@@ -13,7 +13,7 @@ embedded-io-async  = { workspace = true }
 
 embassy-net        = { workspace = true, features = ["defmt", "tcp", "udp", "dhcpv4", "medium-ethernet", "ipv4", "embedded-nal"] }
 embassy-time       = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
-embassy-executor   = { workspace = true }
+embassy-executor   = { workspace = true, features = ["defmt"] }
 embassy-sync       = { workspace = true }
 embassy-futures    = { workspace = true }
 

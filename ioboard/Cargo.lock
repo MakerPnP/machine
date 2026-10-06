@@ -211,6 +211,7 @@ version = "0.10.0"
 dependencies = [
  "cordyceps",
  "critical-section",
+ "defmt",
  "document-features",
  "embassy-executor-macros",
  "embassy-executor-timer-queue",
