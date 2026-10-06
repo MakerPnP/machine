@@ -124,7 +124,7 @@ mod storage {
     unsafe impl Sync for TracePin {}
 }
 
-pub fn init<TRACEPINS: TracePins + 'static>(trace_pins: TRACEPINS) {
+pub fn init<TRACEPINS: TracePins + 'static>(_trace_pins: TRACEPINS) {
     #[cfg(feature = "enable")]
-    storage::TRACE_PINS.init(trace_pins);
+    storage::TRACE_PINS.init(_trace_pins);
 }
