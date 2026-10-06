@@ -10,5 +10,5 @@ cargo build --release
 ## running
 
 ```
-cargo run --release
+trunk serve
 ```
