@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use defmt::{error, info, trace};
+use defmt::{error, info};
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use ioboard_trace::tracepin;
 use libm::round;
@@ -57,7 +57,7 @@ pub async fn run<STEPPER: Stepper>(mut stepper: STEPPER) {
 
     loop {
         let _ = STACK.topics().broadcast::<YeetTopic>(&0, None)
-            .inspect_err(|err| {
+            .inspect_err(|_err| {
                 error!("Error yeeting from `main`");
             })
             .inspect(|_| {
