@@ -118,6 +118,29 @@ fn main() -> ! {
     });
 }
 
+/// Report faults, cortex-m-rt's default handlers just spin, which looks like the firmware silently died.
+#[cortex_m_rt::exception]
+unsafe fn HardFault(ef: &cortex_m_rt::ExceptionFrame) -> ! {
+    // SAFETY: read-only access to the SCB fault status registers.
+    let scb = unsafe { &*cortex_m::peripheral::SCB::PTR };
+    defmt::error!(
+        "HardFault. pc: {=u32:#010x}, lr: {=u32:#010x}, xpsr: {=u32:#010x}, hfsr: {=u32:#010x}, cfsr: {=u32:#010x}, mmfar: {=u32:#010x}, bfar: {=u32:#010x}",
+        ef.pc(),
+        ef.lr(),
+        ef.xpsr(),
+        scb.hfsr.read(),
+        scb.cfsr.read(),
+        scb.mmfar.read(),
+        scb.bfar.read(),
+    );
+    cortex_m::asm::udf()
+}
+
+#[cortex_m_rt::exception]
+unsafe fn DefaultHandler(irqn: i16) {
+    defmt::panic!("Unhandled exception. irqn: {}", irqn);
+}
+
 #[embassy_executor::task]
 async fn init_task(lp_spawner: Spawner, hp_spawner: SendSpawner, p: Peripherals) {
     let mut fpga_creset_b = Output::new(p.PF15, Level::Low, Speed::Low);
